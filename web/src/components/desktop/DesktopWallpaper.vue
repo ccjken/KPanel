@@ -142,7 +142,7 @@ defineExpose({ nextCamera: () => { if (current.value) scene.value?.nextCamera() 
         class="desktop-wallpaper-surface desktop__wallpaper-image"
         :class="{ 'desktop-wallpaper-surface--scene': shown.live }"
         :data-wallpaper="shown.id"
-        :style="{ '--desktop-wallpaper-image': `url(${shown.src})`, '--desktop-wallpaper-position': shown.position }"
+        :style="{ '--desktop-wallpaper-image': `url(&quot;${shown.src}&quot;)`, '--desktop-wallpaper-position': shown.position }"
       >
         <img ref="image" class="desktop-wallpaper-surface__image" :class="{ 'desktop-wallpaper-surface__image--failed': imageFailed }" :src="shown.src" alt="" decoding="async" fetchpriority="high" @load="onImageLoad" @error="onImageError" />
         <ScenePack v-if="shown.pack" :key="shown.key" ref="scene" :pack-id="shown.pack" :covered="covered || phase === 'leaving'" @cameras="onCameras" @failed="onFailed" />

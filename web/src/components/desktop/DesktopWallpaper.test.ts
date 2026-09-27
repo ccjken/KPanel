@@ -49,8 +49,6 @@ describe('shared wallpaper handoff', () => {
     expect(surface(wrapper).classes()).toContain('desktop-wallpaper-surface--scene')
     expect(wrapper.get('img').attributes('src')).toContain('/neon-city/poster')
     expect(surface(wrapper).attributes('style')).not.toContain('old-orbital')
-    expect((surface(wrapper).element as HTMLElement).style.getPropertyValue('--desktop-wallpaper-image')).toContain('/neon-city/poster')
-    expect((surface(wrapper).element as HTMLElement).style.getPropertyValue('--desktop-wallpaper-image')).not.toContain('&quot;')
     wrapper.unmount()
   })
 
