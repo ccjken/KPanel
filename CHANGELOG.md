@@ -22,7 +22,7 @@
 ### Upgrade Notes
 
 - 本版为 `preview` 预览版；GitHub Release 标记为 prerelease，Docker `preview` 提升至本版，GitHub Latest、Docker `latest` 和正式生产部署仍保持 1.22.0。
-- 应用市场 `kpanel.conf` 的生命周期锁契约变化将在公开镜像验证后同步；默认安装入口仍使用 `latest`。
+- 应用市场 `kpanel.conf` 已包含相同的 BusyBox 锁修复；本版内置配置与之对齐，默认安装入口仍使用 `latest`。
 - 本次无新的 `kejilion.sh` 脚本契约和数据库迁移，`scriptLinkageState=not-required`。
 
 ## [1.22.0] - 2026-09-26
