@@ -90,13 +90,13 @@
 - 生产完成时间：不适用
 - 提交到生产用时：不适用
 - 是否回滚、紧急热修复或重复发布：否
-- 若发生失败，发现时间、恢复时间和逃逸门禁：不适用（无生产部署或产品故障；流程异常见下）
+- 若发生失败，发现时间、恢复时间和逃逸门禁：不适用
 <!-- kpanel-release-metrics:end -->
 
 本版为首个 1.23.0 RC，不计稳定发布或生产部署频率。
 
 <!-- kpanel-release-process-metrics:start -->
-- 已记录发布流程异常或无效证据拦截次数：3
+- 已记录发布流程异常或无效证据拦截次数：4
 - 其中生产写操作开始后异常次数：0
 <!-- kpanel-release-process-metrics:end -->
 
@@ -127,6 +127,15 @@
     "impact": "隔离浏览器首次读取场景仓库失败，无法直接完成本轮场景切换旅程。",
     "recoveryEvidence": "对仓库内 orbital-station 34 个文件逐项校验 catalog SHA-256 后注入隔离数据目录；重启容器，公开镜像场景、切换和登录封面验收通过。在线下载链路仍未验证。",
     "permanentAction": "下次场景下载改动时在可访问场景仓库的登记环境另测下载线路；退出条件是公开镜像从仓库完成下载和安装。",
+    "historicalReleases": []
+  },
+  {
+    "fingerprint": "acceptance-ci/metrics/recovery-sentinel",
+    "position": "before-production-write",
+    "count": 1,
+    "impact": "验收记录首轮 CI 的指标校验拒绝带解释的“不适用”恢复字段，文档候选未能直接进入主线。",
+    "recoveryEvidence": "将无产品失败时的恢复字段改为精确“不适用”，本地 report-release-metrics 验证通过；重新提交并等待同 SHA 候选 CI。",
+    "permanentAction": "后续验收记录提交前先运行 report-release-metrics --validate-acceptance；退出条件是文档首轮 CI 不因已知指标格式失败。",
     "historicalReleases": []
   }
 ]
