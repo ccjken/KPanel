@@ -1,5 +1,5 @@
-import { networkTrafficCounterBytes } from '@/lib/networkTraffic'
-import type { ClusterHost, ClusterHostDetails } from '@/types/api'
+import { networkTrafficCounterBytes, type NetworkTrafficCounters } from '@/lib/networkTraffic'
+import type { ClusterHost, ClusterHostDetails, PublicClusterShareHost } from '@/types/api'
 
 export type ClusterHostDetailsSortKey = 'custom' | 'expiresOn' | 'price'
 export type ClusterHostTemporarySortKey = ClusterHostDetailsSortKey | 'cpu' | 'memory' | 'disk' | 'traffic'
@@ -83,8 +83,15 @@ function normalizedMetric(value: number | undefined): number | undefined {
   return Math.max(0, value)
 }
 
-function hostMetric(host: ClusterHost, key: ClusterHostTemporarySortKey): number | undefined {
-  const telemetry = host.lastSnapshot?.telemetry
+function telemetryMetric(
+  telemetry: {
+    cpu: { usagePercent: number }
+    memory: { usagePercent: number }
+    disk: { usagePercent: number }
+    network: NetworkTrafficCounters
+  } | undefined,
+  key: ClusterHostTemporarySortKey,
+): number | undefined {
   if (!telemetry || key === 'custom') return undefined
   if (key === 'cpu') return normalizedMetric(telemetry.cpu.usagePercent)
   if (key === 'memory') return normalizedMetric(telemetry.memory.usagePercent)
@@ -105,7 +112,21 @@ export function sortClusterHostsTemporarily(
   if (key === 'custom') return [...items]
   if (key === 'expiresOn' || key === 'price') return sortClusterHostsByDetails(items, key, direction, host => details[host.id])
   return sortByMetric(items, direction, host => {
-    const value = hostMetric(host, key)
+    const value = telemetryMetric(host.lastSnapshot?.telemetry, key)
+    return value === undefined ? undefined : { value }
+  })
+}
+
+export function sortPublicClusterHostsTemporarily(
+  items: readonly PublicClusterShareHost[],
+  key: ClusterHostTemporarySortKey,
+  direction: ClusterHostTemporarySortDirection,
+): PublicClusterShareHost[] {
+  if (key === 'custom' || key === 'expiresOn' || key === 'price') {
+    return sortClusterHostsByDetails(items, key, direction, host => host)
+  }
+  return sortByMetric(items, direction, host => {
+    const value = telemetryMetric(host.collectedAt ? host : undefined, key)
     return value === undefined ? undefined : { value }
   })
 }
