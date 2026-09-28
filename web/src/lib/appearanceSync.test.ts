@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   applyWallpaper: vi.fn(),
   danger: vi.fn(),
   preference: { value: 'system' },
-  colors: { value: { brand: '#0c7a60', neutral: '#52645f', signature: '#0c7a60', signatureLinked: true } },
+  colors: { value: { brand: '#2867b2', neutral: '#4b5d76', signature: '#2867b2', signatureLinked: true } },
   isCustom: { value: false },
   wallpaper: { value: 'classic' },
   classicLevel: { value: 'off' },

@@ -3983,8 +3983,8 @@ body.desktop-mode-open::-webkit-scrollbar {
   height: 38px;
   place-items: center;
   overflow: hidden;
-  color: #0f766e;
-  background: #f7f9f8;
+  color: var(--brand);
+  background: var(--surface-subtle);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   font-size: 15px;

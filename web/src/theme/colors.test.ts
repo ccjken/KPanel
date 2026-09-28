@@ -96,10 +96,10 @@ describe('theme color input contract', () => {
   it('publishes a fixed three-intent color key list', () => {
     expect(THEME_COLOR_KEYS).toEqual(['brand', 'neutral', 'signature'])
     expect(DEFAULT_THEME_COLORS).toEqual({
-      brand: '#0c7a60',
-      neutral: '#52645f',
+      brand: '#2867b2',
+      neutral: '#4b5d76',
       signatureLinked: true,
-      signature: '#0c7a60',
+      signature: '#2867b2',
     })
   })
 

@@ -39,10 +39,10 @@ const mocks = vi.hoisted(() => {
     themeResolved: { value: 'light' },
     themeColors: {
       value: {
-        brand: '#0c7a60',
-        neutral: '#52645f',
+        brand: '#2867b2',
+        neutral: '#4b5d76',
         signatureLinked: true,
-        signature: '#0c7a60',
+        signature: '#2867b2',
       },
     },
     themeIsCustom: { value: false },
@@ -339,10 +339,10 @@ beforeEach(() => {
   mocks.themePreference.value = 'system'
   mocks.themeResolved.value = 'light'
   mocks.themeColors.value = {
-    brand: '#0c7a60',
-    neutral: '#52645f',
+    brand: '#2867b2',
+    neutral: '#4b5d76',
     signatureLinked: true,
-    signature: '#0c7a60',
+    signature: '#2867b2',
   }
   mocks.themeIsCustom.value = false
   mocks.themeSetColors.mockImplementation((colors: ThemeColorIntent) => {
@@ -351,10 +351,10 @@ beforeEach(() => {
   })
   mocks.themeResetColors.mockImplementation(() => {
     mocks.themeColors.value = {
-      brand: '#0c7a60',
-      neutral: '#52645f',
+      brand: '#2867b2',
+      neutral: '#4b5d76',
       signatureLinked: true,
-      signature: '#0c7a60',
+      signature: '#2867b2',
     }
     mocks.themeIsCustom.value = false
   })
@@ -583,10 +583,10 @@ describe('SettingsView appearance', () => {
     view.resetThemeColors()
     expect(mocks.themeResetColors).toHaveBeenCalledOnce()
     expect(view.colorDraft).toEqual({
-      brand: '#0c7a60',
-      neutral: '#52645f',
+      brand: '#2867b2',
+      neutral: '#4b5d76',
       signatureLinked: true,
-      signature: '#0c7a60',
+      signature: '#2867b2',
     })
     expect(mocks.toastSuccess).toHaveBeenCalledWith('已恢复默认配色')
   })
@@ -602,10 +602,10 @@ describe('SettingsView appearance', () => {
     const view = setupView()
 
     Object.assign(view.colorDraft, {
-      brand: '#0c7a60',
-      neutral: '#52645f',
+      brand: '#2867b2',
+      neutral: '#4b5d76',
       signatureLinked: true,
-      signature: '#0c7a60',
+      signature: '#2867b2',
     })
     view.applyThemeColors()
 

@@ -72,26 +72,26 @@
 }
 
 :root {
-  color: #172320;
-  background: #eff3f2;
+  color: #1f2329;
+  background: #edf0f5;
   /* Four distinct neutral steps: page < subtle < surface < raised. Keeping
      raised as the only pure white makes dialogs and menus read as lifted
      without adding a heavier shadow. */
-  --bg: #eff3f2;
-  --surface: #fbfcfc;
-  --surface-subtle: #f5f8f7;
+  --bg: #edf0f5;
+  --surface: #fafbfd;
+  --surface-subtle: #f4f6f9;
   --surface-raised: #ffffff;
-  --text: #172320;
-  --text-soft: #3e4d49;
-  --muted: #60716b;
-  --border: #dce6e2;
-  --border-strong: #c7d6d1;
-  --control-border: #81958e;
-  --brand: #0c7a60;
-  --brand-strong: #075f49;
-  --brand-soft: #e5f4ef;
-  --brand-muted: #c3e7dc;
-  --theme-accent: #0c7a60;
+  --text: #1f2329;
+  --text-soft: #444d5a;
+  --muted: #5f6a79;
+  --border: #e2e3e6;
+  --border-strong: #ced0d3;
+  --control-border: #8e9195;
+  --brand: #2867b2;
+  --brand-strong: #1f4f88;
+  --brand-soft: #dfe8f3;
+  --brand-muted: #bbcfe7;
+  --theme-accent: #3d82d3;
   --on-brand: #ffffff;
   --success: #075f49;
   --success-soft: #e5f4ef;
@@ -104,62 +104,62 @@
   --danger: #a93636;
   --danger-soft: #fbeaea;
   --on-danger: #ffffff;
-  --neutral-soft: #edf2f0;
-  --sidebar: #13241f;
-  --sidebar-text: #f3faf7;
-  --sidebar-muted: #9ab0a9;
-  --sidebar-border: rgb(255 255 255 / 9%);
+  --neutral-soft: #e6ebf2;
+  --sidebar: #111720;
+  --sidebar-text: #f2f4f8;
+  --sidebar-muted: #a6b1bf;
+  --sidebar-border: rgb(255 255 255 / 10%);
   --sidebar-hover: color-mix(in srgb, var(--sidebar) 88%, var(--brand) 12%);
-  --sidebar-active: rgb(59 188 151 / 14%);
-  --sidebar-accent: #45c7a1;
-  --desktop-glass: rgb(246 251 250 / 72%);
-  --desktop-glass-strong: rgb(250 253 252 / 86%);
+  --sidebar-active: rgb(61 130 211 / 16%);
+  --sidebar-accent: #3d82d3;
+  --desktop-glass: rgb(250 251 253 / 72%);
+  --desktop-glass-strong: rgb(255 255 255 / 86%);
   --desktop-glass-border: rgb(255 255 255 / 70%);
-  --desktop-label: #17312c;
-  --desktop-shadow: rgb(12 34 30 / 20%);
-  --desktop-wallpaper-base: linear-gradient(145deg, #b9d4d4, #edf5f3);
-  --desktop-wallpaper-veil-light: linear-gradient(145deg, rgb(226 242 239 / 8%), rgb(190 218 224 / 3%));
-  --desktop-wallpaper-veil-dark: linear-gradient(145deg, rgb(0 12 15 / 14%), rgb(1 10 14 / 30%));
+  --desktop-label: #1f2329;
+  --desktop-shadow: rgb(17 23 32 / 20%);
+  --desktop-wallpaper-base: linear-gradient(145deg, #a2b5ce, #e5eaf1);
+  --desktop-wallpaper-veil-light: linear-gradient(145deg, rgb(235 239 244 / 8%), rgb(162 180 205 / 3%));
+  --desktop-wallpaper-veil-dark: linear-gradient(145deg, rgb(10 13 18 / 14%), rgb(4 6 8 / 30%));
   --desktop-wallpaper-vignette:
-    linear-gradient(90deg, rgb(3 14 17 / 6%), transparent 30%, transparent 80%, rgb(3 14 17 / 5%)),
-    radial-gradient(circle at 50% 40%, transparent 42%, rgb(2 9 12 / 8%) 100%);
-  --desktop-aurora-one: radial-gradient(circle, rgb(75 224 195 / 30%), transparent 67%);
-  --desktop-aurora-two: radial-gradient(circle, rgb(67 169 230 / 24%), transparent 68%);
+    linear-gradient(90deg, rgb(7 10 13 / 6%), transparent 30%, transparent 80%, rgb(7 10 13 / 5%)),
+    radial-gradient(circle at 50% 40%, transparent 42%, rgb(7 10 13 / 8%) 100%);
+  --desktop-aurora-one: radial-gradient(circle, rgb(40 103 178 / 30%), transparent 67%);
+  --desktop-aurora-two: radial-gradient(circle, rgb(61 130 211 / 24%), transparent 68%);
   --desktop-aurora-opacity: .1;
   /* One contact shadow carries small elevation; only overlays add a second
      diffuse layer. Keeps depth readable without a heavy drop shadow. */
-  --shadow-sm: 0 1px 2px rgb(20 44 38 / 6%);
-  --shadow-md: 0 1px 2px rgb(20 44 38 / 8%), 0 10px 28px rgb(20 44 38 / 10%);
-  --shadow-button: 0 1px 2px rgb(10 70 54 / 14%);
-  --shadow-feature: 0 2px 6px rgb(20 44 38 / 6%);
+  --shadow-sm: 0 1px 2px rgb(17 23 32 / 6%);
+  --shadow-md: 0 1px 2px rgb(17 23 32 / 8%), 0 10px 28px rgb(17 23 32 / 10%);
+  --shadow-button: 0 1px 2px rgb(40 103 178 / 14%);
+  --shadow-feature: 0 2px 6px rgb(17 23 32 / 6%);
   --radius-sm: 8px;
   --radius: 12px;
   --radius-lg: 18px;
-  --scrollbar-track: #edf3f1;
-  --scrollbar-thumb: #b5c8c2;
-  --scrollbar-thumb-hover: #86a69d;
-  --scrollbar-thumb-active: #0c7a60;
+  --scrollbar-track: #e6ebf2;
+  --scrollbar-thumb: #bdbfc2;
+  --scrollbar-thumb-hover: #9c9ea2;
+  --scrollbar-thumb-active: #2867b2;
 }
 
 :root[data-theme='dark'] {
-  color: #e7efec;
-  background: #0b1412;
-  --bg: #0b1412;
-  --surface: #111d1a;
-  --surface-subtle: #16231f;
-  --surface-raised: #192925;
-  --text: #e7efec;
-  --text-soft: #b9c8c3;
-  --muted: #91a39d;
-  --border: #253732;
-  --border-strong: #354b44;
-  --control-border: #657a73;
-  --brand: #3bc4a0;
-  --brand-strong: #66d3b5;
-  --brand-soft: #153a31;
-  --brand-muted: #205244;
-  --theme-accent: #3bc4a0;
-  --on-brand: #10231f;
+  color: #eeeff2;
+  background: #070a0e;
+  --bg: #070a0e;
+  --surface: #0b1016;
+  --surface-subtle: #0f161f;
+  --surface-raised: #151e2b;
+  --text: #eeeff2;
+  --text-soft: #c5cbd3;
+  --muted: #9ea7b3;
+  --border: #262b30;
+  --border-strong: #3b3f44;
+  --control-border: #666a70;
+  --brand: #639adc;
+  --brand-strong: #8db5e5;
+  --brand-soft: #1f3044;
+  --brand-muted: #2c4461;
+  --theme-accent: #337bd1;
+  --on-brand: #0b111b;
   --success: #66d3b5;
   --success-soft: #153a31;
   --blue: #74a7e5;
@@ -171,27 +171,27 @@
   --danger: #e77b7b;
   --danger-soft: #3b2324;
   --on-danger: #241516;
-  --neutral-soft: #1d2b27;
-  --sidebar: #08110f;
-  --sidebar-text: #f2faf7;
-  --sidebar-muted: #82978f;
+  --neutral-soft: #111924;
+  --sidebar: #070b0f;
+  --sidebar-text: #f1f4f8;
+  --sidebar-muted: #9aa6b6;
   --sidebar-border: rgb(255 255 255 / 8%);
   --sidebar-hover: color-mix(in srgb, var(--sidebar) 88%, var(--brand) 12%);
-  --sidebar-active: rgb(59 196 160 / 14%);
-  --sidebar-accent: #4bc9a7;
-  --desktop-glass: rgb(12 24 27 / 64%);
-  --desktop-glass-strong: rgb(14 27 29 / 84%);
+  --sidebar-active: rgb(99 154 220 / 18%);
+  --sidebar-accent: #337bd1;
+  --desktop-glass: rgb(11 16 23 / 64%);
+  --desktop-glass-strong: rgb(21 31 44 / 84%);
   --desktop-glass-border: rgb(255 255 255 / 13%);
-  --desktop-label: #f5fbfa;
+  --desktop-label: #eeeff2;
   --desktop-shadow: rgb(0 0 0 / 42%);
-  --desktop-wallpaper-base: linear-gradient(145deg, #06151a, #0a2026);
-  --desktop-wallpaper-veil-light: linear-gradient(145deg, rgb(226 242 239 / 8%), rgb(190 218 224 / 3%));
-  --desktop-wallpaper-veil-dark: linear-gradient(145deg, rgb(0 12 15 / 14%), rgb(1 10 14 / 30%));
+  --desktop-wallpaper-base: linear-gradient(145deg, #0a0e14, #1b2738);
+  --desktop-wallpaper-veil-light: linear-gradient(145deg, rgb(234 239 245 / 8%), rgb(159 180 208 / 3%));
+  --desktop-wallpaper-veil-dark: linear-gradient(145deg, rgb(9 13 19 / 14%), rgb(4 6 9 / 30%));
   --desktop-wallpaper-vignette:
-    linear-gradient(90deg, rgb(3 14 17 / 12%), transparent 28%, transparent 78%, rgb(3 14 17 / 8%)),
-    radial-gradient(circle at 50% 40%, transparent 36%, rgb(2 9 12 / 12%) 100%);
-  --desktop-aurora-one: radial-gradient(circle, rgb(75 224 195 / 30%), transparent 67%);
-  --desktop-aurora-two: radial-gradient(circle, rgb(67 169 230 / 24%), transparent 68%);
+    linear-gradient(90deg, rgb(7 10 14 / 12%), transparent 28%, transparent 78%, rgb(7 10 14 / 8%)),
+    radial-gradient(circle at 50% 40%, transparent 36%, rgb(7 10 14 / 12%) 100%);
+  --desktop-aurora-one: radial-gradient(circle, rgb(99 154 220 / 30%), transparent 67%);
+  --desktop-aurora-two: radial-gradient(circle, rgb(51 123 209 / 24%), transparent 68%);
   --desktop-aurora-opacity: .16;
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 22%);
   --shadow-md: 0 1px 2px rgb(0 0 0 / 28%), 0 12px 32px rgb(0 0 0 / 30%);
@@ -200,8 +200,8 @@
   --radius-sm: 8px;
   --radius: 12px;
   --radius-lg: 18px;
-  --scrollbar-track: #0c1714;
-  --scrollbar-thumb: #344a43;
-  --scrollbar-thumb-hover: #526c63;
-  --scrollbar-thumb-active: #3bc4a0;
+  --scrollbar-track: #111924;
+  --scrollbar-thumb: #484c51;
+  --scrollbar-thumb-hover: #6a6e72;
+  --scrollbar-thumb-active: #639adc;
 }
