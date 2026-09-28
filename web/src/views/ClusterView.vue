@@ -64,7 +64,7 @@ import {
 import { clusterHostMonitoringRoute, clusterHostPanelURL } from '@/lib/clusterHostNavigation'
 import { desktopWindowActiveKey } from '@/lib/desktopRouteKeys'
 import { detectOperatingSystemIdentity } from '@/lib/operatingSystem'
-import { formatNetworkTrafficCounter } from '@/lib/networkTraffic'
+import { clusterTrafficCounters, formatNetworkTrafficCounter, trafficPeriodHint } from '@/lib/networkTraffic'
 import {
   clampPercent,
   formatBytes,
@@ -1606,16 +1606,16 @@ onBeforeUnmount(() => {
             <small>{{ host.lastSnapshot.telemetry.publicNetwork.isp || '运营商未知' }}</small>
           </div>
           <RouterLink class="cluster-metric-link" :to="clusterHostMonitoringRoute(host, 'network')" :title="phrase('查看历史趋势')" :aria-label="`${phrase('查看历史趋势')} · ${host.name} · ${phrase('累计流量')}`">
-            <span>{{ phrase('累计流量') }}</span>
+            <span :title="trafficPeriodHint(host.trafficPeriod, t)" :aria-label="trafficPeriodHint(host.trafficPeriod, t)">{{ phrase('累计流量') }}</span>
             <strong :title="phrase('累计接收')">
               <span aria-hidden="true">↓</span>
               <span class="sr-only">{{ phrase('累计接收') }}</span>
-              {{ formatNetworkTrafficCounter(host.lastSnapshot.telemetry.network, 'received') }}
+              {{ formatNetworkTrafficCounter(clusterTrafficCounters(host), 'received') }}
             </strong>
             <small :title="phrase('累计传送')">
               <span aria-hidden="true">↑</span>
               <span class="sr-only">{{ phrase('累计传送') }}</span>
-              {{ formatNetworkTrafficCounter(host.lastSnapshot.telemetry.network, 'sent') }}
+              {{ formatNetworkTrafficCounter(clusterTrafficCounters(host), 'sent') }}
             </small>
           </RouterLink>
           <div>

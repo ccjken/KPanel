@@ -655,6 +655,17 @@ const mockHostDetails = Object.fromEntries(visualClusterHosts.map((host, index) 
 }]))
 
 let mockNotificationRevision = 1
+// Presentation fixtures only; durable accounting is exercised by backend tests.
+function mockTrafficPeriod(host) {
+  if (!mockHostDetails[host.id]?.trafficResetDay) return undefined
+  return {
+    receivedBytes: host.id === visualClusterHosts[0].id ? 2 * 1024 ** 3 : 512 * 1024 ** 2,
+    sentBytes: 256 * 1024 ** 2,
+    available: Boolean(host.lastSnapshot),
+    startedAt: '2026-09-15T00:00:00Z', endsAt: '2026-10-15T00:00:00Z',
+    partial: true, estimated: false,
+  }
+}
 let mockNotificationSnapshot = {
   localRecording: true,
   enabled: false,
@@ -730,6 +741,7 @@ function visualClusterPublicSnapshot() {
       expiresOn: mockHostDetails[host.id]?.expiresOn,
       price: mockHostDetails[host.id]?.price,
       trafficResetDay: mockHostDetails[host.id]?.trafficResetDay,
+      trafficPeriod: mockTrafficPeriod(host),
       os: telemetry?.os,
       architecture: telemetry?.architecture,
       uptimeSeconds: telemetry?.uptimeSeconds,
@@ -2380,7 +2392,7 @@ createServer(async (request, response) => {
   }
   if (request.method === 'GET' && url.pathname === '/api/v1/cluster/hosts') {
     send(response, 200, {
-      items: visualClusterHosts,
+      items: visualClusterHosts.map(host => ({ ...host, trafficPeriod: mockTrafficPeriod(host) })),
       hostDetails: mockHostDetails,
       total: visualClusterHosts.length,
       remoteTotal: visualClusterHosts.filter((host) => !host.isLocal).length,

@@ -1,4 +1,24 @@
 import { formatBytes } from '@/lib/format'
+import type { ClusterTrafficPeriod } from '@/types/api'
+import type { useI18n } from '@/i18n'
+
+export function clusterTrafficCounters(host: {
+  trafficPeriod?: ClusterTrafficPeriod
+  lastSnapshot?: { telemetry: { network: NetworkTrafficCounters } }
+  network?: NetworkTrafficCounters
+} | undefined): NetworkTrafficCounters | undefined {
+  if (host?.trafficPeriod) return host.trafficPeriod.available ? host.trafficPeriod : undefined
+  return host?.lastSnapshot?.telemetry.network ?? host?.network
+}
+
+export function trafficPeriodHint(period: ClusterTrafficPeriod | undefined, t: ReturnType<typeof useI18n>['t']): string | undefined {
+  if (!period) return undefined
+  if (!period.available) return t('cluster.traffic.waiting')
+  const parts = [t('cluster.traffic.period', { start: period.startedAt, end: period.endsAt })]
+  if (period.partial) parts.push(t('cluster.traffic.partial'))
+  if (period.estimated) parts.push(t('cluster.traffic.estimated'))
+  return parts.join(' · ')
+}
 
 /**
  * The panel receives the same monotonic byte counters through two API shapes:

@@ -203,6 +203,7 @@ export interface ClusterHostSnapshot {
 }
 
 export interface ClusterHost {
+	trafficPeriod?: ClusterTrafficPeriod
 	lightHealth?: LightNodeHealth
   id: string
   isLocal: boolean
@@ -264,6 +265,16 @@ export interface ClusterHostDetails {
   expiryReminderEnabled?: boolean
   price?: string
   trafficResetDay?: number
+}
+
+export interface ClusterTrafficPeriod {
+  receivedBytes: number
+  sentBytes: number
+  available: boolean
+  startedAt: string
+  endsAt: string
+  partial: boolean
+  estimated: boolean
 }
 
 export interface ClusterHostOrderPreference {
@@ -354,6 +365,7 @@ export interface ClusterNotificationResources {
 export type PublicClusterShareHostState = 'online' | 'degraded' | 'offline' | 'pending'
 
 export interface PublicClusterShareHost extends Pick<ClusterHostDetails, 'expiresOn' | 'price' | 'trafficResetDay'> {
+	trafficPeriod?: ClusterTrafficPeriod
 	id: string
 	name: string
 	state: PublicClusterShareHostState

@@ -89,6 +89,7 @@ func (s *Store) ReplaceClusterHostDetails(id, expected string, value ClusterHost
 		next[id] = value
 	}
 	s.data.ClusterHostDetails = next
+	reconcileClusterTraffic(s.data.ClusterTraffic, next, activeIDs)
 	if err := s.persistLocked(); err != nil {
 		s.data = previous
 		return err

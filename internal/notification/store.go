@@ -39,6 +39,7 @@ type telegramState struct {
 }
 
 type alertState struct {
+	TrafficCycle       string    `json:"trafficCycle,omitempty"`
 	ExpiryDate         string    `json:"expiryDate,omitempty"`
 	ExpiryNotifiedMask uint8     `json:"expiryNotifiedMask,omitempty"`
 	LastSampleAt       time.Time `json:"lastSampleAt,omitempty"`
@@ -218,6 +219,9 @@ func validateAlertStates(states map[string]alertState) error {
 		return errors.New("notification state contains too many alert states")
 	}
 	for key, value := range states {
+		if !validTrafficCycle(value.TrafficCycle) {
+			return errors.New("invalid traffic cycle")
+		}
 		if value.ExpiryNotifiedMask > 15 || (value.ExpiryDate == "" && value.ExpiryNotifiedMask != 0) ||
 			(value.ExpiryDate != "" && !validExpiryDate(value.ExpiryDate)) {
 			return errors.New("notification expiry state is invalid")

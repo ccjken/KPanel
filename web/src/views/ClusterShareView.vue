@@ -28,7 +28,7 @@ import { usePhraseCatalog } from '@/i18n/phrase'
 import { useI18n } from '@/i18n'
 import { sortPublicClusterHostsTemporarily, type ClusterHostTemporarySortKey, type ClusterHostTemporarySortDirection } from '@/lib/clusterHostTemporarySort'
 import { ApiError, api } from '@/lib/api'
-import { formatNetworkTrafficCounter } from '@/lib/networkTraffic'
+import { clusterTrafficCounters, formatNetworkTrafficCounter, trafficPeriodHint } from '@/lib/networkTraffic'
 import {
   clampPercent,
   formatDateTime,
@@ -371,17 +371,17 @@ onBeforeUnmount(() => {
               </dd>
             </div>
             <div class="share-details__traffic">
-              <dt>累计流量</dt>
+              <dt :title="trafficPeriodHint(host.trafficPeriod, t)" :aria-label="trafficPeriodHint(host.trafficPeriod, t)">累计流量</dt>
               <dd>
                 <span title="累计接收">
                   <ArrowDown :size="13" aria-hidden="true" />
                   <span class="sr-only">累计接收</span>
-                  {{ host.collectedAt ? formatNetworkTrafficCounter(host.network, 'received') : '—' }}
+                  {{ host.collectedAt ? formatNetworkTrafficCounter(clusterTrafficCounters(host), 'received') : '—' }}
                 </span>
                 <span title="累计传送">
                   <ArrowUp :size="13" aria-hidden="true" />
                   <span class="sr-only">累计传送</span>
-                  {{ host.collectedAt ? formatNetworkTrafficCounter(host.network, 'sent') : '—' }}
+                  {{ host.collectedAt ? formatNetworkTrafficCounter(clusterTrafficCounters(host), 'sent') : '—' }}
                 </span>
               </dd>
             </div>

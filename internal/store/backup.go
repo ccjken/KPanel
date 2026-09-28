@@ -26,6 +26,7 @@ func (s *Store) ExportIdentity() ([]byte, error) {
 		Users:              users,
 		ClusterHostOrder:   cloneClusterHostOrder(s.data.ClusterHostOrder),
 		ClusterHostDetails: maps.Clone(s.data.ClusterHostDetails),
+		ClusterTraffic:     maps.Clone(s.data.ClusterTraffic),
 		Appearance:         cloneAppearance(s.data.Appearance),
 	})
 }
@@ -48,6 +49,9 @@ func ValidateIdentityBackup(data []byte) error {
 	}
 	if validateClusterHostDetailsMap(state.ClusterHostDetails) != nil {
 		return errors.New("invalid cluster host details backup")
+	}
+	if validateClusterTraffic(state.ClusterTraffic, state.ClusterHostDetails) != nil {
+		return errors.New("invalid cluster traffic backup")
 	}
 	u := state.Users[0]
 	if u.ID == "" || len(u.ID) > 128 || u.Role != "admin" || u.Username == "" || len(u.Username) > 128 || len(u.PasswordHash) > 1024 || len(u.PasswordHash) < 32 || len(u.TOTPRecoveryCodeHashes) != 0 || len(u.Passkeys) != 0 {
@@ -88,6 +92,7 @@ func (s *Store) RestoreIdentity(data []byte) error {
 	s.data.ClusterShare = ClusterShare{}
 	s.data.ClusterHostOrder = cloneClusterHostOrder(incoming.ClusterHostOrder)
 	s.data.ClusterHostDetails = maps.Clone(incoming.ClusterHostDetails)
+	s.data.ClusterTraffic = maps.Clone(incoming.ClusterTraffic)
 	s.data.Appearance = cloneAppearance(incoming.Appearance)
 	if err := s.persistLocked(); err != nil {
 		s.data = previous

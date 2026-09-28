@@ -80,6 +80,7 @@ type HostSnapshot struct {
 }
 
 type Host struct {
+	TrafficPeriod               *contract.TrafficPeriod   `json:"trafficPeriod,omitempty"`
 	LightHealth                 *contract.LightNodeHealth `json:"lightHealth,omitempty"`
 	ID                          string                    `json:"id"`
 	IsLocal                     bool                      `json:"isLocal"`

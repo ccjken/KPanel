@@ -43,6 +43,7 @@ type Event struct {
 
 type storedEvent struct {
 	Event
+	TrafficCycle string `json:"trafficCycle,omitempty"`
 	// Binds delayed delivery to the expiry date that generated this reminder.
 	ExpiryDate string `json:"expiryDate,omitempty"`
 	// Never included in an API response. Bind retries to the original channel.
@@ -111,6 +112,9 @@ func validateHistory(state historyState) error {
 	}
 	var previous uint64
 	for _, event := range state.Events {
+		if !validTrafficCycle(event.TrafficCycle) {
+			return errors.New("invalid traffic cycle")
+		}
 		if (event.Rule == serverExpiryRuleKey && !validExpiryDate(event.ExpiryDate)) ||
 			(event.Rule != serverExpiryRuleKey && event.ExpiryDate != "") {
 			return errors.New("invalid notification expiry event")

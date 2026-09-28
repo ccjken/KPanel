@@ -27,7 +27,7 @@ type clusterHostsResponse struct {
 }
 
 func (s *Server) clusterHostsView(ctx context.Context) clusterHostsResponse {
-	hosts := s.cluster.Hosts(ctx)
+	hosts := s.accountedClusterHosts(ctx)
 	value, configured, version := s.store.ClusterHostOrder()
 	values := s.store.ClusterHostDetails()
 	details := make(map[string]clusterHostDetailsResponse, len(hosts.Items))

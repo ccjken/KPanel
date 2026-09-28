@@ -24,6 +24,14 @@ function host(
 }
 
 describe('temporary cluster host sorting', () => {
+  it('sorts by cycle usage instead of the raw counters and puts unavailable cycles last', () => {
+    const cycle = host('cycle', 0, 0, 0, 9000, 9000)
+    cycle.trafficPeriod = { available: true, receivedBytes: 1, sentBytes: 2, startedAt: '', endsAt: '', partial: true, estimated: false }
+    const legacy = host('legacy', 0, 0, 0, 100, 200)
+    const waiting = { ...cycle, id: 'waiting', trafficPeriod: { ...cycle.trafficPeriod, available: false } }
+    expect(sortClusterHostsTemporarily([waiting, cycle, legacy], 'traffic', 'desc').map(item => item.id)).toEqual(['legacy', 'cycle', 'waiting'])
+    expect(sortClusterHostsTemporarily([waiting, cycle, legacy], 'traffic', 'asc').map(item => item.id)).toEqual(['cycle', 'legacy', 'waiting'])
+  })
   const customOrder = [
     host('custom-first', 20, 80, 30, 100, 200),
     host('custom-second', 70, 10, 50, 900, 100),

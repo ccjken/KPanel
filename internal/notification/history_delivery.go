@@ -40,8 +40,10 @@ func (s *Service) deliverHistory(ctx context.Context, state persistedState, host
 	before := cloneHistory(history)
 	expiries := s.expirySnapshot()
 	present := map[string]bool{}
+	cycles := map[string]string{}
 	for _, host := range hosts {
 		present[host.ID] = true
+		cycles[host.ID] = trafficCycleKey(host)
 	}
 	indices := []int{}
 	for i := range history.Events {
@@ -59,6 +61,8 @@ func (s *Service) deliverHistory(ctx context.Context, state persistedState, host
 			reason = "rule_disabled"
 		case !present[event.HostID]:
 			reason = "host_removed"
+		case (event.Rule == cumulativeTrafficReceivedRuleKey || event.Rule == cumulativeTrafficSentRuleKey) && event.TrafficCycle != cycles[event.HostID]:
+			reason = "traffic_cycle_changed"
 		case credential != "" && event.ChannelFingerprint != tokenFingerprint(credential):
 			reason = "channel_changed"
 		case now.Sub(event.CreatedAt) >= 24*time.Hour:

@@ -555,6 +555,9 @@ func (s *Service) evaluate(parent context.Context) error {
 		if rule == serverExpiryRuleKey {
 			event.ExpiryDate = expiries[host.ID].ExpiresOn
 		}
+		if rule == cumulativeTrafficReceivedRuleKey || rule == cumulativeTrafficSentRuleKey {
+			event.TrafficCycle = trafficCycleKey(host)
+		}
 		if event.HostName == "" {
 			event.HostName = host.ID
 		}
@@ -606,11 +609,18 @@ func (s *Service) evaluate(parent context.Context) error {
 		if rules.TrafficEnabled && rateAvailable {
 			stateChanged = s.handleThreshold(host, "traffic", rate, float64(rules.TrafficThresholdMiBPerSecond), "MiB/s", now, locale, trySend) || stateChanged
 		}
+		received, sent := host.LastSnapshot.Telemetry.Network.ReceivedBytes, host.LastSnapshot.Telemetry.Network.SentBytes
+		if host.TrafficPeriod != nil {
+			if !host.TrafficPeriod.Available {
+				continue
+			}
+			received, sent = host.TrafficPeriod.ReceivedBytes, host.TrafficPeriod.SentBytes
+		}
 		if rules.TrafficTotalReceivedEnabled {
-			stateChanged = s.handleCumulativeThreshold(host, cumulativeTrafficReceivedRuleKey, host.LastSnapshot.Telemetry.Network.ReceivedBytes, rules.TrafficTotalReceivedThresholdGiB, now, locale, trySend) || stateChanged
+			stateChanged = s.handleCumulativeThreshold(host, cumulativeTrafficReceivedRuleKey, received, rules.TrafficTotalReceivedThresholdGiB, now, locale, trySend) || stateChanged
 		}
 		if rules.TrafficTotalSentEnabled {
-			stateChanged = s.handleCumulativeThreshold(host, cumulativeTrafficSentRuleKey, host.LastSnapshot.Telemetry.Network.SentBytes, rules.TrafficTotalSentThresholdGiB, now, locale, trySend) || stateChanged
+			stateChanged = s.handleCumulativeThreshold(host, cumulativeTrafficSentRuleKey, sent, rules.TrafficTotalSentThresholdGiB, now, locale, trySend) || stateChanged
 		}
 	}
 	// Resource alert states remain dormant: no collection, evaluation, retries
@@ -722,12 +732,14 @@ func (s *Service) handleCumulativeThreshold(host cluster.Host, ruleKey string, v
 	if !tracked {
 		return false
 	}
-	if state.LastNetworkBytes > 0 && value < state.LastNetworkBytes {
+	cycle := trafficCycleKey(host)
+	if state.TrafficCycle != cycle || (state.LastNetworkBytes > 0 && value < state.LastNetworkBytes) {
 		// Network counters are monotonic until an interface, host or agent
 		// restarts. A rollback starts a new accumulation cycle and must not
 		// generate a misleading recovery message.
 		state = alertState{}
 	}
+	state.TrafficCycle = cycle
 	state.LastNetworkBytes = value
 	state.Consecutive = 0
 	if value < thresholdBytes {

@@ -58,6 +58,9 @@ func TestClusterHostDetailsAuthorizationLifecycleAndPublicWhitelist(t *testing.T
 	}
 	public := s.clusterShareSnapshot(context.Background(), settings, "share-version")
 	encoded, _ := json.Marshal(public.Items[0])
+	if public.Items[0].TrafficPeriod == nil || strings.Contains(string(encoded), "sampleAt") || strings.Contains(string(encoded), "recordedAt") {
+		t.Fatalf("public accounting whitelist: %s", encoded)
+	}
 	if public.Items[0].Price != "$5/month" || public.Items[0].ExpiresOn != "2027-09-28" || public.Items[0].TrafficResetDay != 31 {
 		t.Fatalf("public metadata missing: %s", encoded)
 	}

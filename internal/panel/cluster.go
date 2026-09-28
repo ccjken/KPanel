@@ -52,6 +52,9 @@ func (s clusterTelemetrySource) Telemetry(ctx context.Context) (contract.HostTel
 
 func (s *Server) StartBackground(ctx context.Context) {
 	s.cluster.Start(ctx)
+	if s.clusterTraffic != nil {
+		s.clusterTraffic.Start(ctx)
+	}
 	if s.notifications != nil {
 		s.notifications.Start(ctx)
 	}
@@ -77,6 +80,9 @@ func (s *Server) Close() error {
 	// Cluster-owned relay connections can outlive HTTP shutdown. Close their
 	// transport before waiting for handlers, or restore restarts can deadlock.
 	var clusterErr error
+	if s.clusterTraffic != nil {
+		s.clusterTraffic.Close()
+	}
 	if s.cluster != nil {
 		clusterErr = s.cluster.Close()
 	}

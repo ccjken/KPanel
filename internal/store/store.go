@@ -164,15 +164,16 @@ type diskState struct {
 	Sessions      []Session `json:"sessions"`
 	// Audit is read only to migrate records written before audit history
 	// moved to its own database; it is never persisted again.
-	Audit              []AuditEvent                  `json:"audit,omitempty"`
-	LoginAttempts      []LoginAttempt                `json:"loginAttempts"`
-	SecurityEntrance   SecurityEntrance              `json:"securityEntrance,omitempty"`
-	PasskeyOrigin      string                        `json:"passkeyOrigin,omitempty"`
-	ClusterShare       ClusterShare                  `json:"clusterShare,omitempty"`
-	ClusterHostOrder   *ClusterHostOrder             `json:"clusterHostOrder,omitempty"`
-	ClusterHostDetails map[string]ClusterHostDetails `json:"clusterHostDetails,omitempty"`
-	Appearance         *Appearance                   `json:"appearance,omitempty"`
-	FileShares         []FileShare                   `json:"fileShares,omitempty"`
+	Audit              []AuditEvent                    `json:"audit,omitempty"`
+	LoginAttempts      []LoginAttempt                  `json:"loginAttempts"`
+	SecurityEntrance   SecurityEntrance                `json:"securityEntrance,omitempty"`
+	PasskeyOrigin      string                          `json:"passkeyOrigin,omitempty"`
+	ClusterShare       ClusterShare                    `json:"clusterShare,omitempty"`
+	ClusterHostOrder   *ClusterHostOrder               `json:"clusterHostOrder,omitempty"`
+	ClusterHostDetails map[string]ClusterHostDetails   `json:"clusterHostDetails,omitempty"`
+	ClusterTraffic     map[string]ClusterTrafficRecord `json:"clusterTraffic,omitempty"`
+	Appearance         *Appearance                     `json:"appearance,omitempty"`
+	FileShares         []FileShare                     `json:"fileShares,omitempty"`
 }
 
 // Store is a small, single-node persistence layer. It deliberately stores only
@@ -247,6 +248,9 @@ func Open(path string) (*Store, error) {
 		}
 		if err := validateClusterHostDetailsMap(s.data.ClusterHostDetails); err != nil {
 			return nil, fmt.Errorf("validate cluster host details: %w", err)
+		}
+		if err := validateClusterTraffic(s.data.ClusterTraffic, s.data.ClusterHostDetails); err != nil {
+			return nil, fmt.Errorf("validate cluster traffic: %w", err)
 		}
 	case errors.Is(err, os.ErrNotExist):
 		if err := s.persistLocked(); err != nil {
@@ -1164,6 +1168,7 @@ func cloneDiskState(source diskState) diskState {
 		ClusterShare:       cloneClusterShare(source.ClusterShare),
 		ClusterHostOrder:   cloneClusterHostOrder(source.ClusterHostOrder),
 		ClusterHostDetails: maps.Clone(source.ClusterHostDetails),
+		ClusterTraffic:     maps.Clone(source.ClusterTraffic),
 		Appearance:         cloneAppearance(source.Appearance),
 		FileShares:         cloneFileShares(source.FileShares),
 	}

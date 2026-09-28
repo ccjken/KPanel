@@ -388,8 +388,8 @@ describe('ClusterView compact summary layout', () => {
     expect(source).toMatch(/\.cluster-grid\.is-list \.cluster-card__details > \.cluster-metric-link\s*\{[^}]*border-radius:\s*0;/)
     expect(source).toMatch(/\.cluster-metric-link:hover,\s*\.cluster-metric-link:focus-visible\s*\{[^}]*background:\s*var\(--brand-soft\);/)
     expect(source).toMatch(/\.cluster-metric-link:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--brand\);/)
-    expect(source).toContain("formatNetworkTrafficCounter(host.lastSnapshot.telemetry.network, 'received')")
-    expect(source).toContain("formatNetworkTrafficCounter(host.lastSnapshot.telemetry.network, 'sent')")
+    expect(source).toContain("formatNetworkTrafficCounter(clusterTrafficCounters(host), 'received')")
+    expect(source).toContain("formatNetworkTrafficCounter(clusterTrafficCounters(host), 'sent')")
     expect(source).not.toContain('formatTotalNetworkTraffic')
   })
 

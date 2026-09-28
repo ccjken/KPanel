@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/kejilion/kejilion-panel/internal/cluster"
+	"github.com/kejilion/kejilion-panel/internal/contract"
 	"github.com/kejilion/kejilion-panel/internal/store"
 )
 
@@ -59,6 +60,7 @@ type publicClusterShareSnapshot struct {
 }
 
 type publicClusterShareHost struct {
+	TrafficPeriod   *contract.TrafficPeriod    `json:"trafficPeriod,omitempty"`
 	ExpiresOn       string                     `json:"expiresOn,omitempty"`
 	Price           string                     `json:"price,omitempty"`
 	TrafficResetDay int                        `json:"trafficResetDay,omitempty"`
@@ -326,7 +328,7 @@ func (s *Server) clusterShareSnapshot(ctx context.Context, value store.ClusterSh
 	if s.clusterShareCache.resourceVersion == resourceVersion && now.Before(s.clusterShareCache.expiresAt) {
 		return s.clusterShareCache.value
 	}
-	inventory := s.cluster.Hosts(ctx)
+	inventory := s.accountedClusterHosts(ctx)
 	details := s.store.ClusterHostDetails()
 	result := publicClusterShareSnapshot{
 		Title: value.Title, Description: value.Description, GeneratedAt: now,
@@ -342,6 +344,7 @@ func (s *Server) clusterShareSnapshot(ctx context.Context, value store.ClusterSh
 			ExpiresOn:       details[host.ID].ExpiresOn,
 			Price:           details[host.ID].Price,
 			TrafficResetDay: details[host.ID].TrafficResetDay,
+			TrafficPeriod:   host.TrafficPeriod,
 		}
 		if item.State == "online" {
 			result.Online++

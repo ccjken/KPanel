@@ -1,4 +1,4 @@
-import { networkTrafficCounterBytes, type NetworkTrafficCounters } from '@/lib/networkTraffic'
+import { clusterTrafficCounters, networkTrafficCounterBytes, type NetworkTrafficCounters } from '@/lib/networkTraffic'
 import type { ClusterHost, ClusterHostDetails, PublicClusterShareHost } from '@/types/api'
 
 export type ClusterHostDetailsSortKey = 'custom' | 'expiresOn' | 'price'
@@ -91,14 +91,15 @@ function telemetryMetric(
     network: NetworkTrafficCounters
   } | undefined,
   key: ClusterHostTemporarySortKey,
+  traffic?: NetworkTrafficCounters,
 ): number | undefined {
   if (!telemetry || key === 'custom') return undefined
   if (key === 'cpu') return normalizedMetric(telemetry.cpu.usagePercent)
   if (key === 'memory') return normalizedMetric(telemetry.memory.usagePercent)
   if (key === 'disk') return normalizedMetric(telemetry.disk.usagePercent)
 
-  const received = networkTrafficCounterBytes(telemetry.network, 'received')
-  const sent = networkTrafficCounterBytes(telemetry.network, 'sent')
+  const received = networkTrafficCounterBytes(traffic, 'received')
+  const sent = networkTrafficCounterBytes(traffic, 'sent')
   if (received === undefined || sent === undefined) return undefined
   return normalizedMetric(received + sent)
 }
@@ -112,7 +113,7 @@ export function sortClusterHostsTemporarily(
   if (key === 'custom') return [...items]
   if (key === 'expiresOn' || key === 'price') return sortClusterHostsByDetails(items, key, direction, host => details[host.id])
   return sortByMetric(items, direction, host => {
-    const value = telemetryMetric(host.lastSnapshot?.telemetry, key)
+    const value = telemetryMetric(host.lastSnapshot?.telemetry, key, clusterTrafficCounters(host))
     return value === undefined ? undefined : { value }
   })
 }
@@ -126,7 +127,7 @@ export function sortPublicClusterHostsTemporarily(
     return sortClusterHostsByDetails(items, key, direction, host => host)
   }
   return sortByMetric(items, direction, host => {
-    const value = telemetryMetric(host.collectedAt ? host : undefined, key)
+    const value = telemetryMetric(host.collectedAt ? host : undefined, key, clusterTrafficCounters(host))
     return value === undefined ? undefined : { value }
   })
 }
