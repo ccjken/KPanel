@@ -1,8 +1,8 @@
 # KPanel 当前业务事实与规范适配基线
 
-- 复核日期：`2026-09-26`
-- 基线提交：`081c983bccb617cb70e5a39f77507eeefb521f30`
-- 基线版本：`v1.21.0`
+- 复核日期：`2026-09-28`
+- 基线提交：`cea6261f9ae1de064216a1c423d3cd3f2d87d3fa`
+- 基线版本：`v1.22.0`
 - 上一份完整复核：[`product-quality-review-2026-08-13.md`](product-quality-review-2026-08-13.md)
 - 自动刷新门槛：基线后达到 50 个提交，或同时达到 20 个提交和 8 个正式版本；产品性质、业务真源、权限边界或核心旅程发生实质变化时立即复核
 
@@ -438,3 +438,30 @@ CHANGELOG、公开 Release 和验收记录。`v1.21.0` 仍是最近稳定版；�
 来源：[rc.10 Release](https://github.com/kejilion/KPanel/releases/tag/v1.22.0-rc.10)、
 [`release-v1.22.0-rc.9-acceptance.md`](release-v1.22.0-rc.9-acceptance.md)、
 [`release-v1.22.0-rc.10-acceptance.md`](release-v1.22.0-rc.10-acceptance.md) 与候选源码差异。
+
+### v1.22.0 稳定版与 v1.23.0 预览序列
+
+本次以已发布的 `v1.22.0`（`cea6261f`）为稳定事实基线，核对稳定版验收记录、
+`v1.23.0-rc.1` 至 `rc.3` 的 Changelog、RC3 验收记录及当前候选差异：
+
+- `v1.22.0` 已作为 GitHub Latest 与 Docker `latest` 发布，镜像 index 为
+  `sha256:46b854bdf6233e81742986a3bee9e65c6b4a39123c393a51a4ada63783eed7ac`；
+  三个官方 3D 场景、Worker/OffscreenCanvas 优化、自定义壁纸在经典模式与登录页显示属于稳定版范围。
+  公开产物成功不代表用户实例已升级或生产环境已部署。
+- `v1.23.0-rc.1` 至 `rc.3` 是已发布预览：外观选择通过 Panel 状态跨已登录浏览器同步；
+  静态图和 3D 场景切换层、浅色导航及场景加载占位视觉曾调整。RC3 的 `preview` 镜像 index 为
+  `sha256:d6690b097d9c1a4282132eb56258bd73f67d83ee859bf82099d063d9bd42c6b8`；
+  GitHub Latest 和 Docker `latest` 仍为 `v1.22.0`。
+- RC3 后已收到“通透”仍看不到壁纸的现场截图。公开镜像的浏览器复现证实：系统减少动态效果本身
+  不隐藏壁纸，但浏览器减少透明度会把经典模式背景层设为 `display: none`；同一规则在 `v1.22.0`
+  也存在，不能把它单独归因于 RC3。RC2 起经典模式静态图从 CSS 背景改为共用壁纸组件，是另一项
+  可定位的呈现变化。当前 `v1.23.0-rc.4` 候选恢复静态图的稳定版绘制路径，并让明确选择的透出
+  选项在减少透明度下仍显示；候选测试不等于公开发布或现场问题已关闭。
+- 新候选还包括 MCP bridge 的 `version` 子命令，以及面板仅使用 Docker 部署的分发说明和 Release
+  元数据归档名称修正。它们不改变宿主机动作、Panel/Agent 权限、持久数据格式或 `kejilion.sh` 契约；
+  未提交的动态场景开发工作不进入本轮预览。
+
+本次刷新不放宽 `arena-154` 的隔离验收要求；用户已选择的 `local-wsl-dr` 仍只用于候选 L3，
+不能替代公开镜像在登记环境的浏览器验收或生产部署。来源：
+[`v1.22.0` 验收](release-v1.22.0-acceptance.md)、
+[`v1.23.0-rc.3` 验收](release-v1.23.0-rc.3-acceptance.md)、对应 Changelog 与精确源码差异。
