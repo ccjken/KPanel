@@ -2177,7 +2177,7 @@ onBeforeUnmount(() => {
           </label>
           <small>{{ t('cluster.details.hint') }}</small>
         </div>
-        <div class="cluster-manage__details form-stack">
+        <div class="cluster-manage__details cluster-manage__traffic-limits form-stack">
           <strong>{{ t('cluster.details.trafficLimits') }}</strong>
           <label class="field">
             {{ t('cluster.details.receivedLimit') }}
@@ -2283,6 +2283,8 @@ onBeforeUnmount(() => {
   border-block: 1px solid var(--border);
 }
 .cluster-manage__details small { font-size: 0.8125rem; line-height: 1.5; color: var(--text-soft); }
+.cluster-manage__traffic-limits .field,
+.cluster-manage__traffic-limits input { font-size: .875rem; }
 .cluster-manage__expiry-label { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .cluster-manage__expiry-reminder { display: inline-flex; align-items: center; gap: 7px; font-size: .875rem; cursor: pointer; }
 .cluster-manage__expiry-reminder input { flex: 0 0 auto; width: 16px; height: 16px; min-height: 16px; padding: 0; margin: 0; accent-color: var(--brand); }
