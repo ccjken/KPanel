@@ -1287,6 +1287,7 @@ describe('ClusterView optional server details', () => {
     Object.assign(view.editDetails, { expiresOn: '2028-02-29', price: ' $5/month ', trafficResetDay: 15 })
     mocks.saveHostDetails.mockResolvedValueOnce({ expiresOn: '2028-02-29', price: '$5/month', trafficResetDay: 15, resourceVersion: 'details-v2' })
     mocks.rename.mockResolvedValueOnce({ ...target, name: 'New name', resourceVersion: 'name-v2' })
+    mocks.hosts.mockResolvedValueOnce({ ...items, items: [{ ...target, name: 'New name', resourceVersion: 'name-v2', trafficPeriod: { available: true, receivedBytes: 0, sentBytes: 0, startedAt: '', endsAt: '', partial: true, estimated: false } }] })
 
     await view.saveHost()
 
@@ -1319,6 +1320,43 @@ describe('ClusterView optional server details', () => {
     expect(view.editDetails.price).toBe('$5/month')
     expect(view.manageOpen.value).toBe(true)
     expect(view.manageError.value).toContain('输入已保留')
+  })
+
+  it('clears old cycle data immediately when changing reset configuration even if the readback fails', async () => {
+    const view = setupView()
+    const items = inventory()
+    const target = items.items[0]!
+    target.trafficPeriod = { available: true, receivedBytes: 123, sentBytes: 456, startedAt: '', endsAt: '', partial: false, estimated: false }
+    items.hostDetails = { [target.id]: { trafficResetDay: 15, resourceVersion: 'v1' } }
+    view.inventory.value = items
+    view.openManage(target)
+    view.editDetails.trafficResetDay = ''
+    mocks.saveHostDetails.mockResolvedValueOnce({ resourceVersion: 'v2' })
+    mocks.hosts.mockRejectedValueOnce(new Error('readback unavailable'))
+    await view.saveHost()
+    expect(view.inventory.value?.items[0]?.trafficPeriod).toBeUndefined()
+    view.editDetails.trafficResetDay = 1
+    mocks.saveHostDetails.mockResolvedValueOnce({ trafficResetDay: 1, resourceVersion: 'v3' })
+    mocks.hosts.mockRejectedValueOnce(new Error('readback unavailable'))
+    await view.saveHost()
+    expect(view.inventory.value?.items[0]?.trafficPeriod?.available).toBe(false)
+    expect(view.inventory.value?.items[0]?.trafficPeriod?.receivedBytes).toBe(0)
+  })
+
+  it('preserves center accounting when a rename returns a raw host response', async () => {
+    const view = setupView()
+    const items = inventory()
+    const target = items.items[0]!
+    target.trafficPeriod = { available: true, receivedBytes: 123, sentBytes: 456, startedAt: '', endsAt: '', partial: false, estimated: false }
+    items.hostDetails = { [target.id]: { trafficResetDay: 15, resourceVersion: 'v1' } }
+    view.inventory.value = items
+    view.openManage(target)
+    view.editName.value = 'renamed'
+    mocks.rename.mockResolvedValueOnce({ ...target, name: 'renamed', trafficPeriod: undefined })
+    await view.saveHost()
+    expect(view.inventory.value?.items[0]?.trafficPeriod?.receivedBytes).toBe(123)
+    expect(view.inventory.value?.items[0]?.name).toBe('renamed')
+    expect(mocks.hosts).not.toHaveBeenCalled()
   })
 
   it('reports a partial save and retries only the failed name without resubmitting details', async () => {

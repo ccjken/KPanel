@@ -1114,6 +1114,7 @@ async function saveHost(): Promise<void> {
     || Boolean(details.expiryReminderEnabled) !== Boolean(savedDetails.value.expiryReminderEnabled)
     || details.price !== (savedDetails.value.price || '')
     || details.trafficResetDay !== (savedDetails.value.trafficResetDay || 0)
+  const trafficResetChanged = details.trafficResetDay !== (savedDetails.value.trafficResetDay || 0)
   manageError.value = ''
   if (detailsChanged && !editDetails.resourceVersion) {
     manageError.value = t('cluster.details.unavailable')
@@ -1133,6 +1134,12 @@ async function saveHost(): Promise<void> {
       editDetails.resourceVersion = updated.resourceVersion
       savedDetails.value = { ...updated }
       detailsWritten = true
+      if (trafficResetChanged) {
+        const current = inventory.value?.items.find(item => item.id === host.id)
+        if (current) current.trafficPeriod = details.trafficResetDay
+          ? { available: false, receivedBytes: 0, sentBytes: 0, startedAt: '', endsAt: '', partial: true, estimated: false }
+          : undefined
+      }
     }
     phase = 'name'
     if (name !== savedName.value) {
@@ -1157,6 +1164,7 @@ async function saveHost(): Promise<void> {
     }
   } finally {
     saving.value = false
+    if (detailsWritten && trafficResetChanged) await load(true)
   }
 }
 
@@ -1216,7 +1224,8 @@ async function refreshHost(host: ClusterHost): Promise<void> {
 function upsertHost(host: ClusterHost): void {
   if (!inventory.value) return
   const index = inventory.value.items.findIndex((item) => item.id === host.id)
-  if (index >= 0) inventory.value.items[index] = host
+  // Individual mutation responses contain raw telemetry, not center accounting.
+  if (index >= 0) inventory.value.items[index] = { ...host, trafficPeriod: host.trafficPeriod ?? inventory.value.items[index]?.trafficPeriod }
   else inventory.value.items.unshift(host)
   inventory.value.total = inventory.value.items.length
 }
