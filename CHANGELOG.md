@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [1.23.0-rc.4] - 2026-09-28
+
+本预览版修复经典模式壁纸透出，补齐 MCP bridge 版本查询，并澄清面板的正式分发方式。
+
+### Added
+
+- `kpanel-mcp version` 可输出 bridge 的版本和协议版本。
+
+### Fixed
+
+- 经典模式静态壁纸恢复 1.22.0 的背景绘制路径；3D 场景继续使用动态渲染层。
+- 明确选择“氛围”或“通透”时，浏览器的减少透明度设置不再直接隐藏壁纸；强制高对比度模式仍使用纯色背景。
+- Release 附件改名为 `kejilion-panel-meta-<version>.tar.gz`，准确表明其只含部署、文档及许可元数据；README、部署文档和发布说明统一写明面板本体使用 Docker 部署。
+
+### Upgrade Notes
+
+- 本版只提升 GitHub prerelease 与 Docker `preview`；GitHub Latest、Docker `latest` 和生产部署继续保持 1.22.0。
+- 不改变 `kejilion.sh`、Agent 权限、持久化格式或数据库结构，`scriptLinkageState=not-required`；应用市场配置无需更新。
+
 ## [1.23.0-rc.3] - 2026-09-28
 
 本预览版修正浅色经典模式侧边栏的壁纸透出和 3D 场景加载占位层的亮度，并改善首次安装 Token 的复制体验。
