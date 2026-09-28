@@ -498,7 +498,7 @@ onBeforeUnmount(() => {
           </div>
           <div class="cluster-notifications__event-rules">
             <label class="cluster-notifications__event-rule cluster-notifications__service-rule">
-              <span><strong>{{ phrase('服务异常通知') }}</strong><small>{{ phrase('监控所有主机的全部服务检测项，新增项自动生效。连续 3 次失败告警，恢复后通知；默认关闭。') }}</small></span>
+              <span><strong>{{ phrase('服务异常通知') }}</strong><small>{{ phrase('监控所有主机的 Ping、TCP、HTTP 检测项，连续 3 次失败时告警，恢复后通知。') }}</small></span>
               <input v-model="form.serviceChecksEnabled" type="checkbox" :aria-label="phrase('启用服务异常通知')" />
             </label>
             <label class="cluster-notifications__event-rule">
