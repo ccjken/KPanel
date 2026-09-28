@@ -473,8 +473,9 @@ function startLightEnrollmentWatch(): void {
   void pollLightEnrollmentConnection()
 }
 
-async function load(silent = false): Promise<void> {
-  if (loadInFlight) return
+async function load(silent = false, replaceInFlight = false): Promise<void> {
+  if (loadInFlight && !replaceInFlight) return
+  if (replaceInFlight) loadController?.abort()
   loadInFlight = true
   if (!silent && !inventory.value) loading.value = true
   else refreshing.value = true
@@ -485,6 +486,7 @@ async function load(silent = false): Promise<void> {
     if (controller.signal.aborted) return
     inventory.value = freshInventory
     await applyPanelHostOrder(inventory.value.items, inventory.value.hostOrder)
+    if (controller.signal.aborted) return
     if (selected.value) {
       const fresh = inventory.value.items.find((host) => host.id === selected.value?.id)
       if (fresh) selected.value = fresh
@@ -495,14 +497,16 @@ async function load(silent = false): Promise<void> {
     loadError.value = ''
     refreshWarning.value = ''
   } catch (reason) {
-    if (reason instanceof DOMException && reason.name === 'AbortError') return
+    if (controller.signal.aborted || (reason instanceof DOMException && reason.name === 'AbortError')) return
     const message = friendlyError(reason, '无法读取集群主机，请稍后重试。')
     if (inventory.value) refreshWarning.value = `${message} 当前保留上次成功数据。`
     else loadError.value = message
   } finally {
-    loading.value = false
-    refreshing.value = false
-    loadInFlight = false
+    if (loadController === controller) {
+      loading.value = false
+      refreshing.value = false
+      loadInFlight = false
+    }
   }
 }
 
@@ -1164,7 +1168,7 @@ async function saveHost(): Promise<void> {
     }
   } finally {
     saving.value = false
-    if (detailsWritten && trafficResetChanged) await load(true)
+    if (detailsWritten && trafficResetChanged) await load(true, true)
   }
 }
 

@@ -1359,6 +1359,30 @@ describe('ClusterView optional server details', () => {
     expect(mocks.hosts).not.toHaveBeenCalled()
   })
 
+  it('reads the new cycle immediately even when an older inventory poll is still pending', async () => {
+    const view = setupView()
+    const items = inventory()
+    const target = items.items[0]!
+    const oldPeriod = { available: true, receivedBytes: 123, sentBytes: 456, startedAt: '', endsAt: '', partial: false, estimated: false }
+    target.trafficPeriod = oldPeriod
+    items.hostDetails = { [target.id]: { trafficResetDay: 15, resourceVersion: 'v1' } }
+    view.inventory.value = items
+    view.openManage(target)
+    let finishOld!: (value: ClusterHostList) => void
+    mocks.hosts.mockImplementationOnce(() => new Promise<ClusterHostList>(resolve => { finishOld = resolve }))
+    const pendingPoll = view.load(true)
+    view.editDetails.trafficResetDay = 1
+    mocks.saveHostDetails.mockResolvedValueOnce({ trafficResetDay: 1, resourceVersion: 'v2' })
+    const freshPeriod = { ...oldPeriod, receivedBytes: 0, sentBytes: 0, partial: true }
+    mocks.hosts.mockResolvedValueOnce({ ...items, items: [{ ...target, trafficPeriod: freshPeriod }], hostDetails: { [target.id]: { trafficResetDay: 1, resourceVersion: 'v2' } } })
+    await view.saveHost()
+    expect(mocks.hosts).toHaveBeenCalledTimes(2)
+    expect(view.inventory.value?.items[0]?.trafficPeriod).toEqual(freshPeriod)
+    finishOld({ ...items, items: [{ ...target, trafficPeriod: oldPeriod }] })
+    await pendingPoll
+    expect(view.inventory.value?.items[0]?.trafficPeriod).toEqual(freshPeriod)
+  })
+
   it('reports a partial save and retries only the failed name without resubmitting details', async () => {
     const view = setupView()
     const items = inventory()
