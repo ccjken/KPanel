@@ -1069,7 +1069,6 @@ export default [
 	['正在执行 · {0}%', 'Running · {0}%'],
 	['Docker 容器：{0}', 'Docker container: {0}'],
 	['通知渠道', 'Notification channels'],
-	['选择一个消息渠道，接收所有集群主机的关键变化。', 'Choose one messaging channel to receive important changes from every cluster host.'],
 	['选择接收告警的通知渠道；同一时间只保存一个活动渠道。', 'Choose where to receive alerts. Only one active channel is stored at a time.'],
 	['飞书', 'Feishu'],
 	['钉钉', 'DingTalk'],

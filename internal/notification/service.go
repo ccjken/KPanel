@@ -67,6 +67,7 @@ type trafficSample struct {
 
 type Service struct {
 	store      *Store
+	history    *historyStore
 	hosts      HostSource
 	telegram   TelegramAPI
 	robots     RobotAPI
@@ -125,13 +126,15 @@ func NewService(config Config) (*Service, error) {
 		return nil, err
 	}
 	state := store.stateSnapshot()
+	history := openHistory(store.directory, state)
+	historyState, _ := history.snapshot()
 	service := &Service{
-		store: store, hosts: config.Hosts, telegram: config.Telegram, robots: config.Robots, timezone: config.Timezone, now: config.Now,
+		store: store, history: history, hosts: config.Hosts, telegram: config.Telegram, robots: config.Robots, timezone: config.Timezone, now: config.Now,
 		evaluation: config.EvaluationInterval, sustain: config.SustainSamples,
 		repeat: config.RepeatInterval, alerts: make(map[string]alertState),
 		traffic: make(map[string]trafficSample),
 	}
-	for key, value := range state.AlertStates {
+	for key, value := range historyState.Alerts {
 		service.alerts[key] = value
 	}
 	if state.ResourceVersion == "" {
@@ -222,6 +225,8 @@ func (s *Service) snapshot(ctx context.Context) Snapshot {
 	// Local certificate/container alerts are withdrawn. Keep the response shape
 	// for compatible clients without discovering host resources.
 	result.Resources = unknownResources()
+	_, historyErr := s.history.snapshot()
+	result.LocalRecording = historyErr == nil
 	return result
 }
 
@@ -303,7 +308,6 @@ func (s *Service) Configure(ctx context.Context, input UpdateInput) (Snapshot, e
 		}
 		return Snapshot{}, channelStoreError("state_store_unavailable", delivered, err)
 	}
-	s.replaceAlertStates(next.AlertStates)
 	return s.snapshot(ctx), nil
 }
 
@@ -517,39 +521,52 @@ func (s *Service) evaluate(parent context.Context) error {
 		parent = context.Background()
 	}
 	state := s.store.stateSnapshot()
-	if !state.Settings.Enabled {
-		return nil
+	history, historyErr := s.history.snapshot()
+	if historyErr != nil && s.history.loadFailed {
+		// Preserve a damaged file; never replace it with an empty successful history.
+		return historyError(historyErr)
 	}
+	before := cloneHistory(history)
+	s.replaceAlertStates(history.Alerts)
+	defer func() { current, _ := s.history.snapshot(); s.replaceAlertStates(current.Alerts) }()
+	if cumulativeTrafficRulesChanged(history.Rules, state.Settings.Rules) {
+		s.mu.Lock()
+		removeCumulativeTrafficAlertStates(s.alerts)
+		s.mu.Unlock()
+	}
+	history.Rules = state.Settings.Rules
 	credential, configured, credentialErr := s.store.credential()
-	if credentialErr != nil || !configured || !state.Telegram.HasChat || state.Telegram.TokenFingerprint != tokenFingerprint(credential) {
-		return nil
-	}
+	canDeliver := state.Settings.Enabled && credentialErr == nil && configured && state.Telegram.HasChat && state.Telegram.TokenFingerprint == tokenFingerprint(credential)
 	provider, _ := DetectProvider(credential)
 	fetchCtx, cancel := context.WithTimeout(parent, 8*time.Second)
 	defer cancel()
 	hosts := s.hosts.Hosts(fetchCtx)
 	now := s.displayTime(parent, s.now())
 	locale := normalizeNotificationLocale(state.Settings.Locale)
-	channelState := state.Telegram
-	sent := 0
 	stateChanged := s.pruneHostState(hosts.Items)
-	trySend := func(message string) (bool, bool) {
-		if sent >= maxMessagesPerEvaluation {
-			return false, false
+	trySend := func(host cluster.Host, rule, kind, message string) (bool, bool) {
+		history.Sequence++
+		event := storedEvent{Event: Event{ID: fmt.Sprint(history.Sequence), CreatedAt: now.UTC(), HostID: host.ID,
+			HostName: safeMessageText(host.Name), IsLocal: host.IsLocal || host.ID == cluster.LocalHostID,
+			Rule: rule, Kind: kind, Message: message, Delivery: "local_only"}}
+		if event.HostName == "" {
+			event.HostName = host.ID
 		}
-		sent++
-		sendCtx, cancel := context.WithTimeout(parent, channelSendTimeout)
-		err := s.sendChannel(sendCtx, provider, credential, channelState, message)
-		cancel()
-		channelState.LastCheckedAt = timePtr(now)
-		if err != nil {
-			channelState.Status = TelegramError
-			channelState.LastErrorCode = channelCode(provider, err)
-			return false, true
+		if kind == "recovery" {
+			for i := len(history.Events) - 1; i >= 0; i-- {
+				previous := history.Events[i]
+				if previous.HostID == host.ID && previous.Rule == rule && previous.Kind == "alert" {
+					event.RelatedEventID = previous.ID
+					break
+				}
+			}
 		}
-		channelState.Status = TelegramReady
-		channelState.LastSuccessAt = timePtr(now)
-		channelState.LastErrorCode = ""
+		if canDeliver {
+			event.Delivery = "pending"
+			event.Provider = provider
+			event.ChannelFingerprint = tokenFingerprint(credential)
+		}
+		history.Events = append(history.Events, event)
 		return true, true
 	}
 	for _, host := range hosts.Items {
@@ -591,13 +608,14 @@ func (s *Service) evaluate(parent context.Context) error {
 	}
 	// Resource alert states remain dormant: no collection, evaluation, retries
 	// or recovery delivery, even when persisted rules are enabled.
-	alertStates := s.alertStateSnapshot()
-	if !stateChanged && reflect.DeepEqual(channelState, state.Telegram) && reflect.DeepEqual(alertStates, state.AlertStates) {
-		return nil
+	history.Alerts = s.alertStateSnapshot()
+	pruneHistory(&history, now)
+	if historyErr != nil || stateChanged || !reflect.DeepEqual(before, history) {
+		if err := s.history.commit(history); err != nil {
+			return historyError(err)
+		}
 	}
-	state.Telegram = channelState
-	state.AlertStates = alertStates
-	return s.store.commitState(state)
+	return s.deliverHistory(parent, state, hosts.Items, credential, canDeliver, now)
 }
 
 func (s *Service) handleThreshold(
@@ -607,7 +625,7 @@ func (s *Service) handleThreshold(
 	unit string,
 	now time.Time,
 	locale string,
-	send func(string) (bool, bool),
+	send func(cluster.Host, string, string, string) (bool, bool),
 ) bool {
 	if !finiteMetric(value) || (unit == "%" && (value < 0 || value > 100)) {
 		return false
@@ -624,7 +642,7 @@ func (s *Service) handleThreshold(
 	if !state.Active && state.Consecutive >= s.sustain && canAlertAttempt(state, now) {
 		state.LastAttemptAt = now
 		s.setAlertState(key, state)
-		success, attempted := send(resourceAlertMessage(host, ruleKey, value, threshold, unit, now, locale, false))
+		success, attempted := send(host, ruleKey, "alert", resourceAlertMessage(host, ruleKey, value, threshold, unit, now, locale, false))
 		if !attempted {
 			state.LastAttemptAt = time.Time{}
 			s.setAlertState(key, state)
@@ -643,7 +661,7 @@ func (s *Service) handleThreshold(
 	if state.Active && now.Sub(state.LastNotifiedAt) >= s.repeat && canAlertAttempt(state, now) {
 		state.LastAttemptAt = now
 		s.setAlertState(key, state)
-		success, attempted := send(resourceAlertMessage(host, ruleKey, value, threshold, unit, now, locale, false))
+		success, attempted := send(host, ruleKey, "alert", resourceAlertMessage(host, ruleKey, value, threshold, unit, now, locale, false))
 		if !attempted {
 			state.LastAttemptAt = time.Time{}
 			s.setAlertState(key, state)
@@ -660,7 +678,7 @@ func (s *Service) handleThreshold(
 	return false
 }
 
-func (s *Service) handleThresholdRecovery(host cluster.Host, ruleKey string, value float64, unit, locale string, now time.Time, send func(string) (bool, bool)) bool {
+func (s *Service) handleThresholdRecovery(host cluster.Host, ruleKey string, value float64, unit, locale string, now time.Time, send func(cluster.Host, string, string, string) (bool, bool)) bool {
 	key := host.ID + ":" + ruleKey
 	state := s.getAlertState(key)
 	state.Consecutive = 0
@@ -670,7 +688,7 @@ func (s *Service) handleThresholdRecovery(host cluster.Host, ruleKey string, val
 	}
 	state.LastAttemptAt = now
 	s.setAlertState(key, state)
-	success, attempted := send(resourceAlertMessage(host, ruleKey, value, 0, unit, now, locale, true))
+	success, attempted := send(host, ruleKey, "recovery", resourceAlertMessage(host, ruleKey, value, 0, unit, now, locale, true))
 	if !attempted {
 		state.LastAttemptAt = time.Time{}
 		s.setAlertState(key, state)
@@ -687,7 +705,7 @@ func (s *Service) handleThresholdRecovery(host cluster.Host, ruleKey string, val
 	return false
 }
 
-func (s *Service) handleCumulativeThreshold(host cluster.Host, ruleKey string, value uint64, thresholdGiB int, now time.Time, locale string, send func(string) (bool, bool)) bool {
+func (s *Service) handleCumulativeThreshold(host cluster.Host, ruleKey string, value uint64, thresholdGiB int, now time.Time, locale string, send func(cluster.Host, string, string, string) (bool, bool)) bool {
 	if thresholdGiB <= 0 || thresholdGiB > MaxTrafficTotalThresholdGiB {
 		return false
 	}
@@ -717,7 +735,7 @@ func (s *Service) handleCumulativeThreshold(host cluster.Host, ruleKey string, v
 	}
 	state.LastAttemptAt = now
 	s.setAlertState(key, state)
-	success, attempted := send(cumulativeTrafficAlertMessage(host, ruleKey, value, thresholdBytes, now, locale))
+	success, attempted := send(host, ruleKey, "alert", cumulativeTrafficAlertMessage(host, ruleKey, value, thresholdBytes, now, locale))
 	if !attempted {
 		state.LastAttemptAt = time.Time{}
 		s.setAlertState(key, state)
@@ -733,7 +751,7 @@ func (s *Service) handleCumulativeThreshold(host cluster.Host, ruleKey string, v
 	return false
 }
 
-func (s *Service) handleAvailability(host cluster.Host, now time.Time, locale string, send func(string) (bool, bool)) bool {
+func (s *Service) handleAvailability(host cluster.Host, now time.Time, locale string, send func(cluster.Host, string, string, string) (bool, bool)) bool {
 	key := host.ID + ":availability"
 	state, tracked := s.reserveAlertState(key)
 	if !tracked {
@@ -754,7 +772,7 @@ func (s *Service) handleAvailability(host cluster.Host, now time.Time, locale st
 		}
 		state.LastAttemptAt = now
 		s.setAlertState(key, state)
-		success, attempted := send(availabilityAlertMessage(host, now, locale, true))
+		success, attempted := send(host, "availability", "recovery", availabilityAlertMessage(host, now, locale, true))
 		if !attempted {
 			state.LastAttemptAt = time.Time{}
 			s.setAlertState(key, state)
@@ -776,7 +794,7 @@ func (s *Service) handleAvailability(host cluster.Host, now time.Time, locale st
 	}
 	state.LastAttemptAt = now
 	s.setAlertState(key, state)
-	success, attempted := send(availabilityAlertMessage(host, now, locale, false))
+	success, attempted := send(host, "availability", "alert", availabilityAlertMessage(host, now, locale, false))
 	if !attempted {
 		state.LastAttemptAt = time.Time{}
 		s.setAlertState(key, state)
@@ -791,7 +809,7 @@ func (s *Service) handleAvailability(host cluster.Host, now time.Time, locale st
 	return false
 }
 
-func (s *Service) handleSSHLogin(host cluster.Host, event contract.SSHLoginEvent, now time.Time, locale string, send func(string) (bool, bool)) bool {
+func (s *Service) handleSSHLogin(host cluster.Host, event contract.SSHLoginEvent, now time.Time, locale string, send func(cluster.Host, string, string, string) (bool, bool)) bool {
 	if !contract.ValidSSHLoginEvent(event) {
 		return false
 	}
@@ -818,7 +836,7 @@ func (s *Service) handleSSHLogin(host cluster.Host, event contract.SSHLoginEvent
 	state.PendingEventID = event.ID
 	state.LastAttemptAt = now
 	s.setAlertState(key, state)
-	success, attempted := send(sshLoginMessage(host, event, now, locale))
+	success, attempted := send(host, "ssh", "info", sshLoginMessage(host, event, now, locale))
 	if !attempted {
 		state.LastAttemptAt = time.Time{}
 		state.PendingEventID = ""

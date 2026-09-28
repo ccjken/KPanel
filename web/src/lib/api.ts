@@ -29,6 +29,7 @@ import type {
   ClusterLightBatchEnrollmentList,
   ClusterLightEnrollment,
   ClusterNotificationSnapshot,
+  NotificationHistoryPage,
   ClusterPairingCode,
   ClusterShareSettings,
   CrossPanelFileTransferEvent,
@@ -1660,6 +1661,8 @@ export const api = {
       request<ClusterHostOrderPreference>('/cluster/host-order', { method: 'PUT', body }),
     shareSettings: (signal?: AbortSignal): Promise<ClusterShareSettings> =>
       request<ClusterShareSettings>('/cluster/share', { signal }),
+    notificationHistory: (filters: Record<string, string>, signal?: AbortSignal): Promise<NotificationHistoryPage> =>
+      request<NotificationHistoryPage>(`/cluster/notifications/history?${new URLSearchParams(filters)}`, { signal }),
     notifications: (signal?: AbortSignal): Promise<ClusterNotificationSnapshot> =>
       request<ClusterNotificationSnapshot>('/cluster/notifications', { signal }),
     updateNotifications: (body: {

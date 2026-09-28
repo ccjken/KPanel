@@ -202,13 +202,14 @@ type TelegramSnapshot struct {
 }
 
 type Snapshot struct {
-	Resources ResourceSnapshot `json:"resources"`
-	Enabled   bool             `json:"enabled"`
-	Locale    string           `json:"locale"`
-	Timezone  string           `json:"timezone"`
-	Rules     Rules            `json:"rules"`
-	Provider  Provider         `json:"provider"`
-	Channel   ChannelSnapshot  `json:"channel"`
+	LocalRecording bool             `json:"localRecording"`
+	Resources      ResourceSnapshot `json:"resources"`
+	Enabled        bool             `json:"enabled"`
+	Locale         string           `json:"locale"`
+	Timezone       string           `json:"timezone"`
+	Rules          Rules            `json:"rules"`
+	Provider       Provider         `json:"provider"`
+	Channel        ChannelSnapshot  `json:"channel"`
 	// Telegram mirrors Channel only when Telegram is active. It is retained
 	// for compatibility with clients released before multi-channel support.
 	Telegram        TelegramSnapshot `json:"telegram"`

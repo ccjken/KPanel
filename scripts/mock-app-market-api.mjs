@@ -593,6 +593,7 @@ if (process.env.KPANEL_MOCK_CLUSTER_FIXTURE) {
 
 let mockNotificationRevision = 1
 let mockNotificationSnapshot = {
+  localRecording: true,
   enabled: false,
   locale: 'zh-CN',
   timezone: 'Asia/Shanghai',
@@ -1547,6 +1548,27 @@ createServer(async (request, response) => {
       truncated: false,
       observedAt: new Date().toISOString(),
     })
+    return
+  }
+  if (request.method === 'GET' && url.pathname === '/api/v1/cluster/notifications/history') {
+    const hosts = [{ id: 'local', name: '本机 · KPanel', isLocal: true }, { id: 'preview-hk', name: '香港节点 · Production', isLocal: false }]
+    const events = Array.from({ length: 64 }, (_, index) => {
+      const host = hosts[index % hosts.length]
+      const recovery = index % 4 === 0
+      return { id: String(64 - index), createdAt: new Date(Date.now() - (index + 1) * 600000).toISOString(), hostId: host.id, hostName: host.name, isLocal: host.isLocal,
+        rule: index % 3 === 0 ? 'availability' : 'cpu', kind: recovery ? 'recovery' : 'alert',
+        message: recovery ? '模拟事件：主机连接已恢复。' : '模拟事件：CPU 持续超过 90%，当前 96%。',
+        relatedEventId: recovery ? String(63 - index) : undefined,
+        delivery: ['local_only', 'sent', 'failed', 'pending'][index % 4], attempts: index % 4 === 0 ? 0 : 1, provider: index % 4 === 0 ? undefined : 'telegram' }
+    })
+    const q = url.searchParams
+    const filtered = events.filter(event => (!q.get('host') || event.hostId === q.get('host')) && (!q.get('rule') || event.rule === q.get('rule')) &&
+      (!q.get('kind') || event.kind === q.get('kind')) && (!q.get('delivery') || event.delivery === q.get('delivery')) &&
+      (!q.get('since') || event.createdAt >= q.get('since')) && (!q.get('until') || event.createdAt <= q.get('until')) &&
+      (!q.get('cursor') || Number(event.id) < Number(q.get('cursor'))) &&
+      (!q.get('search') || (event.hostName + event.message).toLowerCase().includes(q.get('search').toLowerCase())))
+    const items = filtered.slice(0, 50)
+    send(response, 200, { items, hosts, nextCursor: filtered.length > 50 ? items.at(-1).id : undefined, retentionDays: 30, maxEvents: 2000, maxBytes: 4194304 })
     return
   }
   if (request.method === 'GET' && url.pathname === '/api/v1/cluster/notifications') {

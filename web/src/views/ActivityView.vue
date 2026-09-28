@@ -3,17 +3,18 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AuditView from '@/views/AuditView.vue'
 import JobsView from '@/views/JobsView.vue'
+import NotificationHistoryView from '@/views/NotificationHistoryView.vue'
 import { usePhraseCatalog } from '@/i18n/phrase'
 
 usePhraseCatalog((locale) => locale === 'en-US'
   ? import('@/i18n/pages/ActivityView/en-US').then((module) => module.default)
   : import('@/i18n/pages/ActivityView/zh-TW').then((module) => module.default))
 
-type ActivityTab = 'jobs' | 'audit'
+type ActivityTab = 'jobs' | 'audit' | 'notifications'
 
 const route = useRoute()
 const router = useRouter()
-const activeTab = computed<ActivityTab>(() => (route.query.tab === 'audit' ? 'audit' : 'jobs'))
+const activeTab = computed<ActivityTab>(() => (route.query.tab === 'notifications' ? 'notifications' : route.query.tab === 'audit' ? 'audit' : 'jobs'))
 
 function selectTab(tab: ActivityTab): void {
   void router.replace({ path: '/activity', query: { tab } })
@@ -41,8 +42,12 @@ function selectTab(tab: ActivityTab): void {
       >
         安全审计
       </button>
+      <button type="button" role="tab" :aria-selected="activeTab === 'notifications'"
+        :class="{ 'is-active': activeTab === 'notifications' }" @click="selectTab('notifications')">
+        通知记录
+      </button>
     </div>
-    <component :is="activeTab === 'audit' ? AuditView : JobsView" />
+    <component :is="activeTab === 'notifications' ? NotificationHistoryView : activeTab === 'audit' ? AuditView : JobsView" />
   </div>
 </template>
 
@@ -54,5 +59,6 @@ function selectTab(tab: ActivityTab): void {
 
 .activity-page__tabs {
   align-self: flex-start;
+  flex-wrap: wrap;
 }
 </style>

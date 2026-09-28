@@ -1,6 +1,7 @@
 import type { PhraseCatalog } from '@/i18n/phrase'
 
 export default [
+  ["查看通知记录", "View notification history"],
   ["更新与服务","Updates and services"],
   ["在线仅表示遥测连接正常，服务状态与可用权限分别判断。","Online indicates a telemetry connection. Service state and granted access are evaluated separately."],
   ["最近检查结果","Latest check result"],
@@ -249,7 +250,6 @@ export default [
   ['撤销 {0} 授权', 'Revoke authorization for {0}'],
   ['管理 {0}', 'Manage {0}'],
   ['集群通知', 'Cluster notifications'],
-  ['选择一个消息渠道，接收所有集群主机的关键变化。', 'Choose one messaging channel to receive important changes from every cluster host.'],
   ['通知渠道', 'Notification channels'],
   ['选择接收告警的通知渠道；同一时间只保存一个活动渠道。', 'Choose where to receive alerts. Only one active channel is stored at a time.'],
   ['飞书', 'Feishu'],
@@ -275,9 +275,6 @@ export default [
   ['正在发现…', 'Discovering…'],
   ['发送测试消息', 'Send test message'],
   ['正在发送…', 'Sending…'],
-  ['通知开关', 'Notification switch'],
-  ['关闭后保留设置，不再主动发送告警。', 'Settings are kept when disabled; alerts are not sent.'],
-  ['启用集群通知', 'Enable cluster notifications'],
   ['资源阈值', 'Resource thresholds'],
   ['应用于本机和所有已接入主机；资源占用和网络吞吐连续 3 次达到阈值，累计收发各自达到阈值后通知一次。', 'Applies to this server and all connected hosts; resource usage and network throughput must reach a threshold for 3 consecutive samples, while cumulative receive and send rules notify independently after reaching their thresholds.'],
   ['启用 CPU 通知', 'Enable CPU notifications'],

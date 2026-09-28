@@ -2125,6 +2125,9 @@ onBeforeUnmount(() => {
             </button>
           </template>
         </div>
+        <RouterLink class="button button--secondary" :to="{ path: '/activity', query: { tab: 'notifications', host: selected.id } }" @click="closeManage">
+          <Bell :size="16" /> {{ phrase('查看通知记录') }}
+        </RouterLink>
         <LightNodeHealth v-if="selected.kind === 'light_node'" :health="selected.lightHealth" />
       </div>
       <template #footer>

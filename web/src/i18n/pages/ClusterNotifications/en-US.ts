@@ -1,4 +1,14 @@
 export default [
+  ["通知记录", "Notification history"],
+  ["事件默认保存在本机，可选开启外部渠道推送。", "Events are saved locally by default. External delivery is optional."],
+  ["本地记录暂时不可用", "Local recording unavailable"],
+  ["本地记录已启用", "Local recording enabled"],
+  ["请检查 KPanel 数据目录，恢复前无法保存新的通知。", "Check the KPanel data directory. New events cannot be saved until storage recovers."],
+  ["未配置渠道或关闭外部推送时，事件仍会保存在活动记录中。", "Events remain in Activity even without a channel or with external delivery off."],
+  ["查看通知记录", "View notification history"],
+  ["外部推送", "External delivery"],
+  ["关闭后继续保存本地记录，只暂停外部发送。", "When off, local recording continues and external delivery pauses."],
+
   [
     "本机资源提醒",
     "Local resource alerts"

@@ -93,6 +93,10 @@ func (s *Server) Close() error {
 }
 
 func (s *Server) handleCluster(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == clusterNotificationsPath+"/history" && r.Method == http.MethodGet && r.URL.RawPath == "" {
+		s.handleNotificationHistory(w, r)
+		return
+	}
 	if r.URL.RawPath != "" || r.URL.RawQuery != "" {
 		s.writeProblem(w, r, http.StatusBadRequest, "invalid_cluster_request", "Invalid cluster request", "")
 		return

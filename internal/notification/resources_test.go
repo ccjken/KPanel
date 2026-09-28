@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/kejilion/kejilion-panel/internal/cluster"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -61,7 +63,7 @@ func TestResourceFullStoreAlsoPreventsUntrackedHostDelivery(t *testing.T) {
 	}
 	s.mu.Unlock()
 	host := s.hosts.Hosts(context.Background()).Items[0]
-	s.handleCumulativeThreshold(host, "traffic-total-received", 100<<30, 1, clock.Now(), "zh-CN", func(message string) (bool, bool) {
+	s.handleCumulativeThreshold(host, "traffic-total-received", 100<<30, 1, clock.Now(), "zh-CN", func(_ cluster.Host, _, _, message string) (bool, bool) {
 		_ = tg.SendMessage(context.Background(), "", 0, message)
 		return true, true
 	})
@@ -87,6 +89,11 @@ func seedDormantResources(t *testing.T, s *Service, clock *notificationTestClock
 	if err := s.store.commitState(state); err != nil {
 		t.Fatal(err)
 	}
+	// A released installation has no history file; exercise the one-time import.
+	if err := os.Remove(s.history.path); err != nil {
+		t.Fatal(err)
+	}
+	s.history = openHistory(s.store.directory, state)
 	s.alerts = s.store.stateSnapshot().AlertStates
 	return rules, states
 }

@@ -8,7 +8,8 @@ import english from '@/i18n/pages/ClusterNotifications/en-US'
 import traditional from '@/i18n/pages/ClusterNotifications/zh-TW'
 import { notificationPhrases } from '@/i18n/pages/ClusterNotifications/labels'
 
-const mocks = vi.hoisted(() => ({ read: vi.fn(), save: vi.fn(), discover: vi.fn(), test: vi.fn() }))
+const mocks = vi.hoisted(() => ({ push: vi.fn(), read: vi.fn(), save: vi.fn(), discover: vi.fn(), test: vi.fn() }))
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: mocks.push }) }))
 vi.mock('@/lib/api', () => ({ ApiError: class extends Error {}, api: { cluster: {
   notifications: mocks.read,
   updateNotifications: mocks.save,
@@ -119,5 +120,27 @@ describe('notification channels', () => {
     await wrapper.findAll('button').find((button) => button.text().includes('钉钉'))!.trigger('click')
     expect(wrapper.text()).not.toContain('重新发现私聊')
     expect(wrapper.text()).toContain('保存时会先发送一条验证消息')
+  })
+})
+
+
+describe('local recording', () => {
+  it('saves rules without channel credentials after browsing an optional provider', async () => {
+    const wrapper = await open()
+    expect(wrapper.text()).toContain('本地记录已启用')
+    await wrapper.findAll('button').find(button => button.text().includes('飞书'))!.trigger('click')
+    await wrapper.get('input[aria-label="CPU 阈值百分比"]').setValue(85)
+    const save = wrapper.findAll('button').find(button => button.text() === '保存设置')!
+    expect(save.attributes('disabled')).toBeUndefined()
+    await save.trigger('click'); await flushPromises()
+    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ enabled: false, provider: 'telegram', channelCredential: undefined, rules: expect.objectContaining({ cpuThresholdPercent: 85 }) }))
+    await wrapper.findAll('button').find(button => button.text() === '查看通知记录')!.trigger('click')
+    expect(mocks.push).toHaveBeenCalledWith({ path: '/activity', query: { tab: 'notifications' } })
+  })
+  it('shows storage failures distinctly from channel setup', async () => {
+    mocks.read.mockResolvedValue({ ...snapshot(), localRecording: false })
+    const wrapper = await open()
+    expect(wrapper.text()).toContain('本地记录暂时不可用')
+    expect(wrapper.text()).not.toContain('本地记录已启用')
   })
 })

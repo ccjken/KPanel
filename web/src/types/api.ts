@@ -309,6 +309,7 @@ export interface ClusterNotificationChannel extends ClusterNotificationTelegram 
 }
 
 export interface ClusterNotificationSnapshot {
+  localRecording?: boolean
   resources?: ClusterNotificationResources
   enabled: boolean
   locale: 'zh-CN' | 'zh-TW' | 'en-US'
@@ -2483,4 +2484,30 @@ export interface DockerActionResult {
   action?: string
   status?: string
   resourceVersion?: string
+}
+
+export interface NotificationEvent {
+  id: string
+  createdAt: string
+  hostId: string
+  hostName: string
+  isLocal: boolean
+  rule: string
+  kind: 'alert' | 'recovery' | 'info'
+  message: string
+  relatedEventId?: string
+  delivery: 'local_only' | 'pending' | 'sent' | 'failed' | 'cancelled'
+  provider?: ClusterNotificationProvider
+  attempts: number
+  lastAttemptAt?: string
+  lastErrorCode?: string
+}
+
+export interface NotificationHistoryPage {
+  items: NotificationEvent[]
+  hosts: { id: string; name: string; isLocal: boolean }[]
+  nextCursor?: string
+  retentionDays: number
+  maxEvents: number
+  maxBytes: number
 }
