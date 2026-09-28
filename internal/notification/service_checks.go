@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -56,17 +57,19 @@ type checkAlertDisk struct {
 	Incidents     map[string]checkIncident `json:"incidents"`
 }
 type CheckAlerts struct {
-	parent    *Service
-	mu        sync.Mutex
-	state     checkAlertDisk
-	path      string
-	lastError string
-	cancel    context.CancelFunc
-	wg        sync.WaitGroup
+	parent      *Service
+	mu          sync.Mutex
+	state       checkAlertDisk
+	path        string
+	lastError   string
+	loggedError string
+	logger      *slog.Logger
+	cancel      context.CancelFunc
+	wg          sync.WaitGroup
 }
 
 func NewCheckAlerts(parent *Service) (*CheckAlerts, error) {
-	s := &CheckAlerts{parent: parent, path: filepath.Join(parent.store.directory, "service-check-alerts-v1.json"),
+	s := &CheckAlerts{parent: parent, logger: slog.Default(), path: filepath.Join(parent.store.directory, "service-check-alerts-v1.json"),
 		state: checkAlertDisk{SchemaVersion: 1, Incidents: map[string]checkIncident{}}}
 	data, err := readRegularFile(s.path, maxStateBytes, false)
 	if errors.Is(err, os.ErrNotExist) {
@@ -215,6 +218,7 @@ func currentCheckTargets(hosts []cluster.Host, incidents map[string]checkInciden
 }
 
 func (s *CheckAlerts) evaluate(ctx context.Context) error {
+	defer s.reportErrorChange()
 	settings := s.parent.store.stateSnapshot().Settings
 	s.mu.Lock()
 	if !settings.Enabled || !settings.Rules.ServiceChecksEnabled {
@@ -385,6 +389,7 @@ func (s *CheckAlerts) evaluate(ctx context.Context) error {
 // Network I/O never holds the configuration/state lock. Outbox transitions are
 // committed before delivery, with at-least-once semantics on crash after send.
 func (s *CheckAlerts) deliver(ctx context.Context) error {
+	defer s.reportErrorChange()
 	settings := s.parent.store.stateSnapshot()
 	credential, configured, err := s.parent.store.credential()
 	if err != nil || !configured || !settings.Settings.Enabled || !settings.Settings.Rules.ServiceChecksEnabled || !settings.Telegram.HasChat || settings.Telegram.TokenFingerprint != tokenFingerprint(credential) {
@@ -496,6 +501,25 @@ func (s *CheckAlerts) deliver(ctx context.Context) error {
 	}
 	return nil
 }
+
+// Report only transitions, with fixed codes and no target or credential data.
+// A persistent failure must remain observable without flooding the service log.
+func (s *CheckAlerts) reportErrorChange() {
+	s.mu.Lock()
+	code, previous := s.lastError, s.loggedError
+	if code == previous {
+		s.mu.Unlock()
+		return
+	}
+	s.loggedError = code
+	s.mu.Unlock()
+	if code != "" {
+		s.logger.Warn("Service notification worker failed", "code", code)
+	} else {
+		s.logger.Info("Service notification worker recovered", "previousCode", previous)
+	}
+}
+
 func freshForCheckDelivery(key string, item checkIncident, host cluster.Host, now time.Time) bool {
 	if item.Revision == "sampler" {
 		return true

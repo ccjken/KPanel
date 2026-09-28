@@ -1,17 +1,20 @@
 package notification
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/kejilion/kejilion-panel/internal/cluster"
-	"github.com/kejilion/kejilion-panel/internal/contract"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/kejilion/kejilion-panel/internal/cluster"
+	"github.com/kejilion/kejilion-panel/internal/contract"
 )
 
 func checkAlertFixture(t *testing.T) (*CheckAlerts, *notificationHostSource, *notificationTestTelegram, *notificationTestClock) {
@@ -445,5 +448,37 @@ func TestCheckAlertsLegacyCandidateDoesNotEnableGlobalRule(t *testing.T) {
 	evaluateChecks(t, restored)
 	if len(restored.state.Incidents) != 0 {
 		t.Fatal("unsupported node generated service incidents")
+	}
+}
+
+func TestCheckAlertsFailuresLoggedOnceUntilRecovery(t *testing.T) {
+	s, host, telegram, clock := checkAlertFixture(t)
+	var output bytes.Buffer
+	s.logger = slog.New(slog.NewJSONHandler(&output, nil))
+	path := s.path
+	s.path = filepath.Join(t.TempDir(), "missing", "state.json")
+	setCheckObservation(host, clock.Now(), 3, "down", 3)
+	for range 2 {
+		if s.evaluate(context.Background()) == nil {
+			t.Fatal("expected storage failure")
+		}
+	}
+	if strings.Count(output.String(), `"code":"storage_unavailable"`) != 1 {
+		t.Fatal("storage failure must be visible and deduplicated", output.String())
+	}
+	s.path = path
+	evaluateChecks(t, s)
+	telegram.sendErr = errors.New("sensitive upstream detail")
+	deliverChecks(t, s)
+	clock.Advance(time.Minute)
+	deliverChecks(t, s)
+	if strings.Count(output.String(), `"code":"delivery_failed"`) != 1 || strings.Contains(output.String(), "sensitive upstream") {
+		t.Fatal("delivery failure must be visible, deduplicated and redacted", output.String())
+	}
+	clock.Advance(5 * time.Minute)
+	telegram.sendErr = nil
+	deliverChecks(t, s)
+	if strings.Count(output.String(), "Service notification worker recovered") != 2 {
+		t.Fatal("missing storage/delivery recovery log", output.String())
 	}
 }
