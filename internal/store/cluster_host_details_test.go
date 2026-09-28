@@ -1,11 +1,13 @@
 package store
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestClusterHostDetailsPersistenceConflictClearAndBoundedCleanup(t *testing.T) {
@@ -46,6 +48,68 @@ func TestClusterHostDetailsPersistenceConflictClearAndBoundedCleanup(t *testing.
 	}
 	if len(s.ClusterHostDetails()) != 0 {
 		t.Fatal("clear and stale cleanup failed")
+	}
+}
+
+func TestClusterHostDetailsIncludedInPanelBackup(t *testing.T) {
+	source, err := Open(filepath.Join(t.TempDir(), "source.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer source.Close()
+	now := time.Now().UTC()
+	if err := source.CreateInitialAdmin(User{ID: "admin", Username: "admin", PasswordHash: strings.Repeat("h", 32), Role: "admin", CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	value := ClusterHostDetails{ExpiresOn: "2028-02-29", Price: "¥99/年", TrafficResetDay: 31}
+	if err := source.ReplaceClusterHostDetails("local", ClusterHostDetailsResourceVersion("local", ClusterHostDetails{}), value, []string{"local"}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := source.ExportIdentity()
+	if err != nil || ValidateIdentityBackup(data) != nil {
+		t.Fatalf("export: %v", err)
+	}
+	destination, err := Open(filepath.Join(t.TempDir(), "destination.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer destination.Close()
+	if err := destination.RestoreIdentity(data); err != nil {
+		t.Fatal(err)
+	}
+	if got := destination.ClusterHostDetails()["local"]; got != value {
+		t.Fatalf("restored: %+v", got)
+	}
+	var state diskState
+	if err := json.Unmarshal(data, &state); err != nil {
+		t.Fatal(err)
+	}
+	state.ClusterHostDetails["local"] = ClusterHostDetails{TrafficResetDay: 32}
+	invalid, _ := json.Marshal(state)
+	if ValidateIdentityBackup(invalid) == nil {
+		t.Fatal("accepted invalid metadata backup")
+	}
+	// Missing metadata in an old backup must clear destination-only values.
+	state.ClusterHostDetails = nil
+	old, _ := json.Marshal(state)
+	path := destination.path
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	if err := os.WriteFile(blocker, []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	destination.path = filepath.Join(blocker, "state.json")
+	if err := destination.RestoreIdentity(old); err == nil {
+		t.Fatal("restore should fail")
+	}
+	if destination.ClusterHostDetails()["local"] != value {
+		t.Fatal("failed restore changed metadata")
+	}
+	destination.path = path
+	if err := destination.RestoreIdentity(old); err != nil {
+		t.Fatal(err)
+	}
+	if len(destination.ClusterHostDetails()) != 0 {
+		t.Fatal("old backup retained destination metadata")
 	}
 }
 

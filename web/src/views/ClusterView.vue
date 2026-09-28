@@ -465,9 +465,12 @@ async function load(silent = false): Promise<void> {
   loadInFlight = true
   if (!silent && !inventory.value) loading.value = true
   else refreshing.value = true
-  loadController = new AbortController()
+  const controller = new AbortController()
+  loadController = controller
   try {
-    inventory.value = await api.cluster.hosts(loadController.signal)
+    const freshInventory = await api.cluster.hosts(controller.signal)
+    if (controller.signal.aborted) return
+    inventory.value = freshInventory
     await applyPanelHostOrder(inventory.value.items, inventory.value.hostOrder)
     if (selected.value) {
       const fresh = inventory.value.items.find((host) => host.id === selected.value?.id)
@@ -1115,6 +1118,8 @@ async function saveDetails(): Promise<void> {
       trafficResetDay: Number(editDetails.trafficResetDay) || 0,
       expectedResourceVersion: editDetails.resourceVersion,
     })
+    // An inventory request started before this write can contain stale details.
+    loadController?.abort()
     if (inventory.value) {
       inventory.value.hostDetails = { ...inventory.value.hostDetails, [host.id]: updated }
     }

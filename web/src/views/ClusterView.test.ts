@@ -1216,6 +1216,24 @@ describe('ClusterView inventory and navigation', () => {
 
 
 describe('ClusterView optional server details', () => {
+  it('does not let a delayed refresh replace a successful details save', async () => {
+    const view = setupView()
+    const items = inventory()
+    const target = items.items[0]!
+    items.hostDetails = { [target.id]: { resourceVersion: 'v1' } }
+    view.inventory.value = items
+    view.openManage(target)
+    let resolveInventory!: (value: ClusterHostList) => void
+    mocks.hosts.mockReturnValueOnce(new Promise<ClusterHostList>(resolve => { resolveInventory = resolve }))
+    const pending = view.load(true)
+    mocks.saveHostDetails.mockResolvedValueOnce({ price: '$5/month', resourceVersion: 'v2' })
+    view.editDetails.price = '$5/month'
+    await view.saveDetails()
+    resolveInventory({ ...items, hostDetails: { [target.id]: { resourceVersion: 'v1' } } })
+    await pending
+    expect(view.inventory.value?.hostDetails?.[target.id]).toEqual({ price: '$5/month', resourceVersion: 'v2' })
+  })
+
   it('preserves the editor version across refresh, reports conflicts and supports clearing', async () => {
     const view = setupView()
     const items = inventory()
