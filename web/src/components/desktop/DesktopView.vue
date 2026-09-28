@@ -2476,6 +2476,29 @@ function onGlobalPointerDown(event: PointerEvent): void {
 }
 
 function onGlobalKeyDown(event: KeyboardEvent): void {
+  if (event.key === 'Tab') {
+    if (event.defaultPrevented || event.isComposing || event.altKey || event.ctrlKey || event.metaKey
+      || contextMenu.value.open || document.body.classList.contains('has-modal')) return
+    const target = event.target
+    // Only the desktop/window shell owns this shortcut. Every descendant keeps
+    // native Tab navigation, including forms, editors, terminals and widgets.
+    if (!(target instanceof HTMLElement) || target !== document.activeElement
+      || !(target === desktopElement.value || target === document.body
+        || (target.matches('.desktop-window') && desktopElement.value?.contains(target)))) return
+    // Store order is stable; z-order changes on each activation and would make
+    // three or more windows alternate between only the last two.
+    const windows = desktop.windows.value.filter((item) => !item.minimized
+      && desktopElement.value?.querySelector(`#desktop-window-${item.id}:not(.desktop-window--closing)`))
+    if (windows.length < 2) return
+    const current = windows.findIndex((item) => item.id === desktop.focusedId.value)
+    const index = current < 0 ? (event.shiftKey ? windows.length - 1 : 0)
+      : (current + (event.shiftKey ? -1 : 1) + windows.length) % windows.length
+    const next = windows[index]!
+    event.preventDefault()
+    desktop.focusWindow(next.id)
+    desktopElement.value?.querySelector<HTMLElement>(`#desktop-window-${next.id}`)?.focus({ preventScroll: true })
+    return
+  }
   const target = event.target
   const editing = target instanceof HTMLElement
     && (target.matches('input, textarea, select') || target.isContentEditable)

@@ -255,6 +255,13 @@ function onPointerDownWindow(): void {
 }
 
 function onWindowKeyDown(event: KeyboardEvent): void {
+  // Enter leaves window selection and starts the window's normal Tab sequence.
+  if (event.key === 'Enter' && event.target === windowElement.value
+    && !event.defaultPrevented && !event.isComposing && !event.altKey && !event.ctrlKey && !event.metaKey) {
+    windowElement.value?.querySelector<HTMLButtonElement>('.desktop-window__action--minimize')?.focus({ preventScroll: true })
+    event.preventDefault()
+    return
+  }
   if (event.altKey && event.key === 'F4') {
     event.preventDefault()
     void onClose()
@@ -413,6 +420,7 @@ function onTitlebarPointerDown(event: PointerEvent): void {
   if (isCompactLayout()) return
   const target = event.target as HTMLElement | null
   if (target?.closest('button,[data-no-drag]')) return
+  if (event.button === 0) windowElement.value?.focus({ preventScroll: true })
   gesture.onPointerDown(event, null)
 }
 
