@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ClusterHostDetails from '@/components/cluster/ClusterHostDetails.vue'
+import ClusterTemporarySortMenu from '@/components/cluster/ClusterTemporarySortMenu.vue'
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
@@ -24,6 +25,8 @@ import LogoMark from '@/components/common/LogoMark.vue'
 import CountryFlagIcon from '@/components/overview/CountryFlagIcon.vue'
 import OperatingSystemIcon from '@/components/overview/OperatingSystemIcon.vue'
 import { usePhraseCatalog } from '@/i18n/phrase'
+import { useI18n } from '@/i18n'
+import { sortClusterHostsByDetails, type ClusterHostDetailsSortKey, type ClusterHostTemporarySortKey, type ClusterHostTemporarySortDirection } from '@/lib/clusterHostTemporarySort'
 import { ApiError, api } from '@/lib/api'
 import { formatNetworkTrafficCounter } from '@/lib/networkTraffic'
 import {
@@ -51,9 +54,26 @@ type ShareViewMode = 'list' | 'card' | 'globe'
 const viewMode = ref<ShareViewMode>('list')
 const viewModeStorageKey = 'kpanel:cluster-share-view'
 const search = ref('')
+const { t } = useI18n()
+const sortKey = ref<ClusterHostDetailsSortKey>('custom')
+const sortDirection = ref<ClusterHostTemporarySortDirection>('asc')
+const sortOptions = computed(() => [
+  { value: 'custom' as const, label: t('cluster.details.defaultOrder') },
+  { value: 'expiresOn' as const, label: t('cluster.details.expiresOn') },
+  { value: 'price' as const, label: t('cluster.details.price') },
+])
+const sortDirectionLabel = computed(() => sortKey.value === 'expiresOn'
+  ? t(sortDirection.value === 'asc' ? 'cluster.details.sortEarlier' : 'cluster.details.sortLater')
+  : t(sortDirection.value === 'asc' ? 'cluster.details.sortAsc' : 'cluster.details.sortDesc'))
+function changeSort(key: ClusterHostTemporarySortKey): void {
+  if (key !== 'custom' && key !== 'expiresOn' && key !== 'price') return
+  sortKey.value = key
+  sortDirection.value = 'asc'
+}
 const filteredHosts = computed(() => {
   const keyword = search.value.trim().toLowerCase()
-  return (snapshot.value?.items || []).filter(host => [host.name, host.os, host.location.country, host.location.city, host.location.isp].filter(Boolean).join(' ').toLowerCase().includes(keyword))
+  const hosts = (snapshot.value?.items || []).filter(host => [host.name, host.os, host.location.country, host.location.city, host.location.isp].filter(Boolean).join(' ').toLowerCase().includes(keyword))
+  return sortClusterHostsByDetails(hosts, sortKey.value, sortDirection.value, host => host)
 })
 const ClusterGlobe = defineAsyncComponent(() => import('@/components/cluster/ClusterGlobe.vue'))
 const { resolved: resolvedTheme, setTheme } = useTheme()
@@ -241,7 +261,16 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <div v-if="snapshot?.items.length" class="share-toolbar"><label class="share-search"><Search :size="17" /><input v-model="search" type="search" aria-label="搜索公开主机" placeholder="搜索名称、地区或系统…" /></label><span>{{ filteredHosts.length }} / {{ snapshot.items.length }}</span></div>
+      <div v-if="snapshot?.items.length" class="share-toolbar">
+        <label class="share-search"><Search :size="17" /><input v-model="search" type="search" aria-label="搜索公开主机" placeholder="搜索名称、地区或系统…" /></label>
+        <div class="share-sort">
+          <ClusterTemporarySortMenu :model-value="sortKey" :options="sortOptions" :label="t('cluster.details.sortLabel')" :prefix="t('cluster.details.sortPrefix')" :title="sortKey === 'price' ? t('cluster.details.priceSortHint') : undefined" @update:model-value="changeSort" />
+          <button type="button" class="share-sort__direction" :disabled="sortKey === 'custom'" :title="sortDirectionLabel" :aria-label="sortDirectionLabel" @click="sortDirection = sortDirection === 'asc' ? 'desc' : 'asc'">
+            <ArrowUp v-if="sortDirection === 'asc'" :size="15" aria-hidden="true" /><ArrowDown v-else :size="15" aria-hidden="true" />
+          </button>
+        </div>
+        <span>{{ filteredHosts.length }} / {{ snapshot.items.length }}</span>
+      </div>
 
       <section v-if="loading && !snapshot" class="share-state" aria-live="polite">
         <RefreshCw class="spin" :size="24" />
@@ -513,11 +542,20 @@ onBeforeUnmount(() => {
 .share-stats .is-attention strong { color: var(--amber); }
 
 .share-grid { display: grid; gap: 12px; }
-.share-toolbar { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+.share-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-bottom: 16px; }
+.share-sort { display: flex; min-width: 0; align-items: center; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.share-sort__direction { display: grid; place-items: center; min-width: 38px; min-height: 40px; padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-soft); cursor: pointer; }
+.share-sort__direction:hover { background: var(--interaction-hover); }
+.share-sort__direction:disabled { opacity: .4; cursor: default; }
+.share-sort__direction:focus-visible { outline: 3px solid var(--brand); outline-offset: -3px; }
 .share-toolbar > span { margin-left: auto; color: var(--text-soft); font-size: .8125rem; font-variant-numeric: tabular-nums; }
 .share-search { display: flex; align-items: center; gap: 10px; flex: 1; max-width: 520px; min-width: 0; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-soft); background: var(--surface); }
 .share-search input { min-width: 0; width: 100%; min-height: 42px; padding: 10px 0; font-size: .875rem; color: var(--text); background: transparent; border: 0; outline: none; box-shadow: none; }
 .share-search:focus-within { outline: 2px solid var(--brand); outline-offset: 2px; }
+@media (max-width: 680px) {
+  .share-search { flex-basis: 100%; max-width: none; }
+  .share-sort { flex: 1; }
+}
 .share-grid.is-card { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 15px; }
 .share-grid.is-card .share-card { display: flex; flex-direction: column; }
 .share-grid.is-card .share-card__header { grid-template-columns: auto minmax(0, 1fr); align-items: start; flex: 1; }

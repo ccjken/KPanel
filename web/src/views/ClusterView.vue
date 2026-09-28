@@ -269,15 +269,23 @@ const temporarySortOptions = computed(() => [
   { value: 'memory' as const, label: phrase('内存使用率') },
   { value: 'disk' as const, label: phrase('磁盘使用率') },
   { value: 'traffic' as const, label: phrase('总流量（收发合计）') },
+  { value: 'expiresOn' as const, label: t('cluster.details.expiresOn') },
+  { value: 'price' as const, label: t('cluster.details.price') },
 ])
 const filteredHosts = computed(() => sortClusterHostsTemporarily(
   matchingHosts.value,
   temporarySortKey.value,
   temporarySortDirection.value,
+  inventory.value?.hostDetails,
 ))
-const temporarySortDirectionLabel = computed(() => temporarySortDirection.value === 'desc'
+const temporarySortDirectionLabel = computed(() => temporarySortKey.value === 'expiresOn'
+  ? t(temporarySortDirection.value === 'asc' ? 'cluster.details.sortEarlier' : 'cluster.details.sortLater')
+  : temporarySortDirection.value === 'desc'
   ? phrase('当前从高到低；切换为从低到高')
   : phrase('当前从低到高；切换为从高到低'))
+function onTemporarySortChange(key: ClusterHostTemporarySortKey): void {
+  if (key === 'expiresOn' || key === 'price') temporarySortDirection.value = 'asc'
+}
 const hostOrderControlTitle = computed(() => {
   if (hostOrderSaving.value) return phrase('正在保存主机顺序')
   if (search.value.trim()) return phrase('清除搜索后可调整顺序')
@@ -1339,6 +1347,8 @@ onBeforeUnmount(() => {
           <div class="cluster-sort" role="group" aria-label="临时主机排序">
             <ClusterTemporarySortMenu
               v-model="temporarySortKey"
+              :title="temporarySortKey === 'price' ? t('cluster.details.priceSortHint') : undefined"
+              @update:model-value="onTemporarySortChange"
               :options="temporarySortOptions"
               :label="phrase('临时排序方式')"
               :prefix="phrase('临时排序')"

@@ -594,6 +594,8 @@ if (process.env.KPANEL_MOCK_CLUSTER_FIXTURE) {
 let mockHostDetailsRevision = 1
 const mockHostDetails = Object.fromEntries(visualClusterHosts.map((host, index) => [host.id, {
   ...(index === 0 ? { expiresOn: '2027-09-28', price: '¥99/年', trafficResetDay: 15 } : {}),
+  ...(index === 1 ? { expiresOn: '2026-12-31', price: '¥12/月', trafficResetDay: 1 } : {}),
+  ...(index === 2 ? { expiresOn: '2027-03-15', price: '$5/月' } : {}),
   resourceVersion: mockRevision(900),
 }]))
 

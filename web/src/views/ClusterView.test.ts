@@ -103,6 +103,7 @@ interface ClusterBindings {
   temporarySortDirection: Ref<ClusterHostTemporarySortDirection>
   temporarySortActive: ComputedRef<boolean>
   hostOrderControlTitle: ComputedRef<string>
+  onTemporarySortChange: (key: ClusterHostTemporarySortKey) => void
   accessOpen: Ref<boolean>
   manageOpen: Ref<boolean>
   shareOpen: Ref<boolean>
@@ -638,6 +639,23 @@ describe('ClusterView inventory and navigation', () => {
 
     expect(reopened.temporarySortKey.value).toBe('custom')
     expect(reopened.temporarySortDirection.value).toBe('desc')
+  })
+
+  it('sorts saved server details without persisting or changing custom host order', () => {
+    const view = setupView()
+    view.inventory.value = { ...inventory(), hostDetails: {
+      local: { expiresOn: '2028-01-01', price: '$120/year', resourceVersion: 'v1' },
+      remote: { expiresOn: '2027-01-01', price: '$12/month', resourceVersion: 'v2' },
+    } }
+    view.temporarySortKey.value = 'expiresOn'
+    view.onTemporarySortChange('expiresOn')
+    expect(view.temporarySortDirection.value).toBe('asc')
+    expect(view.filteredHosts.value.map(h => h.id)).toEqual(['remote', 'local'])
+    view.temporarySortKey.value = 'price'
+    expect(view.filteredHosts.value.map(h => h.id)).toEqual(['local', 'remote'])
+    view.temporarySortDirection.value = 'desc'
+    expect(view.filteredHosts.value.map(h => h.id)).toEqual(['remote', 'local'])
+    expect(mocks.updateHostOrder).not.toHaveBeenCalled()
   })
 
   it('lets the panel order override a conflicting browser cache', async () => {

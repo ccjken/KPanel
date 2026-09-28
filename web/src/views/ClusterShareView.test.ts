@@ -3,7 +3,7 @@ import { createSSRApp, ssrContextKey, type ComputedRef, type Ref } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ClusterShareView from './ClusterShareView.vue'
 import { ApiError } from '@/lib/api'
-import type { PublicClusterShareSnapshot } from '@/types/api'
+import type { PublicClusterShareHost, PublicClusterShareSnapshot } from '@/types/api'
 
 const mocks = vi.hoisted(() => ({
   publicShare: vi.fn(),
@@ -28,6 +28,10 @@ vi.mock('@/lib/api', () => ({
 }))
 
 interface ShareBindings {
+  sortKey: Ref<'custom' | 'expiresOn' | 'price'>
+  sortDirection: Ref<'asc' | 'desc'>
+  search: Ref<string>
+  filteredHosts: ComputedRef<PublicClusterShareHost[]>
   snapshot: Ref<PublicClusterShareSnapshot | undefined>
   loading: Ref<boolean>
   refreshing: Ref<boolean>
@@ -90,6 +94,29 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('ClusterShareView anonymous snapshot', () => {
+  it('sorts public details and keeps filtering and the original public order intact', () => {
+    const view = setupView()
+    const data = publicSnapshot()
+    const host = data.items[0]!
+    data.items = [
+      { ...host, id: 'late', name: 'node late', expiresOn: '2028-01-01', price: '$120/year' },
+      { ...host, id: 'early', name: 'node early', expiresOn: '2027-01-01', price: '$12/month' },
+      { ...host, id: 'empty', name: 'empty' },
+    ]
+    view.snapshot.value = data
+    view.sortKey.value = 'expiresOn'
+    expect(view.filteredHosts.value.map(h => h.id)).toEqual(['early', 'late', 'empty'])
+    view.sortKey.value = 'price'
+    expect(view.filteredHosts.value.map(h => h.id)).toEqual(['late', 'early', 'empty'])
+    view.sortDirection.value = 'desc'
+    view.search.value = 'node'
+    expect(view.filteredHosts.value.map(h => h.id)).toEqual(['early', 'late'])
+    view.sortKey.value = 'custom'
+    expect(view.filteredHosts.value.map(h => h.id)).toEqual(['late', 'early'])
+    expect(data.items.map(h => h.id)).toEqual(['late', 'early', 'empty'])
+    expect(mocks.setItem).not.toHaveBeenCalled()
+  })
+
   it('loads exactly one allowlisted public endpoint without session state', async () => {
     const expected = publicSnapshot()
     mocks.publicShare.mockResolvedValueOnce(expected)
