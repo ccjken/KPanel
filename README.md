@@ -9,8 +9,12 @@
 </p>
 
 <p align="center">
-  与 <code>kejilion.sh</code> 双向互通的开源 Linux 服务器管理面板。<br>
-  桌面模式与经典模式共享同一套主机状态，让系统、网站、Docker、文件、集群与 AI 助手在一个控制面中协同工作。
+  与 <code>kejilion.sh</code> 双向互通的开源 Linux 运维面板，支持双模式工作台、多主机管理与 AI 助手。
+</p>
+
+<p align="center">
+  An open-source Linux server management panel with two-way <code>kejilion.sh</code> integration,
+  desktop and classic workspaces, multi-host management, and an AI assistant.
 </p>
 
 <p align="center">
@@ -22,7 +26,8 @@
 
 <p align="center">
   <a href="https://kpanel.kejilion.sh/"><strong>产品官网</strong></a> ·
-  <a href="https://kpanel.kejilion.sh/en/">English</a> ·
+  <a href="https://panel.kejilion.pro/">在线体验</a> ·
+  <a href="https://kpanel.kejilion.sh/en/">English website</a> ·
   <a href="#快速开始">开始部署</a> ·
   <a href="https://blog.kejilion.pro/kpanel-kejilion-web-server-panel/">图文教程</a> ·
   <a href="https://github.com/kejilion/KPanel/releases">版本发布</a>
@@ -36,6 +41,9 @@
 
 KPanel 面向单管理员 Linux 服务器场景：从一台主机开始，在需要时连接更多节点。它不把资源锁进面板私有数据库；
 `kejilion.sh`、SSH、Compose 与 KPanel 始终面向同一台主机的真实状态。
+
+在线体验在浏览器内模拟数据与操作，不连接真实主机。下方截图包含稳定版与预览版本；
+具体功能以安装版本、节点能力和授权为准，版本区别见[稳定版与预览版](docs/release-channels.md)。
 
 <table>
   <tr>
@@ -55,7 +63,7 @@ KPanel 面向单管理员 Linux 服务器场景：从一台主机开始，在需
     </td>
     <td width="50%">
       <strong>从单机到多节点</strong><br>
-      KPanel 节点可配对集中观测；非面板主机可通过无需 Docker 的轻量节点，以出站 HTTPS 提供只读观测。
+      连接已有 KPanel 或无需 Docker 的轻量 Linux 节点，统一监控，并按节点能力与授权使用远程文件和终端。
     </td>
   </tr>
 </table>
@@ -90,16 +98,40 @@ KPanel 的轻量 AI 助手直接理解面板已经掌握的主机与容器状态
 - 工具过程、关键变更与结果可审计；主机资源仍由 KPanel Agent 实时读取和统一管理。
 - AI 数据独立保存，不会成为 Docker、Nginx、系统配置或文件的第二份事实来源。
 
-## 一屏看全局，也能回到单机细节
+## 集群管理：分散的主机，在一处掌握
+
+从一台主机到多台服务器，将节点接入、状态与历史监控、文件管理和终端操作汇集在同一个工作台。
+通过消息通知掌握关键变化，也可以生成公开只读页面，分享主机运行状态。
 
 <p align="center">
-  <a href=".github/assets/readme/kpanel-cluster-monitoring-dark.webp">
-    <img src=".github/assets/readme/kpanel-cluster-monitoring-dark.webp" alt="KPanel 集群列表与历史监控" width="100%">
+  <a href=".github/assets/readme/kpanel-cluster-globe-history.webp">
+    <img src=".github/assets/readme/kpanel-cluster-globe-history.webp" alt="KPanel 地球集群视图与历史监控并排显示，呈现节点分布、线路延迟和可用性" width="100%">
   </a>
 </p>
 
-KPanel 把多节点概览与主机历史趋势放在同一条工作路径中：远端 KPanel 提供只读概要，
-本机与新授权 v2 节点支持多主机终端；CPU、内存、磁盘、网络与容器历史可按时间回看。
+| 从接入到日常管理 | 可以做什么 |
+| --- | --- |
+| **接入与总览** | 使用授权码配对已有 KPanel，或为普通 Linux 主机安装轻量节点；支持轻量节点单台和批量接入。 |
+| **全局与历史监控** | 在列表、卡片和地球视图间切换，查看在线状态与资源使用；选择目标主机，回看历史指标、线路延迟和 Ping / TCP / HTTP 服务检测。 |
+| **文件与终端管理** | 选择目标主机浏览、编辑、上传和下载文件；管理多主机会话、快捷命令和批量执行。已授权的 KPanel 间还可复制文件与目录。 |
+| **消息通知** | 接收资源阈值、流量、主机失联与恢复、SSH 登录等通知；支持 Telegram、飞书、钉钉和企业微信，同时启用一个通知渠道。 |
+| **公开状态分享** | 管理员主动开启公开只读页面，展示当前运行状态；不公开 IP 或管理入口，可随时关闭或重置链接。 |
+
+终端与文件操作按节点版本、能力和授权开放；旧配对不会因界面升级自动获得新权限。
+打开远端面板时，目标面板仍独立完成登录。
+
+<details>
+<summary>查看多主机文件与终端工作区</summary>
+
+<p align="center">
+  <a href=".github/assets/readme/kpanel-cluster-files-terminal.webp">
+    <img src=".github/assets/readme/kpanel-cluster-files-terminal.webp" alt="KPanel 文件管理器的主机选择列表，与多主机终端和快捷命令并排显示" width="100%">
+  </a>
+</p>
+
+</details>
+
+更多界面见[官网集群介绍](https://kpanel.kejilion.sh/#cluster)；接入与权限见[集群文档](docs/cluster-monitoring.md)。
 
 ## 核心能力
 
@@ -107,9 +139,9 @@ KPanel 把多节点概览与主机历史趋势放在同一条工作路径中：�
 | --- | --- |
 | **主机与历史监控** | 查看 CPU、内存、磁盘、负载、网络、连接与容器历史；查看实时进程，并管理主机名、SSH、DNS、时区、Swap、软件源、内核预设、系统更新与清理。 |
 | **网站与 Nginx** | 发现已有站点、证书与真实 Nginx 配置；管理静态站、PHP 站、反向代理、负载均衡、域名重定向及 LDNMP 环境。 |
-| **Docker 与应用** | 管理容器、镜像、网络、卷、日志、性能、更新、备份和迁移；应用市场动态对齐 `app.kejilion.sh`，展示真实安装状态与任务进度。 |
-| **文件、终端与体检** | 管理主机文件、实时进程与系统设置；通过受控终端处理本机或已授权 v2 KPanel 节点任务，并运行网络、硬件和综合体检。 |
-| **集群与轻量节点** | KPanel 节点可配对集中观测；本机与新授权 v2 节点支持多主机终端。非面板 Linux 主机可使用无需 Docker 的轻量节点，通过出站 HTTPS 提供只读观测。 |
+| **Docker 与应用** | 管理容器、镜像、网络、卷、日志、性能、更新、备份和迁移；支持 Compose 项目的配置发现、启停与受控编辑重部署。应用市场动态对齐 `app.kejilion.sh`，展示真实安装状态与任务进度。 |
+| **文件、终端与体检** | 按节点能力与授权切换本机和远程文件、终端工作区；本机另提供进程管理、系统设置及网络、硬件和综合体检。 |
+| **集群与轻量节点** | 统一接入、监控和管理多台主机，按节点能力开放远程文件与终端；提供消息通知和公开只读状态分享。 |
 | **AI、任务与审计** | 多 Provider、多模型、多会话的 AI 工作区；固定工具、审批边界、后台任务、资源版本冲突检测、审计与失败恢复。 |
 
 ## 快速开始
@@ -154,24 +186,44 @@ Alpine Linux 3.24 `sys` mode 的 OpenRC 路径也已实现并通过自动化契�
 - **不接管既有环境**：安装器不会修改 `kejilion.sh`、`/home/web`、Nginx、防火墙或现有站点。
 - **来源不限制管理**：脚本、KPanel、Compose 或人工创建的资源，都可以按实际状态继续管理。
 - **权限分层**：Web/API 以非特权身份运行；宿主机操作由 Unix Socket 上的结构化 Agent 执行，root PTY 使用独立授权和有界生命周期。
-- **入口保护**：登录限速、服务端 Session、CSRF、可选 TOTP、路径约束与供应链校验共同保护管理入口。
+- **入口保护**：登录限速、服务端 Session、CSRF、可选 TOTP / Passkey、路径约束与供应链校验共同保护管理入口。
 - **变更可恢复**：关键操作保留审计记录；配置写入前执行校验，失败时回滚并报告未完成的清理项。
 
 完整原则见 [PROJECT_RULES.md](PROJECT_RULES.md)、[架构与事实来源](docs/architecture.md)、
 [生态互通基线](docs/ecosystem-parity.md)与[操作边界审计](docs/operational-boundary-audit.md)。
 
+## 运维，也可以有自己的色彩
+
+选择内置壁纸或上传自己的图片，让桌面、经典模式与登录页延续喜欢的背景和配色。
+桌面模式还支持按需下载、随时删除的 3D 场景包。
+
+<table>
+  <tr>
+    <th width="50%">霓虹都市</th>
+    <th width="50%">星港轨道</th>
+  </tr>
+  <tr>
+    <td><a href=".github/assets/readme/kpanel-theme-neon.webp"><img src=".github/assets/readme/kpanel-theme-neon.webp" alt="KPanel 霓虹都市 3D 桌面，展示夕阳城市、文件分组和服务器监控"></a></td>
+    <td><a href=".github/assets/readme/kpanel-theme-orbit.webp"><img src=".github/assets/readme/kpanel-theme-orbit.webp" alt="KPanel 星港轨道 3D 桌面，展示地球、空间站和服务器监控"></a></td>
+  </tr>
+</table>
+
+浏览[官网多彩主题](https://kpanel.kejilion.sh/#themes)，或阅读[场景包开发规范](scene-packs/README.md)。
+
 ## 当前边界
 
-Compose / `daemon.json` 通用编辑器、系统重装非交互适配器，以及部分发行版的 DNS / 换源适配器仍在规划中。
+已支持的 Compose 项目编辑重部署有明确的项目与配置范围。
+`daemon.json` 通用编辑器、系统重装非交互适配器，以及部分发行版的 DNS / 换源适配器仍在规划中。
 这些是待实现能力；后续实现仍需经过鉴权、结构化输入、路径约束、并发控制、审计和失败恢复。
 
 ## 文档
 
 | 主题 | 入口 |
 | --- | --- |
-| 开始使用 | [产品官网](https://kpanel.kejilion.sh/) · [图文教程](https://blog.kejilion.pro/kpanel-kejilion-web-server-panel/) · [部署文档](docs/deployment.md) · [平台支持](docs/platform-support.md) |
+| 开始使用 | [产品官网](https://kpanel.kejilion.sh/) · [在线体验](https://panel.kejilion.pro/) · [图文教程](https://blog.kejilion.pro/kpanel-kejilion-web-server-panel/) · [部署文档](docs/deployment.md) · [平台支持](docs/platform-support.md) |
 | 产品架构 | [架构与事实来源](docs/architecture.md) · [安全模型](docs/security-model.md) · [存储策略](docs/storage-strategy.md) |
 | 核心能力 | [AI 工作区](docs/ai-workspace.md) · [集群监控](docs/cluster-monitoring.md) · [Docker 管理](docs/docker-management-v0.18.md) · [应用市场](docs/application-market.md) |
+| 多主机管理 | [多主机终端](docs/multi-host-terminal.md) · [跨面板文件传输](docs/cross-kpanel-file-transfer.md) · [集群通知](docs/cluster-notifications.md) · [公开状态分享](docs/cluster-public-share.md) |
 | 生态与质量 | [兼容基线](docs/compatibility.md) · [开发质量标准](docs/development-quality-standard.md) · [项目协作](docs/session-collaboration.md) |
 | 版本信息 | [稳定版与预览版](docs/release-channels.md) · [更新记录](CHANGELOG.md) · [最新稳定版](https://github.com/kejilion/KPanel/releases/latest) |
 
@@ -183,7 +235,6 @@ Compose / `daemon.json` 通用编辑器、系统重装非交互适配器，以�
 - [多语言架构与本地化契约](docs/internationalization.md)
 - [体检与第三方测试协议](docs/diagnostics.md)
 - [网站业务分析](docs/legacy-site-contract.md)
-- [多主机终端安全契约](docs/multi-host-terminal.md)
 
 </details>
 
