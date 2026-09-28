@@ -37,7 +37,7 @@ describe('notification history', () => {
     expect(records).toHaveLength(2)
     records.forEach((record, index) => {
       expect(record.find('details, summary').exists()).toBe(false)
-      expect(record.get('.notification-history__detail > p').element.textContent).toBe(messages[index])
+      expect(record.get('.notification-history__detail > p').element.textContent).toBe(messages[index]!.replace(/\n\n/g, '\n'))
       expect(record.get('.notification-history__detail').isVisible()).toBe(true)
     })
     expect(records[0]!.text()).toContain('发送次数: 2')

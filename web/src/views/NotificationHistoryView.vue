@@ -35,6 +35,10 @@ const rules: Record<string, string> = {
 const kinds: Record<NotificationEvent['kind'], string> = { alert: '告警', recovery: '恢复', info: '信息' }
 const deliveries: Record<NotificationEvent['delivery'], string> = { local_only: '仅本地', pending: '待发送', sent: '已发送', failed: '发送失败', cancelled: '已停止发送' }
 
+function compactMessage(message: string): string {
+  return message.replace(/\r?\n(?:[\t ]*\r?\n)+/g, '\n').trim()
+}
+
 async function load(append = false): Promise<void> {
   controller?.abort()
   controller = new AbortController()
@@ -109,22 +113,24 @@ onBeforeUnmount(() => { requestID++; controller?.abort() })
     <ErrorState v-else-if="error" :message="phrase(error)" @retry="load(items.length > 0)" />
     <EmptyState v-else-if="!items.length" :title="phrase('暂无符合条件的通知')" :description="phrase('可以调整筛选条件；首次启用后只记录新发生的事件。')" />
     <div v-if="!loading && items.length" class="notification-history__list">
-      <article v-for="event in items" :key="event.id" class="notification-history__event" :aria-label="[event.hostName, phrase(rules[event.rule] || event.rule), phrase(kinds[event.kind]), formatDateTime(event.createdAt)].join(' · ')">
+      <article v-for="event in items" :key="event.id" class="notification-history__event" :data-kind="event.kind" :aria-label="[event.hostName, phrase(rules[event.rule] || event.rule), phrase(kinds[event.kind]), formatDateTime(event.createdAt)].join(' · ')">
         <header class="notification-history__heading">
           <Bell :size="18" aria-hidden="true" />
           <div class="notification-history__subject"><strong>{{ event.hostName }}</strong><span>{{ phrase(rules[event.rule] || event.rule) }}</span></div>
-          <span class="notification-history__kind" :data-kind="event.kind">{{ phrase(kinds[event.kind]) }}</span>
-          <span :class="{ 'notification-history__failure': event.delivery === 'failed' }">{{ phrase(deliveries[event.delivery]) }}</span>
-          <time :datetime="event.createdAt">{{ formatDateTime(event.createdAt) }}</time>
+          <span class="notification-history__kind">{{ phrase(kinds[event.kind]) }}</span>
         </header>
         <div class="notification-history__detail">
-          <p>{{ event.message }}</p>
-          <p v-if="event.relatedEventId">{{ phrase('关联告警编号') }}: {{ event.relatedEventId }}</p>
-          <p v-if="event.provider">{{ phrase('渠道') }}: {{ event.provider }} · {{ phrase('发送次数') }}: {{ event.attempts }}</p>
-          <p v-if="event.lastAttemptAt">{{ phrase('最近尝试') }}: {{ formatDateTime(event.lastAttemptAt) }}</p>
-          <p v-if="event.delivery === 'failed'">{{ phrase('发送失败会自动重试，最长 24 小时；本地记录已保存。') }}</p>
-          <p v-if="event.delivery === 'cancelled'">{{ phrase('外部推送已关闭、配置已变化或重试已到期，本地记录仍保留。') }}</p>
+          <p>{{ compactMessage(event.message) }}</p>
         </div>
+        <footer class="notification-history__meta">
+          <span :class="{ 'notification-history__failure': event.delivery === 'failed' }">{{ phrase(deliveries[event.delivery]) }}</span>
+          <time :datetime="event.createdAt">{{ formatDateTime(event.createdAt) }}</time>
+          <span v-if="event.relatedEventId">{{ phrase('关联告警编号') }}: {{ event.relatedEventId }}</span>
+          <span v-if="event.provider">{{ phrase('渠道') }}: {{ event.provider }} · {{ phrase('发送次数') }}: {{ event.attempts }}</span>
+          <span v-if="event.lastAttemptAt">{{ phrase('最近尝试') }}: {{ formatDateTime(event.lastAttemptAt) }}</span>
+          <p v-if="event.delivery === 'failed'" class="notification-history__notice notification-history__failure">{{ phrase('发送失败会自动重试，最长 24 小时；本地记录已保存。') }}</p>
+          <p v-if="event.delivery === 'cancelled'" class="notification-history__notice">{{ phrase('外部推送已关闭、配置已变化或重试已到期，本地记录仍保留。') }}</p>
+        </footer>
       </article>
       <button v-if="nextCursor" class="button button--secondary" type="button" :disabled="loadingMore" @click="load(true)">{{ phrase(loadingMore ? '正在加载…' : '加载更多') }}</button>
     </div>
@@ -132,7 +138,7 @@ onBeforeUnmount(() => { requestID++; controller?.abort() })
 </template>
 
 <style scoped>
-.notification-history { min-width: 0; }
+.notification-history { min-width: 0; container: notification-history / inline-size; }
 .notification-history__intro { margin: 0; color: var(--text-soft); font-size: 14px; line-height: 1.6; }
 .notification-history__filters { display: flex; flex-wrap: wrap; gap: 16px; align-items: end; }
 .notification-history__filters label { display: grid; gap: 6px; flex: 1 1 145px; min-width: 0; font-size: 14px; }
@@ -143,16 +149,23 @@ onBeforeUnmount(() => { requestID++; controller?.abort() })
 .notification-history__more > div { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; }
 .notification-history__more summary { cursor: pointer; width: fit-content; padding: 4px 0; }
 .notification-history__retention { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 0; }
-.notification-history__list { display: grid; gap: 12px; min-width: 0; }
-.notification-history__event { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); min-width: 0; }
-.notification-history__heading { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 16px; font-size: 14px; line-height: 1.5; }
-.notification-history__subject { display: grid; gap: 4px; flex: 1 1 180px; min-width: 0; overflow-wrap: anywhere; }
-.notification-history__subject > span, .notification-history__event time { color: var(--text-soft); font-size: 13px; }
-.notification-history__kind { font-weight: 600; }
-.notification-history__kind[data-kind="alert"], .notification-history__failure { color: var(--danger); }
-.notification-history__kind[data-kind="recovery"] { color: var(--success); }
-.notification-history__detail { border-top: 1px solid var(--border); padding: 0 16px 12px; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
-.notification-history__detail p { white-space: pre-wrap; }
+.notification-history__list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; }
+.notification-history__list > button { grid-column: 1 / -1; justify-self: center; }
+.notification-history__event { --event-tone: var(--brand); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-inline-start: 3px solid var(--event-tone); border-radius: var(--radius); min-width: 0; }
+.notification-history__event[data-kind="alert"] { --event-tone: var(--danger); }
+.notification-history__event[data-kind="recovery"] { --event-tone: var(--success); }
+.notification-history__heading { display: flex; gap: 8px; align-items: center; padding: 12px 16px; font-size: 14px; line-height: 1.5; }
+.notification-history__heading > svg { flex: none; color: var(--event-tone); }
+.notification-history__subject { display: grid; gap: 2px; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.notification-history__subject > span { color: var(--text-soft); font-size: 13px; }
+.notification-history__kind { flex: none; color: var(--event-tone); font-weight: 600; }
+.notification-history__failure { color: var(--danger); }
+.notification-history__detail { padding: 0 16px 12px; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.notification-history__detail p { white-space: pre-wrap; margin: 0; }
+.notification-history__meta { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: auto; padding: 10px 16px; border-top: 1px solid var(--border); color: var(--text-soft); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.notification-history__notice { flex-basis: 100%; margin: 4px 0 0; font-size: 14px; }
 .notification-history summary:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; border-radius: var(--radius-sm); }
-@media (max-width: 600px) { .notification-history__event time { flex-basis: 100%; } }
+@container notification-history (min-width: 740px) { .notification-history__list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container notification-history (min-width: 1112px) { .notification-history__list { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@container notification-history (min-width: 1484px) { .notification-history__list { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 </style>
