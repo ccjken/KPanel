@@ -268,6 +268,7 @@ export interface ClusterHostDetails {
 }
 
 export interface ClusterTrafficPeriod {
+  id?: string
   receivedBytes: number
   sentBytes: number
   available: boolean

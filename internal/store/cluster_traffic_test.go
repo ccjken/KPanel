@@ -104,12 +104,16 @@ func TestClusterTrafficPersistentDeltasAndConfiguration(t *testing.T) {
 	if len(reopened.data.ClusterTraffic) != 1 {
 		t.Fatal("unrelated metadata reset traffic")
 	}
+	oldPeriodID := reopened.data.ClusterTraffic["local"].Period.ID
 	setTrafficDay(t, reopened, 1)
 	if len(reopened.data.ClusterTraffic) != 0 {
 		t.Fatal("changed day retained baseline")
 	}
 	if got := sampleTraffic(t, reopened, at.Add(90*time.Second), 3000, 1000, 10090); got.ReceivedBytes != 0 {
 		t.Fatal(got)
+	}
+	if reopened.data.ClusterTraffic["local"].Period.ID == oldPeriodID {
+		t.Fatal("configuration change reused accounting identity")
 	}
 	setTrafficDay(t, reopened, 0)
 	values, err := reopened.UpdateClusterTraffic(nil, []string{"local"}, at, time.UTC)

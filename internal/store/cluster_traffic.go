@@ -1,6 +1,7 @@
 package store
 
 import (
+	"crypto/rand"
 	"maps"
 	"math/bits"
 	"slices"
@@ -55,7 +56,7 @@ func validateClusterTraffic(values map[string]ClusterTrafficRecord, details map[
 	for id, value := range values {
 		ids = append(ids, id)
 		p := value.Period
-		if value.ResetDay < 1 || value.ResetDay > 31 || details[id].TrafficResetDay != value.ResetDay ||
+		if !validTrafficPeriodID(p.ID) || value.ResetDay < 1 || value.ResetDay > 31 || details[id].TrafficResetDay != value.ResetDay ||
 			len(value.SourceKey) > 512 || len(value.Timezone) > 128 || value.Timezone == "" || p.StartedAt.IsZero() || !p.EndsAt.After(p.StartedAt) ||
 			p.EndsAt.Sub(p.StartedAt) > 32*24*time.Hour || value.Received > maxTrafficBytes || value.Sent > maxTrafficBytes ||
 			p.ReceivedBytes > maxTrafficBytes || p.SentBytes > maxTrafficBytes || value.Uptime > maxTrafficBytes ||
@@ -106,7 +107,7 @@ func (s *Store) UpdateClusterTraffic(samples map[string]ClusterTrafficSample, ac
 		}
 		rolled := !start.Equal(record.Period.StartedAt)
 		if rolled {
-			record.Period = contract.TrafficPeriod{StartedAt: start, EndsAt: end}
+			record.Period = contract.TrafficPeriod{ID: rand.Text(), StartedAt: start, EndsAt: end}
 		}
 		if fresh && sample.CollectedAt.After(record.CollectedAt) && sample.ReceivedAt.After(record.SampleAt) &&
 			(rolled || record.RecordedAt.IsZero() || now.Sub(record.RecordedAt) >= trafficSamplingInterval) {
@@ -130,6 +131,18 @@ func (s *Store) UpdateClusterTraffic(samples map[string]ClusterTrafficSample, ac
 		return result, err
 	}
 	return result, nil
+}
+
+func validTrafficPeriodID(value string) bool {
+	if len(value) != 26 {
+		return false
+	}
+	for _, char := range value {
+		if (char < 'A' || char > 'Z') && (char < '2' || char > '7') {
+			return false
+		}
+	}
+	return true
 }
 
 func advanceClusterTraffic(record *ClusterTrafficRecord, sample ClusterTrafficSample) {

@@ -4,6 +4,7 @@ import "time"
 
 // TrafficPeriod is center-owned accounting, separate from the agent's raw counters.
 type TrafficPeriod struct {
+	ID            string    `json:"id"`
 	ReceivedBytes uint64    `json:"receivedBytes"`
 	SentBytes     uint64    `json:"sentBytes"`
 	Available     bool      `json:"available"`

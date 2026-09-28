@@ -74,3 +74,41 @@ func TestCumulativeTrafficUsesPeriodAndRearmsAcrossCycles(t *testing.T) {
 		t.Fatal("legacy counter was not restored")
 	}
 }
+
+func TestCumulativeTrafficReconfigurationCancelsPendingOldUsage(t *testing.T) {
+	for _, kind := range []string{"month-end date change", "disable and re-enable"} {
+		t.Run(kind, func(t *testing.T) {
+			clock := &notificationTestClock{now: time.Date(2026, 2, 28, 12, 0, 0, 0, time.UTC)}
+			source := newNotificationTestHost(clock.Now())
+			telegram := &notificationTestTelegram{sendErr: errors.New("offline")}
+			s := configureNotificationTestService(t, t.TempDir(), source, telegram, clock)
+			defer s.Close()
+			rules := DefaultRules()
+			rules.CPUEnabled, rules.MemoryEnabled, rules.DiskEnabled, rules.HostOfflineEnabled, rules.SSHLoginEnabled = false, false, false, false, false
+			rules.TrafficTotalReceivedEnabled, rules.TrafficTotalSentEnabled = true, false
+			rules.TrafficTotalReceivedThresholdGiB = 1
+			if _, err := s.Configure(context.Background(), UpdateInput{Enabled: true, Locale: "en-US", Rules: rules, ExpectedResourceVersion: s.Snapshot().ResourceVersion}); err != nil {
+				t.Fatal(err)
+			}
+			source.host.TrafficPeriod = &contract.TrafficPeriod{ID: "first", Available: true, ReceivedBytes: 2 << 30, StartedAt: time.Date(2026, 2, 28, 0, 0, 0, 0, time.UTC), EndsAt: time.Date(2026, 3, 30, 0, 0, 0, 0, time.UTC)}
+			if err := s.evaluate(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			clock.Advance(6 * time.Minute)
+			source.host.TrafficPeriod.ReceivedBytes = 0
+			if kind == "month-end date change" {
+				source.host.TrafficPeriod.EndsAt = source.host.TrafficPeriod.EndsAt.AddDate(0, 0, 1)
+			} else {
+				source.host.TrafficPeriod.ID = "second"
+			}
+			telegram.sendErr = nil
+			if err := s.evaluate(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			history, _ := s.history.snapshot()
+			if len(history.Events) != 1 || history.Events[0].Delivery != "cancelled" || telegram.messageCount() != 0 {
+				t.Fatalf("stale usage alert: %+v", history.Events)
+			}
+		})
+	}
+}
