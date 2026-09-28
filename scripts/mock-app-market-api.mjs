@@ -591,6 +591,51 @@ if (process.env.KPANEL_MOCK_CLUSTER_FIXTURE) {
   visualClusterHosts.splice(0, visualClusterHosts.length, ...hosts)
 }
 
+// Match notification/service.go message bodies; names explicitly identify preview data.
+const mockNotificationHosts = [
+  { id: 'local', name: '本机（演示）', isLocal: true },
+  { id: 'preview-es', name: '西班牙（演示）', isLocal: false },
+  { id: 'preview-production', name: '生产环境（演示）', isLocal: false },
+]
+const mockNotificationScenarios = [
+  { host: 1, rule: 'cpu', kind: 'recovery', body: '已恢复：CPU 使用率 当前 6.2%', delivery: 'local_only' },
+  { host: 1, rule: 'cpu', kind: 'alert', body: 'CPU 使用率达到 100.0%\n阈值：90.0%', delivery: 'local_only' },
+  { host: 2, rule: 'availability', kind: 'recovery', body: '连接已恢复，当前状态：在线', delivery: 'sent' },
+  { host: 2, rule: 'availability', kind: 'alert', body: '主机暂时失联，当前状态：离线', delivery: 'sent' },
+  { host: 0, rule: 'memory', kind: 'recovery', body: '已恢复：内存使用率 当前 64.8%', delivery: 'local_only' },
+  { host: 0, rule: 'memory', kind: 'alert', body: '内存使用率达到 92.6%\n阈值：90.0%', delivery: 'local_only' },
+  { host: 2, rule: 'ssh', kind: 'info', body: '用户：deploy\n来源：203.0.113.24\n方式：publickey', delivery: 'sent' },
+  { host: 2, rule: 'disk', kind: 'alert', body: '磁盘使用率达到 91.7%\n阈值：90.0%', delivery: 'failed' },
+  { host: 2, rule: 'traffic', kind: 'recovery', body: '已恢复：网络吞吐 当前 12.4 MiB/s', delivery: 'sent' },
+  { host: 2, rule: 'traffic', kind: 'alert', body: '网络吞吐达到 160.0 MiB/s\n阈值：100.0 MiB/s', delivery: 'sent' },
+  { host: 0, rule: 'traffic-total-received', kind: 'alert', body: '累计接收达到 108.6 GB\n阈值：100.0 GB', delivery: 'local_only' },
+  { host: 0, rule: 'traffic-total-sent', kind: 'alert', body: '累计传送达到 102.4 GB\n阈值：100.0 GB', delivery: 'local_only' },
+  { host: 1, rule: 'disk', kind: 'recovery', body: '已恢复：磁盘使用率 当前 72.3%', delivery: 'local_only' },
+  { host: 1, rule: 'disk', kind: 'alert', body: '磁盘使用率达到 93.1%\n阈值：90.0%', delivery: 'local_only' },
+  { host: 2, rule: 'cpu', kind: 'alert', body: 'CPU 使用率达到 98.2%\n阈值：90.0%', delivery: 'pending' },
+  { host: 0, rule: 'disk', kind: 'alert', body: '磁盘使用率达到 94.3%\n阈值：90.0%', delivery: 'cancelled' },
+]
+const mockNotificationStartedAt = Date.now()
+const mockNotificationEvents = Array.from({ length: 64 }, (_, index) => {
+  const scenario = mockNotificationScenarios[index % mockNotificationScenarios.length]
+  const host = mockNotificationHosts[scenario.host]
+  const timestamp = mockNotificationStartedAt - Math.floor(index / mockNotificationScenarios.length) * 86400000 - (index % mockNotificationScenarios.length + 1) * 600000
+  const createdAt = new Date(timestamp).toISOString()
+  const when = `${new Date(timestamp + 8 * 3600000).toISOString().slice(0, 19).replace('T', ' ')} (UTC+08:00)`
+  const title = scenario.kind === 'alert' ? '⚠️ [KPanel 集群告警]' : scenario.kind === 'recovery' ? '✅ [KPanel 集群通知]' : '🔐 [KPanel 集群通知]'
+  const message = scenario.rule === 'ssh'
+    ? `${title}\n\n主机：${host.name}\nSSH 登录：${when}\n${scenario.body}\n\n发送时间：${when}`
+    : `${title}\n\n主机：${host.name}\n${scenario.body}\n\n时间：${when}`
+  const attempts = scenario.delivery === 'local_only' || scenario.delivery === 'pending' ? 0 : scenario.delivery === 'failed' ? 2 : 1
+  return {
+    id: String(64 - index), createdAt, hostId: host.id, hostName: host.name, isLocal: host.isLocal,
+    rule: scenario.rule, kind: scenario.kind, message,
+    relatedEventId: scenario.kind === 'recovery' ? String(63 - index) : undefined,
+    delivery: scenario.delivery, attempts, provider: scenario.delivery === 'local_only' ? undefined : 'telegram',
+    lastAttemptAt: attempts ? new Date(timestamp + 30000).toISOString() : undefined,
+  }
+})
+
 let mockNotificationRevision = 1
 let mockNotificationSnapshot = {
   localRecording: true,
@@ -1551,16 +1596,8 @@ createServer(async (request, response) => {
     return
   }
   if (request.method === 'GET' && url.pathname === '/api/v1/cluster/notifications/history') {
-    const hosts = [{ id: 'local', name: '本机 · KPanel', isLocal: true }, { id: 'preview-hk', name: '香港节点 · Production', isLocal: false }]
-    const events = Array.from({ length: 64 }, (_, index) => {
-      const host = hosts[index % hosts.length]
-      const recovery = index % 4 === 0
-      return { id: String(64 - index), createdAt: new Date(Date.now() - (index + 1) * 600000).toISOString(), hostId: host.id, hostName: host.name, isLocal: host.isLocal,
-        rule: index % 3 === 0 ? 'availability' : 'cpu', kind: recovery ? 'recovery' : 'alert',
-        message: recovery ? '模拟事件：主机连接已恢复。' : '模拟事件：CPU 持续超过 90%，当前 96%。',
-        relatedEventId: recovery ? String(63 - index) : undefined,
-        delivery: ['local_only', 'sent', 'failed', 'pending'][index % 4], attempts: index % 4 === 0 ? 0 : 1, provider: index % 4 === 0 ? undefined : 'telegram' }
-    })
+    const hosts = mockNotificationHosts
+    const events = [...mockNotificationEvents]
     if (process.env.KPANEL_MOCK_NOTIFICATION_EVENTS) {
       const injected = JSON.parse(await readFile(process.env.KPANEL_MOCK_NOTIFICATION_EVENTS, 'utf8'))
       if (!Array.isArray(injected) || injected.length > 100) throw new Error('Mock notification fixture must contain at most 100 events')

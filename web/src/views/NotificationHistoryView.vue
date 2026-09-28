@@ -109,14 +109,14 @@ onBeforeUnmount(() => { requestID++; controller?.abort() })
     <ErrorState v-else-if="error" :message="phrase(error)" @retry="load(items.length > 0)" />
     <EmptyState v-else-if="!items.length" :title="phrase('暂无符合条件的通知')" :description="phrase('可以调整筛选条件；首次启用后只记录新发生的事件。')" />
     <div v-if="!loading && items.length" class="notification-history__list">
-      <details v-for="event in items" :key="event.id" :open="route.query.event === event.id" class="notification-history__event">
-        <summary :aria-label="[event.hostName, phrase(rules[event.rule] || event.rule), phrase(kinds[event.kind]), phrase(deliveries[event.delivery]), formatDateTime(event.createdAt)].join(' · ')">
+      <article v-for="event in items" :key="event.id" class="notification-history__event" :aria-label="[event.hostName, phrase(rules[event.rule] || event.rule), phrase(kinds[event.kind]), formatDateTime(event.createdAt)].join(' · ')">
+        <header class="notification-history__heading">
           <Bell :size="18" aria-hidden="true" />
           <div class="notification-history__subject"><strong>{{ event.hostName }}</strong><span>{{ phrase(rules[event.rule] || event.rule) }}</span></div>
           <span class="notification-history__kind" :data-kind="event.kind">{{ phrase(kinds[event.kind]) }}</span>
           <span :class="{ 'notification-history__failure': event.delivery === 'failed' }">{{ phrase(deliveries[event.delivery]) }}</span>
           <time :datetime="event.createdAt">{{ formatDateTime(event.createdAt) }}</time>
-        </summary>
+        </header>
         <div class="notification-history__detail">
           <p>{{ event.message }}</p>
           <p v-if="event.relatedEventId">{{ phrase('关联告警编号') }}: {{ event.relatedEventId }}</p>
@@ -125,7 +125,7 @@ onBeforeUnmount(() => { requestID++; controller?.abort() })
           <p v-if="event.delivery === 'failed'">{{ phrase('发送失败会自动重试，最长 24 小时；本地记录已保存。') }}</p>
           <p v-if="event.delivery === 'cancelled'">{{ phrase('外部推送已关闭、配置已变化或重试已到期，本地记录仍保留。') }}</p>
         </div>
-      </details>
+      </article>
       <button v-if="nextCursor" class="button button--secondary" type="button" :disabled="loadingMore" @click="load(true)">{{ phrase(loadingMore ? '正在加载…' : '加载更多') }}</button>
     </div>
   </div>
@@ -145,7 +145,7 @@ onBeforeUnmount(() => { requestID++; controller?.abort() })
 .notification-history__retention { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 0; }
 .notification-history__list { display: grid; gap: 12px; min-width: 0; }
 .notification-history__event { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); min-width: 0; }
-.notification-history__event > summary { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; cursor: pointer; padding: 16px; font-size: 14px; line-height: 1.5; }
+.notification-history__heading { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 16px; font-size: 14px; line-height: 1.5; }
 .notification-history__subject { display: grid; gap: 4px; flex: 1 1 180px; min-width: 0; overflow-wrap: anywhere; }
 .notification-history__subject > span, .notification-history__event time { color: var(--text-soft); font-size: 13px; }
 .notification-history__kind { font-weight: 600; }
