@@ -5,11 +5,15 @@ export type ClusterHostDetailsSortKey = 'custom' | 'expiresOn' | 'price'
 export type ClusterHostTemporarySortKey = ClusterHostDetailsSortKey | 'cpu' | 'memory' | 'disk' | 'traffic'
 export type ClusterHostTemporarySortDirection = 'asc' | 'desc'
 
-interface SortMetric { value: number; group?: string }
+interface SortMetric {
+  value: number
+  group?: string
+  fraction?: { numerator: bigint; denominator: bigint }
+}
 
 function priceMetric(price: string | undefined): SortMetric | undefined {
   // Parse a single amount only; offers, ranges and unknown cycles stay unsorted.
-  const match = price?.normalize('NFKC').trim().match(/^(?:([a-z]{3}|US\$|HK\$|[¥$€£])\s*)?((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*([a-z]{3}|元|美元|欧元|歐元|英镑|英鎊)?(?:\s*(?:\/|每|per\s+)\s*(\d+)?\s*(月|季|季度|半年|年|mo|month|months|quarter|quarters|yr|year|years))?$/i)
+  const match = price?.normalize('NFKC').trim().match(/^(?:([a-z]{3}|US\$|HK\$|[¥$€£])\s*)?((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*([a-z]{3}|元|美元|欧元|歐元|英镑|英鎊)?(?:\s*(?:\/|每|per\s+)\s*(\d+)?\s*(月|个月|個月|季|季度|半年|年|mo|month|months|quarter|quarters|yr|year|years))?$/i)
   if (!match || (match[1] && match[3])) return undefined
   const currencies: Record<string, string> = {
     '¥': 'CNY', RMB: 'CNY', 元: 'CNY', '$': 'USD', 'US$': 'USD', 美元: 'USD',
@@ -18,17 +22,25 @@ function priceMetric(price: string | undefined): SortMetric | undefined {
   const unit = (match[1] || match[3] || '').toUpperCase()
   const currency = currencies[unit] || unit
   const months: Record<string, number> = {
-    月: 1, mo: 1, month: 1, months: 1, 季: 3, 季度: 3, quarter: 3, quarters: 3,
+    月: 1, 个月: 1, 個月: 1, mo: 1, month: 1, months: 1, 季: 3, 季度: 3, quarter: 3, quarters: 3,
     半年: 6, 年: 12, yr: 12, year: 12, years: 12,
   }
   const period = match[5]?.toLowerCase()
   const count = Number(match[4] || 1)
   if (!Number.isFinite(count) || count <= 0) return undefined
-  const amount = Number(match[2]!.replaceAll(',', ''))
+  const decimal = match[2]!.replaceAll(',', '')
+  const amount = Number(decimal)
   const value = period ? amount / (months[period]! * count) : amount
   if (!Number.isFinite(value)) return undefined
   // No exchange rates are assumed; amounts without a cycle form a separate group.
-  return { value, group: `${currency}:${period ? 'monthly' : 'unspecified'}` }
+  return {
+    value, group: `${currency}:${period ? 'monthly' : 'unspecified'}`,
+    fraction: {
+      numerator: BigInt(decimal.replace('.', '')),
+      denominator: 10n ** BigInt(decimal.split('.')[1]?.length || 0)
+        * (period ? BigInt(months[period]!) * BigInt(match[4] || 1) : 1n),
+    },
+  }
 }
 
 function sortByMetric<T>(items: readonly T[], direction: ClusterHostTemporarySortDirection, metric: (host: T) => SortMetric | undefined): T[] {
@@ -40,8 +52,14 @@ function sortByMetric<T>(items: readonly T[], direction: ClusterHostTemporarySor
       const leftGroup = left.metric.group || ''
       const rightGroup = right.metric.group || ''
       if (leftGroup !== rightGroup) return leftGroup < rightGroup ? -1 : 1
-      const order = direction === 'desc' ? right.metric.value - left.metric.value : left.metric.value - right.metric.value
-      return order || left.customIndex - right.customIndex
+      let order = left.metric.value - right.metric.value
+      if (left.metric.fraction && right.metric.fraction) {
+        // Preserve equal decimal prices across billing cycles without floating-point drift.
+        const difference = left.metric.fraction.numerator * right.metric.fraction.denominator
+          - right.metric.fraction.numerator * left.metric.fraction.denominator
+        order = difference < 0n ? -1 : Number(difference > 0n)
+      }
+      return (direction === 'desc' ? -order : order) || left.customIndex - right.customIndex
     }).map(({ host }) => host)
 }
 

@@ -98,4 +98,15 @@ describe('temporary cluster host sorting', () => {
     expect(sortClusterHostsByDetails(items, 'price', 'asc', h => h).map(h => h.price))
       .toEqual(['$299/季', 'USD 1,200/year', '$600/半年', '200 USD/2 months', '$5/0月', '首年$1，续费$10'])
   })
+
+  it.each(['asc', 'desc'] as const)('preserves equivalent decimal prices across cycles in %s order', direction => {
+    for (const prices of [
+      ['$0.10/month', '$0.30/3 months', '$0.30/3个月'],
+      ['$0.40/month', '$4.80/year'],
+      ['$0.0000001/month', '$0.0000012/year'],
+    ]) {
+      const items = prices.map(price => ({ price }))
+      expect(sortClusterHostsByDetails(items, 'price', direction, h => h)).toEqual(items)
+    }
+  })
 })
