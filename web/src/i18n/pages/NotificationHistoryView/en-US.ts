@@ -1,6 +1,18 @@
 import type { PhraseCatalog } from '@/i18n/phrase'
 
 export default [
+  ['通知记录', 'Notification history'],
+  ['时间', 'Time'],
+  ['事件信息', 'Event details'],
+  ['查看原文', 'View original'],
+  ['通知原文', 'Original notification'],
+  ['阈值', 'Threshold'],
+  ['到达值', 'Reached'],
+  ['当前值', 'Current'],
+  ['状态', 'State'],
+  ['用户', 'User'],
+  ['来源', 'Source'],
+  ['方式', 'Method'],
   [
     "本机与集群事件默认保存在当前 KPanel，外部推送可选。",
     "Local and cluster events are saved on this KPanel by default. External delivery is optional."

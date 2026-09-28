@@ -16,6 +16,7 @@ async function open() {
   const wrapper = mount(View, { global: { stubs: {
     LoadingState: { template: '<div>Loading</div>' },
     ErrorState: { props: ['message'], template: '<div role="alert">{{ message }}<button @click="$emit(\'retry\')">retry</button></div>' },
+    ModalDialog: { props: ['open'], template: '<div v-if="open" role="dialog"><slot /></div>' },
   } } })
   wrappers.push(wrapper); await flushPromises(); return wrapper
 }
@@ -23,7 +24,7 @@ beforeEach(() => { vi.clearAllMocks(); mocks.list.mockResolvedValue(page) })
 afterEach(() => wrappers.splice(0).forEach(wrapper => wrapper.unmount()))
 
 describe('notification history', () => {
-  it('shows every full message and delivery detail without expanding a record', async () => {
+  it('shows typed fields inline and preserves original messages and delivery details', async () => {
     const messages = [
       '⚠️ [KPanel 集群告警]\n\n主机：本机\nCPU 使用率达到 95.0%\n阈值：90.0%\n\n时间：2026-09-28 09:00:00 (UTC+08:00)',
       '✅ [KPanel 集群通知]\n\n主机：本机\n已恢复：CPU 使用率 当前 6.2%\n\n时间：2026-09-28 09:10:00 (UTC+08:00)',
@@ -33,16 +34,23 @@ describe('notification history', () => {
       { ...event, id: '10', message: messages[1], kind: 'recovery', relatedEventId: event.id },
     ] })
     const wrapper = await open()
-    const records = wrapper.findAll('article')
+    const records = wrapper.findAll('.notification-history__event')
     expect(records).toHaveLength(2)
-    records.forEach((record, index) => {
+    records.forEach((record) => {
       expect(record.find('details, summary').exists()).toBe(false)
-      expect(record.get('.notification-history__detail > p').element.textContent).toBe(messages[index]!.replace(/\n\n/g, '\n'))
-      expect(record.get('.notification-history__detail').isVisible()).toBe(true)
+      expect(record.get('.notification-history__fields').isVisible()).toBe(true)
     })
-    expect(records[0]!.text()).toContain('发送次数: 2')
-    expect(records[0]!.text()).toContain('发送失败会自动重试')
-    expect(records[1]!.text()).toContain('关联告警编号: 9')
+    expect(records[0]!.text()).toContain('阈值90.0%')
+    expect(records[0]!.text()).toContain('到达值95.0%')
+    expect(records[0]!.text()).toContain('发送失败')
+    expect(records[1]!.text()).toContain('当前值6.2%')
+    await records[0]!.get('button').trigger('click')
+    expect(wrapper.get('.notification-history__original > p').element.textContent).toBe(messages[0])
+    expect(wrapper.get('[role="dialog"]').text()).toContain('发送次数: 2')
+    expect(wrapper.get('[role="dialog"]').text()).toContain('发送失败会自动重试')
+    await records[1]!.get('button').trigger('click')
+    expect(wrapper.get('.notification-history__original > p').element.textContent).toBe(messages[1])
+    expect(wrapper.get('[role="dialog"]').text()).toContain('关联告警编号: 9')
   })
   it('identifies invalid filters without reporting a storage failure', async () => {
     mocks.list.mockRejectedValueOnce(new ApiError('invalid filters', 400))
