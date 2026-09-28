@@ -250,6 +250,20 @@ func TestClusterTrafficStaleSampleClockTimezoneAndSaturation(t *testing.T) {
 	}
 }
 
+func TestClusterTrafficClockCorrectionDoesNotCountHistoricalBytes(t *testing.T) {
+	s := trafficStore(t, 1)
+	at := time.Date(2026, 9, 20, 12, 0, 0, 0, time.UTC)
+	sampleTraffic(t, s, at, 1000, 2000, 10000)
+	sampleTraffic(t, s, at.Add(30*time.Second), 1600, 2600, 10030)
+	now := at.Add(60 * time.Second)
+	values, err := s.UpdateClusterTraffic(map[string]ClusterTrafficSample{"local": {
+		ReceivedAt: now, CollectedAt: at.Add(120 * time.Second), Received: 1800, Sent: 2800, Uptime: 10060,
+	}}, []string{"local"}, now, time.UTC)
+	if err != nil || values["local"].ReceivedBytes != 800 || values["local"].SentBytes != 800 {
+		t.Fatalf("clock correction: %+v %v", values, err)
+	}
+}
+
 func BenchmarkClusterTraffic101Hosts(b *testing.B) {
 	s, err := Open(filepath.Join(b.TempDir(), "state.json"))
 	if err != nil {

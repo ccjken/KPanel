@@ -148,8 +148,12 @@ func advanceClusterTraffic(record *ClusterTrafficRecord, sample ClusterTrafficSa
 		p.Partial = true // The first sample is a baseline, never historical usage.
 		return
 	}
-	elapsed := sample.CollectedAt.Sub(record.CollectedAt).Seconds()
-	rebooted := sample.Uptime < record.Uptime || (elapsed > 0 && float64(sample.Uptime)+5 < float64(record.Uptime)+elapsed)
+	// A wall-clock correction is not evidence of a reboot. Only an observed
+	// uptime rollback permits adding the new boot's entire counter.
+	rebooted := sample.Uptime < record.Uptime
+	if sample.ReceivedAt.Sub(record.SampleAt) > trafficBoundaryWindow {
+		p.Partial = true
+	}
 	delta := func(current, previous uint64) uint64 {
 		if current < previous {
 			p.Partial = true // Interface counters rolled back; their history is unknown.
