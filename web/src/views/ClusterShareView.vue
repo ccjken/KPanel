@@ -589,8 +589,8 @@ onBeforeUnmount(() => {
 .share-grid.is-list .share-card__aside > small { grid-column: 2 / -1; grid-row: 2; }
 .share-grid.is-list .share-metrics { grid-area: metrics; border-block: 0; border-right: 1px solid var(--border); }
 .share-grid.is-list .share-details { grid-area: details; grid-template-columns: minmax(0, 13rem) minmax(0, 11rem); justify-content: start; gap: 0; padding: 0; }
-.share-grid.is-list .share-details__traffic { grid-column: 1; padding: 12px 14px; }
-.share-grid.is-list .share-details__traffic:first-child { padding-bottom: 0; }
+.share-grid.is-list .share-details__traffic { grid-column: 1; padding: 6px 14px 12px; }
+.share-grid.is-list .share-details__traffic:first-child { align-self: end; padding-top: 12px; padding-bottom: 6px; }
 .share-grid.is-list .share-details__uptime { grid-column: 2; grid-row: 1 / span 2; display: grid; align-content: center; align-self: stretch; padding: 14px; border-left: 1px solid var(--border); }
 
 .share-card__header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 14px; }
