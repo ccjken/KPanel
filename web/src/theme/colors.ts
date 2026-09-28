@@ -11,10 +11,10 @@ export interface ThemeColorIntent {
 }
 
 export const DEFAULT_THEME_COLORS = Object.freeze({
-  brand: '#0c7a60',
-  neutral: '#52645f',
+  brand: '#2867b2',
+  neutral: '#4b5d76',
   signatureLinked: true,
-  signature: '#0c7a60',
+  signature: '#2867b2',
 }) satisfies Readonly<ThemeColorIntent>
 
 export interface ThemeColorPreset {

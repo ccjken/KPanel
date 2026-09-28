@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { THEME_TOKEN_NAMES } from './colors'
+import { DEFAULT_THEME_COLORS, THEME_TOKEN_NAMES, contrastRatio, deriveThemeTokens } from './colors'
 
 const themeSource = readFileSync(new URL('../styles/themes.css', import.meta.url), 'utf8')
   .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -59,6 +59,27 @@ describe('theme contract', () => {
       }
     })
   }
+
+  it.each([
+    [':root', 'light'],
+    [":root[data-theme='dark']", 'dark'],
+  ] as const)('keeps the shipped %s palette in sync with the default color intent', (selector, mode) => {
+    const tokens = tokensFor(selector)
+    const derived = deriveThemeTokens(DEFAULT_THEME_COLORS, mode)
+    const sharedColors = [
+      '--bg', '--surface', '--surface-subtle', '--surface-raised',
+      '--text', '--text-soft', '--muted', '--border', '--border-strong', '--control-border',
+      '--brand', '--brand-strong', '--brand-soft', '--brand-muted', '--theme-accent', '--on-brand',
+      '--neutral-soft', '--sidebar', '--sidebar-text', '--sidebar-muted', '--sidebar-accent',
+      '--desktop-label', '--scrollbar-track', '--scrollbar-thumb', '--scrollbar-thumb-hover',
+      '--scrollbar-thumb-active',
+    ] as const
+    for (const name of sharedColors) expect(tokens.get(name), name).toBe(derived[name])
+
+    const success = tokens.get('--success')!
+    expect(success).not.toBe(tokens.get('--brand'))
+    expect(contrastRatio(success, tokens.get('--surface')!)).toBeGreaterThanOrEqual(4.5)
+  })
 
   it('keeps shared compatibility aliases on semantic tokens', () => {
     const tokens = tokensFor(':root')

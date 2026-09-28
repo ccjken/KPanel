@@ -4,7 +4,7 @@ import type { ScenePack } from '@/lib/scenePacks'
 
 const theme = vi.hoisted(() => ({
   setColors: vi.fn(),
-  colors: { value: { brand: '#0c7a60', neutral: '#52645f', signatureLinked: true, signature: '#0c7a60' } },
+  colors: { value: { brand: '#2867b2', neutral: '#4b5d76', signatureLinked: true, signature: '#2867b2' } },
   isCustom: { value: false },
 }))
 vi.mock('@/stores/theme', () => ({ useTheme: () => theme }))
