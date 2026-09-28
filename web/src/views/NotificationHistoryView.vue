@@ -98,7 +98,10 @@ onBeforeUnmount(() => { requestID++; controller?.abort(); hostController.abort()
 
 <template>
   <div class="page notification-history">
-    <p class="notification-history__intro">{{ phrase('本机与集群事件默认保存在当前 KPanel，外部推送可选。') }}</p>
+    <div class="notification-history__summary">
+      <p class="notification-history__intro">{{ phrase('本机与集群事件默认保存在当前 KPanel，外部推送可选。') }}</p>
+      <p class="notification-history__retention">{{ phrase('保留最近') }} {{ retention.days }} {{ phrase('天，最多') }} {{ retention.events }} {{ phrase('条；达到容量上限时清理最早记录。') }}</p>
+    </div>
     <form class="notification-history__filters toolbar-card" @submit.prevent="load()">
       <label class="field notification-history__search">
         <span>{{ phrase('搜索记录') }}</span>
@@ -117,7 +120,6 @@ onBeforeUnmount(() => { requestID++; controller?.abort(); hostController.abort()
       </select></label>
       <button type="submit" class="button button--secondary" :disabled="loading"><RefreshCw :size="16" />{{ phrase('查询') }}</button>
     </form>
-    <p class="notification-history__retention">{{ phrase('保留最近') }} {{ retention.days }} {{ phrase('天，最多') }} {{ retention.events }} {{ phrase('条；达到容量上限时清理最早记录。') }}</p>
     <LoadingState v-if="loading" />
     <ErrorState v-else-if="error" :message="phrase(error)" @retry="load(items.length > 0)" />
     <EmptyState v-else-if="!items.length" :title="phrase('暂无符合条件的通知')" :description="phrase('可以调整筛选条件；首次启用后只记录新发生的事件。')" />
@@ -154,7 +156,8 @@ onBeforeUnmount(() => { requestID++; controller?.abort(); hostController.abort()
 </template>
 
 <style scoped>
-.notification-history { min-width: 0; container: notification-history / inline-size; }
+.notification-history { min-width: 0; gap: 12px; container: notification-history / inline-size; }
+.notification-history__summary { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 24px; }
 .notification-history__intro { margin: 0; color: var(--text-soft); font-size: 14px; line-height: 1.6; }
 .notification-history__filters { display: flex; flex-wrap: wrap; gap: 16px; align-items: end; }
 .notification-history__filters label { display: grid; gap: 6px; flex: 1 1 145px; min-width: 0; font-size: 14px; }
