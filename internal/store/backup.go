@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/kejilion/kejilion-panel/internal/backup"
+	"maps"
 )
 
 // ExportIdentity excludes sessions, passkeys, login attempts, audit history and
@@ -21,10 +22,12 @@ func (s *Store) ExportIdentity() ([]byte, error) {
 		users[i].Passkeys = nil
 	}
 	return json.Marshal(diskState{
-		SchemaVersion:    1,
-		Users:            users,
-		ClusterHostOrder: cloneClusterHostOrder(s.data.ClusterHostOrder),
-		Appearance:       cloneAppearance(s.data.Appearance),
+		SchemaVersion:      1,
+		Users:              users,
+		ClusterHostOrder:   cloneClusterHostOrder(s.data.ClusterHostOrder),
+		ClusterHostDetails: maps.Clone(s.data.ClusterHostDetails),
+		ClusterTraffic:     maps.Clone(s.data.ClusterTraffic),
+		Appearance:         cloneAppearance(s.data.Appearance),
 	})
 }
 
@@ -43,6 +46,12 @@ func ValidateIdentityBackup(data []byte) error {
 	}
 	if state.Appearance != nil && ValidateAppearance(*state.Appearance) != nil {
 		return errors.New("invalid panel appearance backup")
+	}
+	if validateClusterHostDetailsMap(state.ClusterHostDetails) != nil {
+		return errors.New("invalid cluster host details backup")
+	}
+	if validateClusterTraffic(state.ClusterTraffic, state.ClusterHostDetails) != nil {
+		return errors.New("invalid cluster traffic backup")
 	}
 	u := state.Users[0]
 	if u.ID == "" || len(u.ID) > 128 || u.Role != "admin" || u.Username == "" || len(u.Username) > 128 || len(u.PasswordHash) > 1024 || len(u.PasswordHash) < 32 || len(u.TOTPRecoveryCodeHashes) != 0 || len(u.Passkeys) != 0 {
@@ -82,6 +91,8 @@ func (s *Store) RestoreIdentity(data []byte) error {
 	s.data.FileShares = nil
 	s.data.ClusterShare = ClusterShare{}
 	s.data.ClusterHostOrder = cloneClusterHostOrder(incoming.ClusterHostOrder)
+	s.data.ClusterHostDetails = maps.Clone(incoming.ClusterHostDetails)
+	s.data.ClusterTraffic = maps.Clone(incoming.ClusterTraffic)
 	s.data.Appearance = cloneAppearance(incoming.Appearance)
 	if err := s.persistLocked(); err != nil {
 		s.data = previous

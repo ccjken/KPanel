@@ -1,15 +1,19 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, watchEffect, type WatchStopHandle } from 'vue'
+import { computed, onBeforeUnmount, onMounted, watchEffect, type WatchStopHandle } from 'vue'
 import { RouterView } from 'vue-router'
 import { useRoute } from 'vue-router'
 import ToastHost from '@/components/feedback/ToastHost.vue'
 import { useI18n } from '@/i18n'
 import { installPhraseLocalization, usePhraseCatalog } from '@/i18n/phrase'
 import { useDesktopMode } from '@/stores/desktopMode'
+import { useSession } from '@/stores/session'
+import { useLiveNotifications } from '@/composables/useLiveNotifications'
 
 const route = useRoute()
 const i18n = useI18n()
 const desktop = useDesktopMode()
+const session = useSession()
+useLiveNotifications(computed(() => session.state.authenticated && !route.meta.public))
 let stopPhraseLocalization: WatchStopHandle | null = null
 
 usePhraseCatalog((locale) => locale === 'en-US'

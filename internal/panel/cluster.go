@@ -52,6 +52,9 @@ func (s clusterTelemetrySource) Telemetry(ctx context.Context) (contract.HostTel
 
 func (s *Server) StartBackground(ctx context.Context) {
 	s.cluster.Start(ctx)
+	if s.clusterTraffic != nil {
+		s.clusterTraffic.Start(ctx)
+	}
 	if s.notifications != nil {
 		s.notifications.Start(ctx)
 	}
@@ -77,6 +80,9 @@ func (s *Server) Close() error {
 	// Cluster-owned relay connections can outlive HTTP shutdown. Close their
 	// transport before waiting for handlers, or restore restarts can deadlock.
 	var clusterErr error
+	if s.clusterTraffic != nil {
+		s.clusterTraffic.Close()
+	}
 	if s.cluster != nil {
 		clusterErr = s.cluster.Close()
 	}
@@ -93,6 +99,10 @@ func (s *Server) Close() error {
 }
 
 func (s *Server) handleCluster(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == clusterNotificationsPath+"/history" && r.Method == http.MethodGet && r.URL.RawPath == "" {
+		s.handleNotificationHistory(w, r)
+		return
+	}
 	if r.URL.RawPath != "" || r.URL.RawQuery != "" {
 		s.writeProblem(w, r, http.StatusBadRequest, "invalid_cluster_request", "Invalid cluster request", "")
 		return
@@ -181,6 +191,15 @@ func (s *Server) handleClusterHost(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.handleClusterHostRefresh(w, r, id)
+		return
+	}
+	if strings.HasSuffix(rest, "/details") {
+		id := strings.TrimSuffix(rest, "/details")
+		if id == "" || strings.Contains(id, "/") {
+			s.writeProblem(w, r, http.StatusNotFound, "route_not_found", "Route not found", "")
+			return
+		}
+		s.handleClusterHostDetails(w, r, id)
 		return
 	}
 	if strings.HasSuffix(rest, "/mutual-files") {

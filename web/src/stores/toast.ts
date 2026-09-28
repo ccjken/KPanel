@@ -7,6 +7,7 @@ export interface Toast {
   title: string
   message?: string
   tone: ToastTone
+  action?: { label: string; run: () => void }
 }
 
 const items = ref<Toast[]>([])
@@ -16,15 +17,17 @@ function remove(id: number): void {
   items.value = items.value.filter((item) => item.id !== id)
 }
 
-function show(title: string, options: { message?: string; tone?: ToastTone; duration?: number } = {}): void {
+function show(title: string, options: { message?: string; tone?: ToastTone; duration?: number; action?: Toast['action'] } = {}): number {
   const item: Toast = {
     id: nextId++,
     title,
     message: options.message,
     tone: options.tone || 'info',
+    action: options.action,
   }
   items.value.push(item)
   window.setTimeout(() => remove(item.id), options.duration || 4200)
+  return item.id
 }
 
 export function useToast() {

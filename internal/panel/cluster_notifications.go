@@ -3,7 +3,10 @@ package panel
 import (
 	"errors"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/kejilion/kejilion-panel/internal/notification"
 )
@@ -11,6 +14,10 @@ import (
 const clusterNotificationsPath = "/api/v1/cluster/notifications"
 
 func (s *Server) handleClusterNotifications(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == clusterNotificationsPath+"/history" && r.Method == http.MethodGet && r.URL.RawPath == "" {
+		s.handleNotificationHistory(w, r)
+		return
+	}
 	if r.URL.RawPath != "" || r.URL.RawQuery != "" {
 		s.writeProblem(w, r, http.StatusBadRequest, "invalid_cluster_notification_request", "Invalid cluster notification request", "")
 		return
@@ -34,6 +41,75 @@ func (s *Server) handleClusterNotifications(w http.ResponseWriter, r *http.Reque
 	default:
 		s.writeProblem(w, r, http.StatusNotFound, "route_not_found", "Route not found", "")
 	}
+}
+
+func (s *Server) handleNotificationHistory(w http.ResponseWriter, r *http.Request) {
+	if _, _, ok := s.requireSession(w, r); !ok {
+		return
+	}
+	query, err := parseNotificationHistoryQuery(r.URL.RawQuery)
+	if err != nil {
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_notification_history_query", "Invalid notification history filters", "")
+		return
+	}
+	if s.notifications == nil {
+		s.writeProblem(w, r, http.StatusServiceUnavailable, "cluster_notifications_unavailable", "Cluster notifications unavailable", "")
+		return
+	}
+	page, err := s.notifications.History(query)
+	if err != nil {
+		s.writeNotificationError(w, r, err)
+		return
+	}
+	s.writeJSON(w, http.StatusOK, page)
+}
+
+func parseNotificationHistoryQuery(raw string) (notification.HistoryQuery, error) {
+	query := notification.HistoryQuery{}
+	if len(raw) > 4096 {
+		return query, errors.New("query too long")
+	}
+	values, err := url.ParseQuery(raw)
+	if err != nil {
+		return query, err
+	}
+	for key, value := range values {
+		if len(value) != 1 {
+			return query, errors.New("duplicate query parameter")
+		}
+		switch key {
+		case "host":
+			query.HostID = value[0]
+		case "rule":
+			query.Rule = value[0]
+		case "kind":
+			query.Kind = value[0]
+		case "delivery":
+			query.Delivery = value[0]
+		case "search":
+			query.Search = value[0]
+		case "since":
+			query.Since, err = time.Parse(time.RFC3339, value[0])
+		case "until":
+			query.Until, err = time.Parse(time.RFC3339, value[0])
+		case "cursor":
+			query.Before, err = strconv.ParseUint(value[0], 10, 64)
+			if query.Before == 0 {
+				err = errors.New("invalid cursor")
+			}
+		case "limit":
+			query.Limit, err = strconv.Atoi(value[0])
+			if query.Limit < 1 {
+				err = errors.New("invalid limit")
+			}
+		default:
+			return query, errors.New("unknown query parameter")
+		}
+		if err != nil {
+			return query, err
+		}
+	}
+	return query, query.Validate()
 }
 
 func (s *Server) handleClusterNotificationsUpdate(w http.ResponseWriter, r *http.Request) {
@@ -177,7 +253,7 @@ func (s *Server) writeNotificationError(w http.ResponseWriter, r *http.Request, 
 			case "credential_store_unavailable_after_delivery", "credential_rollback_failed_after_delivery",
 				"state_store_unavailable_after_delivery":
 				status, code, title = http.StatusServiceUnavailable, "cluster_notifications_save_failed_after_delivery", "Validation message delivered but notification settings were not saved"
-			case "credential_store_unavailable", "credential_rollback_failed", "state_store_unavailable", "credential_file_unavailable",
+			case "history_store_unavailable", "credential_store_unavailable", "credential_rollback_failed", "state_store_unavailable", "credential_file_unavailable",
 				"token_store_unavailable", "token_file_unavailable":
 				status, code, title = http.StatusServiceUnavailable, "cluster_notifications_unavailable", "Cluster notifications unavailable"
 			case "invalid_response", "api_error", "rate_limited", "unavailable":

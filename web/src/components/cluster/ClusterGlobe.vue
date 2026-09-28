@@ -7,12 +7,14 @@ import CountryFlagIcon from '@/components/overview/CountryFlagIcon.vue'
 import { desktopWindowActiveKey } from '@/lib/desktopRouteKeys'
 import { clusterHostMonitoringRoute } from '@/lib/clusterHostNavigation'
 import { clampPercent, formatBytes, formatDateTime, formatDuration, formatPercent, formatRate, relativeTime } from '@/lib/format'
-import { formatNetworkTrafficCounter } from '@/lib/networkTraffic'
+import { clusterTrafficCounters, formatNetworkTrafficCounter, trafficPeriodHint } from '@/lib/networkTraffic'
+import { useI18n } from '@/i18n'
 import { phraseCatalogVersion, translatePhrase } from '@/i18n/phrase'
 import type { ClusterHost } from '@/types/api'
 import { GlobeRenderer, globeHostLocation, groupGlobeHosts, isPublicGlobeHost, type GlobeHost, type GlobePalette } from './globeRenderer'
 
 const props = withDefaults(defineProps<{ hosts: GlobeHost[]; searchable?: boolean }>(), { searchable: true })
+const { t } = useI18n()
 const emit = defineEmits<{ manage: [host: ClusterHost]; openPanel: [host: ClusterHost] }>()
 const active = inject(desktopWindowActiveKey, computed(() => true))
 const root = ref<HTMLElement>()
@@ -383,8 +385,8 @@ onBeforeUnmount(() => {
           <div class="cluster-globe__isp"><dt>运营商</dt><dd data-i18n-ignore>{{ location?.isp || phrase(publicHost ? '网络信息未公开' : '运营商未知') }}</dd></div>
           <div><dt>实时下行</dt><dd><component :is="managementHost ? RouterLink : 'span'" v-bind="networkHistoryLink('实时下行')">{{ formatRate(receiveRate) }}</component></dd></div>
           <div><dt>实时上行</dt><dd><component :is="managementHost ? RouterLink : 'span'" v-bind="networkHistoryLink('实时上行')">{{ formatRate(transmitRate) }}</component></dd></div>
-          <div><dt>累计接收</dt><dd><component :is="managementHost ? RouterLink : 'span'" v-bind="networkHistoryLink('累计接收')">{{ formatNetworkTrafficCounter(sample.network, 'received') }}</component></dd></div>
-          <div><dt>累计传送</dt><dd><component :is="managementHost ? RouterLink : 'span'" v-bind="networkHistoryLink('累计传送')">{{ formatNetworkTrafficCounter(sample.network, 'sent') }}</component></dd></div>
+          <div :title="trafficPeriodHint(selected.trafficPeriod, t)"><dt>累计接收</dt><dd><component :is="managementHost ? RouterLink : 'span'" v-bind="networkHistoryLink('累计接收')">{{ formatNetworkTrafficCounter(clusterTrafficCounters(selected), 'received') }}</component></dd></div>
+          <div :title="trafficPeriodHint(selected.trafficPeriod, t)"><dt>累计传送</dt><dd><component :is="managementHost ? RouterLink : 'span'" v-bind="networkHistoryLink('累计传送')">{{ formatNetworkTrafficCounter(clusterTrafficCounters(selected), 'sent') }}</component></dd></div>
           <div><dt>运行时间</dt><dd>{{ formatDuration(sample.uptimeSeconds) }}</dd></div>
           <div v-if="managementHost"><dt>延迟</dt><dd>{{ latency }}</dd></div>
         </dl>

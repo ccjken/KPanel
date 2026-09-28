@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ClusterHostDetails from '@/components/cluster/ClusterHostDetails.vue'
+import ClusterTemporarySortMenu from '@/components/cluster/ClusterTemporarySortMenu.vue'
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
@@ -23,8 +25,10 @@ import LogoMark from '@/components/common/LogoMark.vue'
 import CountryFlagIcon from '@/components/overview/CountryFlagIcon.vue'
 import OperatingSystemIcon from '@/components/overview/OperatingSystemIcon.vue'
 import { usePhraseCatalog } from '@/i18n/phrase'
+import { useI18n } from '@/i18n'
+import { sortPublicClusterHostsTemporarily, type ClusterHostTemporarySortKey, type ClusterHostTemporarySortDirection } from '@/lib/clusterHostTemporarySort'
 import { ApiError, api } from '@/lib/api'
-import { formatNetworkTrafficCounter } from '@/lib/networkTraffic'
+import { clusterTrafficCounters, formatNetworkTrafficCounter, trafficPeriodHint } from '@/lib/networkTraffic'
 import {
   clampPercent,
   formatDateTime,
@@ -50,9 +54,29 @@ type ShareViewMode = 'list' | 'card' | 'globe'
 const viewMode = ref<ShareViewMode>('list')
 const viewModeStorageKey = 'kpanel:cluster-share-view'
 const search = ref('')
+const { t } = useI18n()
+const sortKey = ref<ClusterHostTemporarySortKey>('custom')
+const sortDirection = ref<ClusterHostTemporarySortDirection>('asc')
+const sortOptions = computed(() => [
+  { value: 'custom' as const, label: t('cluster.details.defaultOrder') },
+  { value: 'cpu' as const, label: t('cluster.details.sortCPU') },
+  { value: 'memory' as const, label: t('cluster.details.sortMemory') },
+  { value: 'disk' as const, label: t('cluster.details.sortDisk') },
+  { value: 'traffic' as const, label: t('cluster.details.sortTraffic') },
+  { value: 'expiresOn' as const, label: t('cluster.details.expiresOn') },
+  { value: 'price' as const, label: t('cluster.details.price') },
+])
+const sortDirectionLabel = computed(() => sortKey.value === 'expiresOn'
+  ? t(sortDirection.value === 'asc' ? 'cluster.details.sortEarlier' : 'cluster.details.sortLater')
+  : t(sortDirection.value === 'asc' ? 'cluster.details.sortAsc' : 'cluster.details.sortDesc'))
+function changeSort(key: ClusterHostTemporarySortKey): void {
+  sortKey.value = key
+  sortDirection.value = key === 'custom' || key === 'expiresOn' || key === 'price' ? 'asc' : 'desc'
+}
 const filteredHosts = computed(() => {
   const keyword = search.value.trim().toLowerCase()
-  return (snapshot.value?.items || []).filter(host => [host.name, host.os, host.location.country, host.location.city, host.location.isp].filter(Boolean).join(' ').toLowerCase().includes(keyword))
+  const hosts = (snapshot.value?.items || []).filter(host => [host.name, host.os, host.location.country, host.location.city, host.location.isp].filter(Boolean).join(' ').toLowerCase().includes(keyword))
+  return sortPublicClusterHostsTemporarily(hosts, sortKey.value, sortDirection.value)
 })
 const ClusterGlobe = defineAsyncComponent(() => import('@/components/cluster/ClusterGlobe.vue'))
 const { resolved: resolvedTheme, setTheme } = useTheme()
@@ -173,35 +197,6 @@ onBeforeUnmount(() => {
           <strong>KPanel</strong>
         </a>
         <div class="share-header__actions">
-          <div class="share-view-switch" role="group" aria-label="机器排列方式">
-            <button
-              type="button"
-              :class="{ 'is-active': viewMode === 'list' }"
-              :aria-pressed="viewMode === 'list'"
-              title="列表排列"
-              @click="setViewMode('list')"
-            >
-              <LayoutList :size="15" /> <span>列表</span>
-            </button>
-            <button
-              type="button"
-              :class="{ 'is-active': viewMode === 'card' }"
-              :aria-pressed="viewMode === 'card'"
-              title="卡片排列"
-              @click="setViewMode('card')"
-            >
-              <LayoutGrid :size="15" /> <span>卡片</span>
-            </button>
-            <button
-              type="button"
-              :class="{ 'is-active': viewMode === 'globe' }"
-              :aria-pressed="viewMode === 'globe'"
-              title="地球展示"
-              @click="setViewMode('globe')"
-            >
-              <Globe2 :size="15" /> <span>地球</span>
-            </button>
-          </div>
           <button
             class="share-icon-button"
             type="button"
@@ -240,7 +235,44 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <div v-if="snapshot?.items.length" class="share-toolbar"><label class="share-search"><Search :size="17" /><input v-model="search" type="search" aria-label="搜索公开主机" placeholder="搜索名称、地区或系统…" /></label><span>{{ filteredHosts.length }} / {{ snapshot.items.length }}</span></div>
+      <div v-if="snapshot?.items.length" class="share-toolbar">
+        <label class="share-search"><Search :size="17" /><input v-model="search" type="search" aria-label="搜索公开主机" placeholder="搜索名称、地区或系统…" /></label>
+        <div class="share-sort">
+          <ClusterTemporarySortMenu :model-value="sortKey" :options="sortOptions" :label="t('cluster.details.sortLabel')" :prefix="t('cluster.details.sortPrefix')" :title="sortKey === 'price' ? t('cluster.details.priceSortHint') : undefined" @update:model-value="changeSort" />
+          <button type="button" class="share-sort__direction" :disabled="sortKey === 'custom'" :title="sortDirectionLabel" :aria-label="sortDirectionLabel" @click="sortDirection = sortDirection === 'asc' ? 'desc' : 'asc'">
+            <ArrowUp v-if="sortDirection === 'asc'" :size="15" aria-hidden="true" /><ArrowDown v-else :size="15" aria-hidden="true" />
+          </button>
+        </div>
+        <div class="share-view-switch" role="group" aria-label="机器排列方式">
+          <button
+            type="button"
+            :class="{ 'is-active': viewMode === 'list' }"
+            :aria-pressed="viewMode === 'list'"
+            title="列表排列"
+            @click="setViewMode('list')"
+          >
+            <LayoutList :size="15" /> <span>列表</span>
+          </button>
+          <button
+            type="button"
+            :class="{ 'is-active': viewMode === 'card' }"
+            :aria-pressed="viewMode === 'card'"
+            title="卡片排列"
+            @click="setViewMode('card')"
+          >
+            <LayoutGrid :size="15" /> <span>卡片</span>
+          </button>
+          <button
+            type="button"
+            :class="{ 'is-active': viewMode === 'globe' }"
+            :aria-pressed="viewMode === 'globe'"
+            title="地球展示"
+            @click="setViewMode('globe')"
+          >
+            <Globe2 :size="15" /> <span>地球</span>
+          </button>
+        </div>
+      </div>
 
       <section v-if="loading && !snapshot" class="share-state" aria-live="polite">
         <RefreshCw class="spin" :size="24" />
@@ -290,6 +322,7 @@ onBeforeUnmount(() => {
                 <span>{{ locationLabel(host) }}</span>
                 <em>{{ host.location.isp || '网络信息未公开' }}</em>
               </p>
+              <ClusterHostDetails :details="host" />
             </div>
             <div class="share-card__aside">
               <span class="share-status" :class="`is-${host.state}`">
@@ -338,17 +371,17 @@ onBeforeUnmount(() => {
               </dd>
             </div>
             <div class="share-details__traffic">
-              <dt>累计流量</dt>
+              <dt :title="trafficPeriodHint(host.trafficPeriod, t)" :aria-label="trafficPeriodHint(host.trafficPeriod, t)">累计流量</dt>
               <dd>
                 <span title="累计接收">
                   <ArrowDown :size="13" aria-hidden="true" />
                   <span class="sr-only">累计接收</span>
-                  {{ host.collectedAt ? formatNetworkTrafficCounter(host.network, 'received') : '—' }}
+                  {{ host.collectedAt ? formatNetworkTrafficCounter(clusterTrafficCounters(host), 'received') : '—' }}
                 </span>
                 <span title="累计传送">
                   <ArrowUp :size="13" aria-hidden="true" />
                   <span class="sr-only">累计传送</span>
-                  {{ host.collectedAt ? formatNetworkTrafficCounter(host.network, 'sent') : '—' }}
+                  {{ host.collectedAt ? formatNetworkTrafficCounter(clusterTrafficCounters(host), 'sent') : '—' }}
                 </span>
               </dd>
             </div>
@@ -511,11 +544,23 @@ onBeforeUnmount(() => {
 .share-stats .is-attention strong { color: var(--amber); }
 
 .share-grid { display: grid; gap: 12px; }
-.share-toolbar { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
-.share-toolbar > span { margin-left: auto; color: var(--text-soft); font-size: .8125rem; font-variant-numeric: tabular-nums; }
-.share-search { display: flex; align-items: center; gap: 10px; flex: 1; max-width: 520px; min-width: 0; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-soft); background: var(--surface); }
+.share-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 16px; margin-bottom: 16px; }
+.share-toolbar .share-view-switch { justify-self: end; }
+.share-sort { display: flex; min-width: 0; align-items: center; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.share-sort__direction { display: grid; place-items: center; min-width: 38px; min-height: 40px; padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-soft); cursor: pointer; }
+.share-sort__direction:hover { background: var(--interaction-hover); }
+.share-sort__direction:disabled { opacity: .4; cursor: default; }
+.share-sort__direction:focus-visible { outline: 3px solid var(--brand); outline-offset: -3px; }
+.share-search { display: flex; align-items: center; gap: 10px; max-width: 520px; min-width: 0; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-soft); background: var(--surface); }
 .share-search input { min-width: 0; width: 100%; min-height: 42px; padding: 10px 0; font-size: .875rem; color: var(--text); background: transparent; border: 0; outline: none; box-shadow: none; }
 .share-search:focus-within { outline: 2px solid var(--brand); outline-offset: 2px; }
+@media (max-width: 900px) {
+  .share-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
+  .share-search { grid-column: 1 / -1; max-width: none; }
+}
+@media (max-width: 560px) {
+  .share-toolbar { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+}
 .share-grid.is-card { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 15px; }
 .share-grid.is-card .share-card { display: flex; flex-direction: column; }
 .share-grid.is-card .share-card__header { grid-template-columns: auto minmax(0, 1fr); align-items: start; flex: 1; }
@@ -544,8 +589,8 @@ onBeforeUnmount(() => {
 .share-grid.is-list .share-card__aside > small { grid-column: 2 / -1; grid-row: 2; }
 .share-grid.is-list .share-metrics { grid-area: metrics; border-block: 0; border-right: 1px solid var(--border); }
 .share-grid.is-list .share-details { grid-area: details; grid-template-columns: minmax(0, 13rem) minmax(0, 11rem); justify-content: start; gap: 0; padding: 0; }
-.share-grid.is-list .share-details__traffic { grid-column: 1; padding: 12px 14px; }
-.share-grid.is-list .share-details__traffic:first-child { padding-bottom: 0; }
+.share-grid.is-list .share-details__traffic { grid-column: 1; padding: 6px 14px 12px; }
+.share-grid.is-list .share-details__traffic:first-child { align-self: end; padding-top: 12px; padding-bottom: 6px; }
 .share-grid.is-list .share-details__uptime { grid-column: 2; grid-row: 1 / span 2; display: grid; align-content: center; align-self: stretch; padding: 14px; border-left: 1px solid var(--border); }
 
 .share-card__header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 14px; }

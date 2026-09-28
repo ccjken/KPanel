@@ -71,6 +71,7 @@ type Server struct {
 	lastAuthAudit           map[string]time.Time
 	lastGlobalAuthAudit     time.Time
 	cluster                 *cluster.Service
+	clusterTraffic          *clusterTrafficSource
 	notifications           *notification.Service
 	clusterShareMu          sync.Mutex
 	clusterShareCache       clusterShareCacheEntry
@@ -190,8 +191,23 @@ func NewServer(config Config, authService *auth.Service, storage *store.Store, a
 		return nil, fmt.Errorf("initialize remote download jobs: %w", err)
 	}
 	timezoneSource := newNotificationTimezoneSource(agent)
+	trafficSource := &clusterTrafficSource{raw: clusterService, store: storage, location: timezoneSource.AccountingLocation, now: time.Now}
 	notifications, err := notification.NewService(notification.Config{
-		DataDir: config.DataDir, Hosts: clusterService, Timezone: timezoneSource.Location,
+		DataDir: config.DataDir, Hosts: trafficSource, Timezone: timezoneSource.Location,
+		HostTrafficLimits: func() map[string]notification.HostTrafficLimits {
+			result := make(map[string]notification.HostTrafficLimits)
+			for id, details := range storage.ClusterHostDetails() {
+				result[id] = notification.HostTrafficLimits{ReceivedGiB: details.TrafficTotalReceivedThresholdGiB, SentGiB: details.TrafficTotalSentThresholdGiB}
+			}
+			return result
+		},
+		HostExpiries: func() map[string]notification.HostExpiry {
+			result := make(map[string]notification.HostExpiry)
+			for id, details := range storage.ClusterHostDetails() {
+				result[id] = notification.HostExpiry{ExpiresOn: details.ExpiresOn, Enabled: details.ExpiryReminderEnabled}
+			}
+			return result
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("initialize notifications: %w", err)
@@ -201,6 +217,7 @@ func NewServer(config Config, authService *auth.Service, storage *store.Store, a
 		passkeyOriginLocked: passkeyOriginLocked,
 		config:              config, auth: authService, store: storage, agent: agent,
 		cluster:                 clusterService,
+		clusterTraffic:          trafficSource,
 		notifications:           notifications,
 		terminalSessions:        make(map[string]panelTerminalSession),
 		terminalOpeningUser:     make(map[string]int),

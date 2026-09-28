@@ -23,12 +23,14 @@ import type {
   AuthStatus,
   ClusterController,
   ClusterHost,
+  ClusterHostDetails,
   ClusterHostList,
   ClusterHostOrderPreference,
   ClusterLightBatchEnrollment,
   ClusterLightBatchEnrollmentList,
   ClusterLightEnrollment,
   ClusterNotificationSnapshot,
+  NotificationHistoryPage,
   ClusterPairingCode,
   ClusterShareSettings,
   CrossPanelFileTransferEvent,
@@ -1660,6 +1662,8 @@ export const api = {
       request<ClusterHostOrderPreference>('/cluster/host-order', { method: 'PUT', body }),
     shareSettings: (signal?: AbortSignal): Promise<ClusterShareSettings> =>
       request<ClusterShareSettings>('/cluster/share', { signal }),
+    notificationHistory: (filters: Record<string, string>, signal?: AbortSignal): Promise<NotificationHistoryPage> =>
+      request<NotificationHistoryPage>(`/cluster/notifications/history?${new URLSearchParams(filters)}`, { signal }),
     notifications: (signal?: AbortSignal): Promise<ClusterNotificationSnapshot> =>
       request<ClusterNotificationSnapshot>('/cluster/notifications', { signal }),
     updateNotifications: (body: {
@@ -1698,6 +1702,8 @@ export const api = {
       request<PublicClusterShareSnapshot>(`/public/cluster-share/${encodeURIComponent(token)}`, { signal }),
     host: (id: string, signal?: AbortSignal): Promise<ClusterHost> =>
       request<ClusterHost>(`/cluster/hosts/${encodeURIComponent(id)}`, { signal }),
+    saveHostDetails: (id: string, body: ClusterHostDetails & { expectedResourceVersion: string }): Promise<ClusterHostDetails & { resourceVersion: string }> =>
+      request(`/cluster/hosts/${encodeURIComponent(id)}/details`, { method: 'PUT', body }),
     add: (body: { name?: string; origin: string; pairingCode: string }): Promise<ClusterHost> =>
       request<ClusterHost>('/cluster/hosts', { method: 'POST', body }),
     rename: (

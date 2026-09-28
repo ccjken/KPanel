@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useRouter } from 'vue-router'
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { CheckCircle2, LoaderCircle, RefreshCw, Send, ShieldCheck } from '@lucide/vue'
 import ModalDialog from '@/components/common/ModalDialog.vue'
@@ -17,6 +18,8 @@ const props = defineProps<{
 }>()
 
 const { locale } = useI18n()
+const router = useRouter()
+function viewHistory(): void { emit('close'); void router.push({ path: '/activity', query: { tab: 'notifications' } }) }
 
 const emit = defineEmits<{
   close: []
@@ -81,7 +84,7 @@ const selectedChannel = computed<ClusterNotificationChannel>(() => selectedIsAct
   : { provider: selectedProvider.value, configured: false, ready: false, status: 'not_configured' })
 const selectedProviderName = computed(() => notificationProviders.find((provider) => provider.id === selectedProvider.value)?.name || 'Telegram')
 const credentialRequiredForSave = computed(() => !form.channelCredential.trim() && !selectedChannel.value.configured)
-const saveBlocked = computed(() => !form.channelCredential.trim() && (!selectedIsActive.value || (form.enabled && !selectedChannel.value.configured)))
+const saveBlocked = computed(() => form.enabled && !form.channelCredential.trim() && !selectedChannel.value.configured)
 const credentialLabel = computed(() => selectedProvider.value === 'telegram' ? 'Bot API key' : 'Webhook 地址')
 const credentialPlaceholder = computed(() => {
   if (selectedChannel.value.configured) return '已保存，留空则保持不变'
@@ -231,7 +234,7 @@ async function save(): Promise<void> {
       enabled: form.enabled,
       locale: locale.value,
       rules: rulesFromForm(),
-      provider: selectedProvider.value,
+      provider: credentialProvided || form.enabled ? selectedProvider.value : activeChannel.value.provider,
       channelCredential: form.channelCredential.trim() || undefined,
       expectedResourceVersion: snapshot.value.resourceVersion,
     })
@@ -318,7 +321,7 @@ onBeforeUnmount(() => {
   <ModalDialog
     :open="open"
     :title="phrase('集群通知')"
-    :description="phrase('选择一个消息渠道，接收所有集群主机的关键变化。')"
+    :description="phrase('事件默认保存在本机，可选开启外部渠道推送。')"
     size="medium"
     @close="emit('close')"
   >
@@ -337,6 +340,11 @@ onBeforeUnmount(() => {
       </div>
 
       <template v-else-if="snapshot">
+        <section class="cluster-notifications__local" :role="snapshot.localRecording === false ? 'alert' : 'status'">
+          <strong>{{ phrase(snapshot.localRecording === false ? '本地记录暂时不可用' : '本地记录已启用') }}</strong>
+          <button class="button button--secondary" type="button" @click="viewHistory">{{ phrase('查看通知记录') }}</button>
+          <p v-if="snapshot.localRecording === false">{{ phrase('请检查 KPanel 数据目录，恢复前无法保存新的通知。') }}</p>
+        </section>
         <section class="cluster-notifications__providers" aria-labelledby="cluster-notifications-provider-title">
           <div class="cluster-notifications__section-heading">
             <div>
@@ -435,11 +443,11 @@ onBeforeUnmount(() => {
         <section class="cluster-notifications__section">
           <div class="cluster-notifications__section-heading">
             <div>
-              <h3>{{ phrase('通知开关') }}</h3>
-              <p>{{ phrase('关闭后保留设置，不再主动发送告警。') }}</p>
+              <h3>{{ phrase('外部推送') }}</h3>
+              <p>{{ phrase('关闭后继续保存本地记录，只暂停外部发送。') }}</p>
             </div>
             <label class="cluster-notifications__switch">
-              <input v-model="form.enabled" type="checkbox" :aria-label="phrase('启用集群通知')" />
+              <input v-model="form.enabled" type="checkbox" :aria-label="phrase('外部推送')" />
               <span aria-hidden="true" />
             </label>
           </div>
@@ -523,6 +531,10 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.cluster-notifications__local { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-subtle); font-size: 14px; line-height: 1.5; }
+.cluster-notifications__local > strong { min-width: 0; overflow-wrap: anywhere; }
+.cluster-notifications__local > button { justify-self: end; }
+.cluster-notifications__local p { grid-column: 1 / -1; margin: 0; color: var(--text-soft); }
 .cluster-notifications {
   display: grid;
   gap: 14px;

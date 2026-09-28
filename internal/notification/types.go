@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/kejilion/kejilion-panel/internal/contract"
 )
 
 const (
@@ -16,7 +18,7 @@ const (
 	DefaultTrafficTotalThresholdGiB = 100
 	DefaultSustainSamples           = 3
 	MaxTrafficThresholdMiB          = 1_048_576
-	MaxTrafficTotalThresholdGiB     = 1_048_576
+	MaxTrafficTotalThresholdGiB     = contract.MaxTrafficThresholdGiB
 	MaxAlertStates                  = 1_024
 	MaxTelegramTokenBytes           = 256
 	MaxChannelCredentialBytes       = 2_048
@@ -202,13 +204,14 @@ type TelegramSnapshot struct {
 }
 
 type Snapshot struct {
-	Resources ResourceSnapshot `json:"resources"`
-	Enabled   bool             `json:"enabled"`
-	Locale    string           `json:"locale"`
-	Timezone  string           `json:"timezone"`
-	Rules     Rules            `json:"rules"`
-	Provider  Provider         `json:"provider"`
-	Channel   ChannelSnapshot  `json:"channel"`
+	LocalRecording bool             `json:"localRecording"`
+	Resources      ResourceSnapshot `json:"resources"`
+	Enabled        bool             `json:"enabled"`
+	Locale         string           `json:"locale"`
+	Timezone       string           `json:"timezone"`
+	Rules          Rules            `json:"rules"`
+	Provider       Provider         `json:"provider"`
+	Channel        ChannelSnapshot  `json:"channel"`
 	// Telegram mirrors Channel only when Telegram is active. It is retained
 	// for compatibility with clients released before multi-channel support.
 	Telegram        TelegramSnapshot `json:"telegram"`

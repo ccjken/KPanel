@@ -591,8 +591,95 @@ if (process.env.KPANEL_MOCK_CLUSTER_FIXTURE) {
   visualClusterHosts.splice(0, visualClusterHosts.length, ...hosts)
 }
 
+// Match notification/service.go message bodies; names explicitly identify preview data.
+const mockNotificationHosts = [
+  { id: 'local', name: '本机（演示）', isLocal: true },
+  { id: 'preview-es', name: '西班牙（演示）', isLocal: false },
+  { id: 'preview-production', name: '生产环境（演示）', isLocal: false },
+]
+// Give notification preview hosts matching inventory entries for their OS marks.
+visualClusterHosts.push(
+  visualClusterHost({ id: 'preview-es', name: '西班牙（演示）', hostname: 'preview-es', isLocal: false, state: 'online',
+    os: 'Ubuntu 24.04 LTS', osId: 'ubuntu', uptimeSeconds: 432000, receivedBytes: 8 * 1024 ** 3, sentBytes: 3 * 1024 ** 3,
+    city: 'Madrid', country: 'Spain', countryCode: 'ES' }),
+  visualClusterHost({ id: 'preview-production', name: '生产环境（演示）', hostname: 'preview-production', isLocal: false, state: 'online',
+    os: 'Rocky Linux 9', osId: 'rocky', uptimeSeconds: 864000, receivedBytes: 24 * 1024 ** 3, sentBytes: 11 * 1024 ** 3,
+    city: 'Singapore', country: 'Singapore', countryCode: 'SG' }),
+)
+const mockNotificationScenarios = [
+  { host: 0, rule: 'server-expiry', kind: 'info', body: `到期日期：${new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)}\n剩余天数：7`, delivery: 'local_only' },
+  { host: 1, rule: 'cpu', kind: 'recovery', body: '已恢复：CPU 使用率 当前 6.2%', delivery: 'local_only' },
+  { host: 1, rule: 'cpu', kind: 'alert', body: 'CPU 使用率达到 100.0%\n阈值：90.0%', delivery: 'local_only' },
+  { host: 2, rule: 'availability', kind: 'recovery', body: '连接已恢复，当前状态：在线', delivery: 'sent' },
+  { host: 2, rule: 'availability', kind: 'alert', body: '主机暂时失联，当前状态：离线', delivery: 'sent' },
+  { host: 0, rule: 'memory', kind: 'recovery', body: '已恢复：内存使用率 当前 64.8%', delivery: 'local_only' },
+  { host: 0, rule: 'memory', kind: 'alert', body: '内存使用率达到 92.6%\n阈值：90.0%', delivery: 'local_only' },
+  { host: 2, rule: 'ssh', kind: 'info', body: '用户：deploy\n来源：203.0.113.24\n方式：publickey', delivery: 'sent' },
+  { host: 2, rule: 'disk', kind: 'alert', body: '磁盘使用率达到 91.7%\n阈值：90.0%', delivery: 'failed' },
+  { host: 2, rule: 'traffic', kind: 'recovery', body: '已恢复：网络吞吐 当前 12.4 MiB/s', delivery: 'sent' },
+  { host: 2, rule: 'traffic', kind: 'alert', body: '网络吞吐达到 160.0 MiB/s\n阈值：100.0 MiB/s', delivery: 'sent' },
+  { host: 0, rule: 'traffic-total-received', kind: 'alert', body: '累计接收达到 108.6 GB\n阈值：100.0 GB', delivery: 'local_only' },
+  { host: 0, rule: 'traffic-total-sent', kind: 'alert', body: '累计传送达到 102.4 GB\n阈值：100.0 GB', delivery: 'local_only' },
+  { host: 1, rule: 'disk', kind: 'recovery', body: '已恢复：磁盘使用率 当前 72.3%', delivery: 'local_only' },
+  { host: 1, rule: 'disk', kind: 'alert', body: '磁盘使用率达到 93.1%\n阈值：90.0%', delivery: 'local_only' },
+  { host: 2, rule: 'cpu', kind: 'alert', body: 'CPU 使用率达到 98.2%\n阈值：90.0%', delivery: 'pending' },
+  { host: 0, rule: 'disk', kind: 'alert', body: '磁盘使用率达到 94.3%\n阈值：90.0%', delivery: 'cancelled' },
+]
+const mockNotificationStartedAt = Date.now()
+const mockNotificationEvents = Array.from({ length: 64 }, (_, index) => {
+  const scenario = mockNotificationScenarios[index % mockNotificationScenarios.length]
+  const host = mockNotificationHosts[scenario.host]
+  const timestamp = mockNotificationStartedAt - Math.floor(index / mockNotificationScenarios.length) * 86400000 - (index % mockNotificationScenarios.length + 1) * 600000
+  const createdAt = new Date(timestamp).toISOString()
+  const when = `${new Date(timestamp + 8 * 3600000).toISOString().slice(0, 19).replace('T', ' ')} (UTC+08:00)`
+  const title = scenario.rule === 'server-expiry' ? '⏰ [KPanel 集群通知]' : scenario.kind === 'alert' ? '⚠️ [KPanel 集群告警]' : scenario.kind === 'recovery' ? '✅ [KPanel 集群通知]' : '🔐 [KPanel 集群通知]'
+  const message = scenario.rule === 'ssh'
+    ? `${title}\n\n主机：${host.name}\nSSH 登录：${when}\n${scenario.body}\n\n发送时间：${when}`
+    : `${title}\n\n主机：${host.name}\n${scenario.body}\n\n时间：${when}`
+  const attempts = scenario.delivery === 'local_only' || scenario.delivery === 'pending' ? 0 : scenario.delivery === 'failed' ? 2 : 1
+  return {
+    id: String(64 - index), createdAt, hostId: host.id, hostName: host.name, isLocal: host.isLocal,
+    rule: scenario.rule, kind: scenario.kind, message,
+    relatedEventId: scenario.kind === 'recovery' ? String(63 - index) : undefined,
+    delivery: scenario.delivery, attempts, provider: scenario.delivery === 'local_only' ? undefined : 'telegram',
+    lastAttemptAt: attempts ? new Date(timestamp + 30000).toISOString() : undefined,
+  }
+})
+let mockHostDetailsRevision = 1
+let mockHostNameRevision = 1
+const mockHostDetails = Object.fromEntries(visualClusterHosts.map((host, index) => [host.id, {
+  ...(index === 0 ? { expiresOn: '2027-09-28', price: '¥99/年', trafficResetDay: 15 } : {}),
+  ...(index === 1 ? { expiresOn: '2026-12-31', price: '¥12/月', trafficResetDay: 1 } : {}),
+  ...(index === 2 ? { expiresOn: '2027-03-15', price: '$5/月' } : {}),
+  resourceVersion: mockRevision(900),
+}]))
+
 let mockNotificationRevision = 1
+// Presentation fixtures only; durable accounting is exercised by backend tests.
+const mockTrafficPeriods = new Map()
+function mockTrafficPeriod(host) {
+  const day = mockHostDetails[host.id]?.trafficResetDay
+  if (!day) return undefined
+  if (mockTrafficPeriods.has(host.id)) return mockTrafficPeriods.get(host.id)
+  const now = new Date()
+  const boundary = offset => {
+    const first = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1))
+    const last = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate()
+    return new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), Math.min(day, last)))
+  }
+  const offset = now < boundary(0) ? -1 : 0
+  const period = {
+    receivedBytes: host.id === visualClusterHosts[0].id ? 2 * 1024 ** 3 : 512 * 1024 ** 2,
+    sentBytes: 256 * 1024 ** 2,
+    available: Boolean(host.lastSnapshot),
+    startedAt: boundary(offset).toISOString(), endsAt: boundary(offset + 1).toISOString(),
+    partial: true, estimated: false,
+  }
+  mockTrafficPeriods.set(host.id, period)
+  return period
+}
 let mockNotificationSnapshot = {
+  localRecording: true,
   enabled: false,
   locale: 'zh-CN',
   timezone: 'Asia/Shanghai',
@@ -663,6 +750,10 @@ function visualClusterPublicSnapshot() {
       id: host.id,
       name: host.name,
       state: ['online', 'offline', 'pending'].includes(host.state) ? host.state : 'degraded',
+      expiresOn: mockHostDetails[host.id]?.expiresOn,
+      price: mockHostDetails[host.id]?.price,
+      trafficResetDay: mockHostDetails[host.id]?.trafficResetDay,
+      trafficPeriod: mockTrafficPeriod(host),
       os: telemetry?.os,
       architecture: telemetry?.architecture,
       uptimeSeconds: telemetry?.uptimeSeconds,
@@ -1549,6 +1640,26 @@ createServer(async (request, response) => {
     })
     return
   }
+  if (request.method === 'GET' && url.pathname === '/api/v1/cluster/notifications/history') {
+    const hosts = mockNotificationHosts
+    const events = [...mockNotificationEvents]
+    if (process.env.KPANEL_MOCK_NOTIFICATION_EVENTS) {
+      const injected = JSON.parse(await readFile(process.env.KPANEL_MOCK_NOTIFICATION_EVENTS, 'utf8'))
+      if (!Array.isArray(injected) || injected.length > 100) throw new Error('Mock notification fixture must contain at most 100 events')
+      events.unshift(...injected)
+      events.sort((a, b) => Number(b.id) - Number(a.id))
+    }
+    const q = url.searchParams
+    const filtered = events.filter(event => (!q.get('host') || event.hostId === q.get('host')) && (!q.get('rule') || event.rule === q.get('rule')) &&
+      (!q.get('kind') || event.kind === q.get('kind')) && (!q.get('delivery') || event.delivery === q.get('delivery')) &&
+      (!q.get('since') || event.createdAt >= q.get('since')) && (!q.get('until') || event.createdAt <= q.get('until')) &&
+      (!q.get('cursor') || Number(event.id) < Number(q.get('cursor'))) &&
+      (!q.get('search') || (event.hostName + event.message).toLowerCase().includes(q.get('search').toLowerCase())))
+    const limit = Math.min(100, Math.max(1, Number(q.get('limit')) || 50))
+    const items = filtered.slice(0, limit)
+    send(response, 200, { items, hosts, nextCursor: filtered.length > limit ? items.at(-1).id : undefined, retentionDays: 30, maxEvents: 2000, maxBytes: 4194304 })
+    return
+  }
   if (request.method === 'GET' && url.pathname === '/api/v1/cluster/notifications') {
     mockNotificationSnapshot.resources.observedAt = new Date().toISOString()
     send(response, 200, mockNotificationSnapshot)
@@ -2293,13 +2404,67 @@ createServer(async (request, response) => {
   }
   if (request.method === 'GET' && url.pathname === '/api/v1/cluster/hosts') {
     send(response, 200, {
-      items: visualClusterHosts,
+      items: visualClusterHosts.map(host => ({ ...host, trafficPeriod: mockTrafficPeriod(host) })),
+      hostDetails: mockHostDetails,
       total: visualClusterHosts.length,
       remoteTotal: visualClusterHosts.filter((host) => !host.isLocal).length,
       maxHosts: 100,
       pollIntervalSeconds: 30,
       nodeId: 'local-node',
     })
+    return
+  }
+  const hostNameMatch = url.pathname.match(/^\/api\/v1\/cluster\/hosts\/([^/]+)$/)
+  if (request.method === 'PATCH' && hostNameMatch) {
+    const host = visualClusterHosts.find(item => item.id === hostNameMatch[1])
+    const input = await readJSON(request)
+    if (!host) {
+      send(response, 404, { code: 'cluster_host_not_found' })
+      return
+    }
+    if (input.expectedResourceVersion !== host.resourceVersion) {
+      send(response, 409, { code: 'cluster_conflict' })
+      return
+    }
+    if (typeof input.name !== 'string' || !input.name.trim() || [...input.name.trim()].length > 80) {
+      send(response, 422, { code: 'validation_failed' })
+      return
+    }
+    host.name = input.name.trim()
+    host.resourceVersion = mockRevision(1000 + ++mockHostNameRevision)
+    send(response, 200, host)
+    return
+  }
+  const hostDetailsMatch = url.pathname.match(/^\/api\/v1\/cluster\/hosts\/([^/]+)\/details$/)
+  if (request.method === 'PUT' && hostDetailsMatch) {
+    const id = hostDetailsMatch[1]
+    const input = await readJSON(request)
+    if (!Object.hasOwn(mockHostDetails, id)) {
+      send(response, 404, { code: 'cluster_host_not_found' })
+      return
+    }
+    if (input.expectedResourceVersion !== mockHostDetails[id].resourceVersion) {
+      send(response, 409, { code: 'cluster_host_details_changed' })
+      return
+    }
+    const { expiresOn = '', expiryReminderEnabled = false, price = '', trafficResetDay = 0,
+      trafficTotalReceivedThresholdGiB = 0, trafficTotalSentThresholdGiB = 0 } = input
+    if ([trafficTotalReceivedThresholdGiB, trafficTotalSentThresholdGiB].some(value => !Number.isInteger(value) || value < 0 || value > 1_048_576) ||
+        typeof expiryReminderEnabled !== 'boolean' || (expiryReminderEnabled && !expiresOn) ||
+        !Number.isInteger(trafficResetDay) || trafficResetDay < 0 || trafficResetDay > 31 ||
+        typeof price !== 'string' || [...price].length > 40 || /[\u0000-\u001f\u007f]/.test(price) ||
+        (expiresOn && (!/^\d{4}-\d{2}-\d{2}$/.test(expiresOn) || !Number.isFinite(Date.parse(expiresOn)) || new Date(expiresOn).toISOString().slice(0, 10) !== expiresOn))) {
+      send(response, 422, { code: 'cluster_host_details_invalid' })
+      return
+    }
+    const resetChanged = trafficResetDay !== (mockHostDetails[id].trafficResetDay || 0)
+    mockHostDetails[id] = { expiresOn, expiryReminderEnabled, price: price.trim(), trafficResetDay, trafficTotalReceivedThresholdGiB, trafficTotalSentThresholdGiB, resourceVersion: mockRevision(900 + ++mockHostDetailsRevision) }
+    if (resetChanged) {
+      mockTrafficPeriods.delete(id)
+      const period = mockTrafficPeriod(visualClusterHosts.find(host => host.id === id))
+      if (period) { period.receivedBytes = 0; period.sentBytes = 0 }
+    }
+    send(response, 200, mockHostDetails[id])
     return
   }
   if (request.method === 'GET' && url.pathname === '/api/v1/terminal-commands') {

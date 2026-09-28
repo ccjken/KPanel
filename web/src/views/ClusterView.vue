@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, useId, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from '@/i18n'
 import { phraseCatalogVersion, translatePhrase, usePhraseCatalog } from '@/i18n/phrase'
@@ -41,6 +41,7 @@ import ModalDialog from '@/components/common/ModalDialog.vue'
 import ClusterNotificationsDialog from '@/components/cluster/ClusterNotificationsDialog.vue'
 import ClusterTemporarySortMenu from '@/components/cluster/ClusterTemporarySortMenu.vue'
 import LightNodeHealth from '@/components/cluster/LightNodeHealth.vue'
+import ClusterHostDetails from '@/components/cluster/ClusterHostDetails.vue'
 import EmptyState from '@/components/feedback/EmptyState.vue'
 import ErrorState from '@/components/feedback/ErrorState.vue'
 import LoadingState from '@/components/feedback/LoadingState.vue'
@@ -63,7 +64,7 @@ import {
 import { clusterHostMonitoringRoute, clusterHostPanelURL } from '@/lib/clusterHostNavigation'
 import { desktopWindowActiveKey } from '@/lib/desktopRouteKeys'
 import { detectOperatingSystemIdentity } from '@/lib/operatingSystem'
-import { formatNetworkTrafficCounter } from '@/lib/networkTraffic'
+import { clusterTrafficCounters, formatNetworkTrafficCounter, trafficPeriodHint } from '@/lib/networkTraffic'
 import {
   clampPercent,
   formatBytes,
@@ -76,6 +77,7 @@ import { useToast } from '@/stores/toast'
 import type {
   ClusterController,
   ClusterHost,
+  ClusterHostDetails as ClusterHostDetailsValue,
   ClusterHostList,
   ClusterLightBatchEnrollment,
   ClusterLightEnrollment,
@@ -100,6 +102,13 @@ const shareOpen = ref(false)
 const notificationsOpen = ref(false)
 const adding = ref(false)
 const saving = ref(false)
+const editDetails = reactive({ expiresOn: '', expiryReminderEnabled: false, price: '', trafficResetDay: '' as number | string,
+  trafficTotalReceivedThresholdGiB: '' as number | string, trafficTotalSentThresholdGiB: '' as number | string, resourceVersion: '' })
+watch(() => editDetails.expiresOn, date => { if (!date) editDetails.expiryReminderEnabled = false })
+const manageError = ref('')
+const savedDetails = ref<ClusterHostDetailsValue>({})
+const savedName = ref('')
+const manageFormID = `cluster-manage-${useId()}`
 const deleting = ref(false)
 const enablingMutualFiles = ref(false)
 const generatingCode = ref(false)
@@ -266,15 +275,23 @@ const temporarySortOptions = computed(() => [
   { value: 'memory' as const, label: phrase('内存使用率') },
   { value: 'disk' as const, label: phrase('磁盘使用率') },
   { value: 'traffic' as const, label: phrase('总流量（收发合计）') },
+  { value: 'expiresOn' as const, label: t('cluster.details.expiresOn') },
+  { value: 'price' as const, label: t('cluster.details.price') },
 ])
 const filteredHosts = computed(() => sortClusterHostsTemporarily(
   matchingHosts.value,
   temporarySortKey.value,
   temporarySortDirection.value,
+  inventory.value?.hostDetails,
 ))
-const temporarySortDirectionLabel = computed(() => temporarySortDirection.value === 'desc'
+const temporarySortDirectionLabel = computed(() => temporarySortKey.value === 'expiresOn'
+  ? t(temporarySortDirection.value === 'asc' ? 'cluster.details.sortEarlier' : 'cluster.details.sortLater')
+  : temporarySortDirection.value === 'desc'
   ? phrase('当前从高到低；切换为从低到高')
   : phrase('当前从低到高；切换为从高到低'))
+function onTemporarySortChange(key: ClusterHostTemporarySortKey): void {
+  if (key === 'expiresOn' || key === 'price') temporarySortDirection.value = 'asc'
+}
 const hostOrderControlTitle = computed(() => {
   if (hostOrderSaving.value) return phrase('正在保存主机顺序')
   if (search.value.trim()) return phrase('清除搜索后可调整顺序')
@@ -457,15 +474,20 @@ function startLightEnrollmentWatch(): void {
   void pollLightEnrollmentConnection()
 }
 
-async function load(silent = false): Promise<void> {
-  if (loadInFlight) return
+async function load(silent = false, replaceInFlight = false): Promise<void> {
+  if (loadInFlight && !replaceInFlight) return
+  if (replaceInFlight) loadController?.abort()
   loadInFlight = true
   if (!silent && !inventory.value) loading.value = true
   else refreshing.value = true
-  loadController = new AbortController()
+  const controller = new AbortController()
+  loadController = controller
   try {
-    inventory.value = await api.cluster.hosts(loadController.signal)
+    const freshInventory = await api.cluster.hosts(controller.signal)
+    if (controller.signal.aborted) return
+    inventory.value = freshInventory
     await applyPanelHostOrder(inventory.value.items, inventory.value.hostOrder)
+    if (controller.signal.aborted) return
     if (selected.value) {
       const fresh = inventory.value.items.find((host) => host.id === selected.value?.id)
       if (fresh) selected.value = fresh
@@ -476,14 +498,16 @@ async function load(silent = false): Promise<void> {
     loadError.value = ''
     refreshWarning.value = ''
   } catch (reason) {
-    if (reason instanceof DOMException && reason.name === 'AbortError') return
+    if (controller.signal.aborted || (reason instanceof DOMException && reason.name === 'AbortError')) return
     const message = friendlyError(reason, '无法读取集群主机，请稍后重试。')
     if (inventory.value) refreshWarning.value = `${message} 当前保留上次成功数据。`
     else loadError.value = message
   } finally {
-    loading.value = false
-    refreshing.value = false
-    loadInFlight = false
+    if (loadController === controller) {
+      loading.value = false
+      refreshing.value = false
+      loadInFlight = false
+    }
   }
 }
 
@@ -1024,6 +1048,17 @@ function openManage(host: ClusterHost): void {
   selected.value = host
   editResourceVersion.value = host.resourceVersion
   editName.value = host.name
+  savedName.value = host.name
+  const details = inventory.value?.hostDetails?.[host.id]
+  savedDetails.value = { ...details }
+  editDetails.expiresOn = details?.expiresOn || ''
+  editDetails.expiryReminderEnabled = Boolean(details?.expiryReminderEnabled)
+  editDetails.price = details?.price || ''
+  editDetails.trafficResetDay = details?.trafficResetDay || ''
+  editDetails.trafficTotalReceivedThresholdGiB = details?.trafficTotalReceivedThresholdGiB || ''
+  editDetails.trafficTotalSentThresholdGiB = details?.trafficTotalSentThresholdGiB || ''
+  editDetails.resourceVersion = details?.resourceVersion || ''
+  manageError.value = ''
   manageOpen.value = true
 }
 
@@ -1074,23 +1109,80 @@ async function enableMutualFiles(): Promise<void> {
   }
 }
 
-async function saveName(): Promise<void> {
+async function saveHost(): Promise<void> {
   const host = selected.value
-  if (!host || saving.value || enablingMutualFiles.value || !editName.value.trim()) return
+  if (!host || saving.value || deleting.value || enablingMutualFiles.value || !editName.value.trim()) return
+  const name = editName.value.trim()
+  const trafficLimits = {
+    trafficTotalReceivedThresholdGiB: Number(editDetails.trafficTotalReceivedThresholdGiB),
+    trafficTotalSentThresholdGiB: Number(editDetails.trafficTotalSentThresholdGiB),
+  }
+  if (Object.values(trafficLimits).some(value => !Number.isInteger(value) || value < 0 || value > 1_048_576)) {
+    manageError.value = t('cluster.details.trafficLimitInvalid')
+    return
+  }
+  const details = {
+    expiresOn: editDetails.expiresOn, price: editDetails.price.trim(), trafficResetDay: Number(editDetails.trafficResetDay) || 0,
+    ...trafficLimits,
+    ...(editDetails.expiresOn && editDetails.expiryReminderEnabled ? { expiryReminderEnabled: true } : {}),
+  }
+  const detailsChanged = details.expiresOn !== (savedDetails.value.expiresOn || '')
+    || Boolean(details.expiryReminderEnabled) !== Boolean(savedDetails.value.expiryReminderEnabled)
+    || details.price !== (savedDetails.value.price || '')
+    || details.trafficResetDay !== (savedDetails.value.trafficResetDay || 0)
+    || details.trafficTotalReceivedThresholdGiB !== (savedDetails.value.trafficTotalReceivedThresholdGiB || 0)
+    || details.trafficTotalSentThresholdGiB !== (savedDetails.value.trafficTotalSentThresholdGiB || 0)
+  const trafficResetChanged = details.trafficResetDay !== (savedDetails.value.trafficResetDay || 0)
+  manageError.value = ''
+  if (detailsChanged && !editDetails.resourceVersion) {
+    manageError.value = t('cluster.details.unavailable')
+    return
+  }
   saving.value = true
+  let phase: 'details' | 'name' = 'details'
+  let detailsWritten = false
   try {
-    const updated = await api.cluster.rename(host.id, {
-      name: editName.value.trim(),
-      expectedResourceVersion: editResourceVersion.value,
-    })
-    upsertHost(updated)
-    selected.value = updated
-    editResourceVersion.value = updated.resourceVersion
-    toast.success('主机名称已更新')
+    if (detailsChanged) {
+      const updated = await api.cluster.saveHostDetails(host.id, {
+        ...details, expectedResourceVersion: editDetails.resourceVersion,
+      })
+      // A request started before this write may contain stale inventory.
+      loadController?.abort()
+      if (inventory.value) inventory.value.hostDetails = { ...inventory.value.hostDetails, [host.id]: updated }
+      editDetails.resourceVersion = updated.resourceVersion
+      savedDetails.value = { ...updated }
+      detailsWritten = true
+      if (trafficResetChanged) {
+        const current = inventory.value?.items.find(item => item.id === host.id)
+        if (current) current.trafficPeriod = details.trafficResetDay
+          ? { available: false, receivedBytes: 0, sentBytes: 0, startedAt: '', endsAt: '', partial: true, estimated: false }
+          : undefined
+      }
+    }
+    phase = 'name'
+    if (name !== savedName.value) {
+      const updated = await api.cluster.rename(host.id, { name, expectedResourceVersion: editResourceVersion.value })
+      loadController?.abort()
+      upsertHost(updated)
+      selected.value = updated
+      editResourceVersion.value = updated.resourceVersion
+      savedName.value = updated.name
+    }
+    toast.success(t('cluster.details.saved'))
   } catch (reason) {
-    toast.danger('保存失败', friendlyError(reason, '请刷新后重试。'))
+    if (phase === 'details') {
+      manageError.value = reason instanceof ApiError && reason.code === 'cluster_host_details_changed'
+        ? t('cluster.details.conflict')
+        : reason instanceof ApiError && reason.code === 'cluster_host_details_invalid'
+          ? t('cluster.details.invalid')
+          : t('cluster.details.failed')
+    } else {
+      manageError.value = (detailsWritten ? `${t('cluster.details.nameFailedAfterDetails')} ` : '')
+        + friendlyError(reason, t('cluster.details.failed'))
+    }
   } finally {
     saving.value = false
+    if (detailsWritten && trafficResetChanged) await load(true, true)
   }
 }
 
@@ -1150,7 +1242,8 @@ async function refreshHost(host: ClusterHost): Promise<void> {
 function upsertHost(host: ClusterHost): void {
   if (!inventory.value) return
   const index = inventory.value.items.findIndex((item) => item.id === host.id)
-  if (index >= 0) inventory.value.items[index] = host
+  // Individual mutation responses contain raw telemetry, not center accounting.
+  if (index >= 0) inventory.value.items[index] = { ...host, trafficPeriod: host.trafficPeriod ?? inventory.value.items[index]?.trafficPeriod }
   else inventory.value.items.unshift(host)
   inventory.value.total = inventory.value.items.length
 }
@@ -1195,11 +1288,6 @@ function transportSecurityDescription(host: ClusterHost): string {
     return '集群监控数据端到端加密；普通浏览器管理页面仍是 HTTP'
   }
   return '验证目标证书并通过 TLS 加密集群连接'
-}
-
-function shortFingerprint(value?: string): string {
-  if (!value || value.length <= 26) return value || ''
-  return `${value.slice(0, 16)}…${value.slice(-8)}`
 }
 
 function onVisibilityChange(): void {
@@ -1302,6 +1390,8 @@ onBeforeUnmount(() => {
           <div class="cluster-sort" role="group" aria-label="临时主机排序">
             <ClusterTemporarySortMenu
               v-model="temporarySortKey"
+              :title="temporarySortKey === 'price' ? t('cluster.details.priceSortHint') : undefined"
+              @update:model-value="onTemporarySortChange"
               :options="temporarySortOptions"
               :label="phrase('临时排序方式')"
               :prefix="phrase('临时排序')"
@@ -1454,16 +1544,7 @@ onBeforeUnmount(() => {
             >
               {{ displayHostAddress(host) || phrase('公网 IP 未获取') }}
             </span>
-            <small
-              v-if="!host.isLocal && host.peerFingerprint"
-              class="cluster-card__fingerprint"
-              :title="host.peerFingerprint"
-            >
-              身份指纹 {{ shortFingerprint(host.peerFingerprint) }}
-            </small>
-            <small v-else-if="host.kind === 'light_node'" class="cluster-card__fingerprint">
-              {{ phrase(lightNodeCapabilitySummary(host)) }}
-            </small>
+            <ClusterHostDetails :details="inventory?.hostDetails?.[host.id]" />
           </div>
           <button
             class="icon-button icon-button--small"
@@ -1552,16 +1633,16 @@ onBeforeUnmount(() => {
             <small>{{ host.lastSnapshot.telemetry.publicNetwork.isp || '运营商未知' }}</small>
           </div>
           <RouterLink class="cluster-metric-link" :to="clusterHostMonitoringRoute(host, 'network')" :title="phrase('查看历史趋势')" :aria-label="`${phrase('查看历史趋势')} · ${host.name} · ${phrase('累计流量')}`">
-            <span>{{ phrase('累计流量') }}</span>
+            <span :title="trafficPeriodHint(host.trafficPeriod, t)" :aria-label="trafficPeriodHint(host.trafficPeriod, t)">{{ phrase('累计流量') }}</span>
             <strong :title="phrase('累计接收')">
               <span aria-hidden="true">↓</span>
               <span class="sr-only">{{ phrase('累计接收') }}</span>
-              {{ formatNetworkTrafficCounter(host.lastSnapshot.telemetry.network, 'received') }}
+              {{ formatNetworkTrafficCounter(clusterTrafficCounters(host), 'received') }}
             </strong>
             <small :title="phrase('累计传送')">
               <span aria-hidden="true">↑</span>
               <span class="sr-only">{{ phrase('累计传送') }}</span>
-              {{ formatNetworkTrafficCounter(host.lastSnapshot.telemetry.network, 'sent') }}
+              {{ formatNetworkTrafficCounter(clusterTrafficCounters(host), 'sent') }}
             </small>
           </RouterLink>
           <div>
@@ -1650,7 +1731,7 @@ onBeforeUnmount(() => {
           <ShieldCheck :size="19" />
           <span>
             <strong>{{ phrase('公开字段经过白名单过滤') }}</strong>
-            <small>{{ phrase('仅展示名称、状态、地区、系统和资源使用情况；不公开 IP、面板地址、节点 ID、身份指纹、错误详情、版本或管理入口。') }}</small>
+            <small>{{ phrase('展示名称、状态、地区、系统、资源使用情况及已填写的服务器信息；不公开 IP、面板地址、节点 ID、身份指纹、错误详情、版本或管理入口。') }}</small>
           </span>
         </section>
 
@@ -2069,11 +2150,46 @@ onBeforeUnmount(() => {
       size="small"
       @close="closeManage"
     >
-      <div v-if="selected" class="form-stack">
+      <form v-if="selected" :id="manageFormID" class="form-stack" @submit.prevent="saveHost">
         <label class="field">
           {{ phrase('显示名称') }}
-          <input v-model="editName" maxlength="80" autocomplete="off" />
+          <input v-model="editName" required maxlength="80" autocomplete="off" :disabled="saving || deleting || enablingMutualFiles" />
         </label>
+        <div class="cluster-manage__details form-stack">
+          <strong>{{ t('cluster.details.title') }}</strong>
+          <div class="field">
+            <div class="cluster-manage__expiry-label">
+              <label :for="`${manageFormID}-expiry`">{{ t('cluster.details.expiresOn') }}</label>
+              <label class="cluster-manage__expiry-reminder" :title="t(editDetails.expiresOn ? 'cluster.details.expiryReminderHint' : 'cluster.details.expiryReminderRequiresDate')">
+                <input v-model="editDetails.expiryReminderEnabled" type="checkbox" :disabled="!editDetails.expiresOn || saving || deleting || enablingMutualFiles" />
+                <span>{{ t('cluster.details.expiryReminder') }}</span>
+              </label>
+            </div>
+            <input :id="`${manageFormID}-expiry`" v-model="editDetails.expiresOn" type="date" min="0001-01-01" max="9999-12-31" :disabled="saving || deleting || enablingMutualFiles" />
+          </div>
+          <label class="field">
+            {{ t('cluster.details.price') }}
+            <input v-model="editDetails.price" maxlength="40" :placeholder="t('cluster.details.pricePlaceholder')" :disabled="saving || deleting || enablingMutualFiles" />
+          </label>
+          <label class="field">
+            {{ t('cluster.details.resetDay') }}
+            <input v-model="editDetails.trafficResetDay" type="number" min="1" max="31" step="1" :placeholder="t('cluster.details.resetPlaceholder')" :disabled="saving || deleting || enablingMutualFiles" />
+          </label>
+          <small>{{ t('cluster.details.hint') }}</small>
+        </div>
+        <div class="cluster-manage__details cluster-manage__traffic-limits form-stack">
+          <strong>{{ t('cluster.details.trafficLimits') }}</strong>
+          <label class="field">
+            {{ t('cluster.details.receivedLimit') }}
+            <input v-model="editDetails.trafficTotalReceivedThresholdGiB" type="number" min="1" max="1048576" step="1" :placeholder="t('cluster.details.inheritGlobal')" :disabled="saving || deleting || enablingMutualFiles" />
+          </label>
+          <label class="field">
+            {{ t('cluster.details.sentLimit') }}
+            <input v-model="editDetails.trafficTotalSentThresholdGiB" type="number" min="1" max="1048576" step="1" :placeholder="t('cluster.details.inheritGlobal')" :disabled="saving || deleting || enablingMutualFiles" />
+          </label>
+          <small>{{ t('cluster.details.trafficLimitsHint') }}</small>
+        </div>
+        <p v-if="manageError" class="cluster-manage__details-error" role="alert">{{ manageError }}</p>
         <div class="cluster-manage__identity">
           <template v-if="selected.kind !== 'light_node'">
             <span>{{ phrase('目标地址') }}</span><code>{{ displayHostAddress(selected) }}</code>
@@ -2085,6 +2201,9 @@ onBeforeUnmount(() => {
             </code>
           </template>
           <span>{{ phrase('连接方式') }}</span><code>{{ phrase(transportSecurityLabel(selected)) }}</code>
+          <template v-if="selected.kind === 'light_node'">
+            <span>{{ phrase('轻量节点') }}</span><span>{{ phrase(lightNodeCapabilitySummary(selected)) }}</span>
+          </template>
           <template v-if="selected.peerFingerprint">
             <span>{{ phrase('身份指纹') }}</span><code>{{ selected.peerFingerprint }}</code>
           </template>
@@ -2125,8 +2244,11 @@ onBeforeUnmount(() => {
             </button>
           </template>
         </div>
+        <RouterLink class="button button--secondary" :to="{ path: '/activity', query: { tab: 'notifications', host: selected.id } }" @click="closeManage">
+          <Bell :size="16" /> {{ phrase('查看通知记录') }}
+        </RouterLink>
         <LightNodeHealth v-if="selected.kind === 'light_node'" :health="selected.lightHealth" />
-      </div>
+      </form>
       <template #footer>
         <button
           v-if="selected && !selected.isLocal"
@@ -2141,12 +2263,12 @@ onBeforeUnmount(() => {
         <button class="button button--secondary" type="button" :disabled="saving || deleting || enablingMutualFiles" @click="closeManage">{{ phrase('关闭') }}</button>
         <button
           class="button button--primary"
-          type="button"
+          type="submit"
+          :form="manageFormID"
           :disabled="saving || deleting || enablingMutualFiles || !editName.trim()"
-          @click="saveName"
         >
           <LoaderCircle v-if="saving" class="spin" :size="16" />
-          <Check v-else :size="16" /> {{ phrase('保存名称') }}
+          <Check v-else :size="16" /> {{ t('cluster.details.save') }}
         </button>
       </template>
     </ModalDialog>
@@ -2156,6 +2278,17 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.cluster-manage__details {
+  padding-block: 1rem;
+  border-block: 1px solid var(--border);
+}
+.cluster-manage__details small { font-size: 0.8125rem; line-height: 1.5; color: var(--text-soft); }
+.cluster-manage__traffic-limits .field,
+.cluster-manage__traffic-limits input { font-size: .875rem; }
+.cluster-manage__expiry-label { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.cluster-manage__expiry-reminder { display: inline-flex; align-items: center; gap: 7px; font-size: .875rem; cursor: pointer; }
+.cluster-manage__expiry-reminder input { flex: 0 0 auto; width: 16px; height: 16px; min-height: 16px; padding: 0; margin: 0; accent-color: var(--brand); }
+.cluster-manage__details-error { color: var(--danger); }
 .cluster-page {
   --cluster-accent: #6d5dfc;
   align-content: start;
@@ -2605,18 +2738,6 @@ onBeforeUnmount(() => {
 
 .cluster-card__origin:is(a, button):hover {
   color: var(--brand);
-}
-
-.cluster-card__fingerprint {
-  display: block;
-  max-width: 100%;
-  margin-top: 3px;
-  overflow: hidden;
-  color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .cluster-origin-help.is-secure {

@@ -1,6 +1,7 @@
 import type { PhraseCatalog } from '@/i18n/phrase'
 
 export default [
+  ["查看通知记录", "View notification history"],
   ["更新与服务","Updates and services"],
   ["在线仅表示遥测连接正常，服务状态与可用权限分别判断。","Online indicates a telemetry connection. Service state and granted access are evaluated separately."],
   ["最近检查结果","Latest check result"],
@@ -187,7 +188,6 @@ export default [
   ["摘要监控 · 远程终端 · 文件管理", "Summary monitoring · Remote terminal · File management"],
   ["主机 URL 格式无效。", "Host URL format is invalid."],
   ["主机 URL 只能填写根地址，不能包含路径、参数或账号信息。", "Host URL can only fill out root addresses and cannot contain path, parameter or account information."],
-  ["主机名称已更新", "Host name updated"],
   ["主机排列方式", "Host Arrange"],
   ["主机信息已变化，请刷新后重试。", "Host information has changed. Refresh and try again."],
   ["主机已加入集群", "Host has joined the cluster"],
@@ -211,7 +211,7 @@ export default [
   ['公开链接已复制', 'Public link copied'],
   ['公开链接已重置', 'Public link reset'],
   ['公开链接重置失败', 'Could not reset public link'],
-  ['仅展示名称、状态、地区、系统和资源使用情况；不公开 IP、面板地址、节点 ID、身份指纹、错误详情、版本或管理入口。', 'Only names, status, location, operating systems, and resource usage are shown. IP addresses, panel origins, node IDs, fingerprints, error details, versions, and management links are never exposed.'],
+  ['展示名称、状态、地区、系统、资源使用情况及已填写的服务器信息；不公开 IP、面板地址、节点 ID、身份指纹、错误详情、版本或管理入口。', 'Names, status, location, operating systems, resource usage, and configured server details are shown. IP addresses, panel origins, node IDs, fingerprints, error details, versions, and management links are never exposed.'],
   ['默认关闭；关闭后现有链接立即返回 404。', 'Disabled by default. Existing links return 404 immediately after sharing is disabled.'],
   ['分享设置保存失败', 'Could not save sharing settings'],
   ['分享设置读取失败', 'Could not load sharing settings'],
@@ -249,7 +249,6 @@ export default [
   ['撤销 {0} 授权', 'Revoke authorization for {0}'],
   ['管理 {0}', 'Manage {0}'],
   ['集群通知', 'Cluster notifications'],
-  ['选择一个消息渠道，接收所有集群主机的关键变化。', 'Choose one messaging channel to receive important changes from every cluster host.'],
   ['通知渠道', 'Notification channels'],
   ['选择接收告警的通知渠道；同一时间只保存一个活动渠道。', 'Choose where to receive alerts. Only one active channel is stored at a time.'],
   ['飞书', 'Feishu'],
@@ -275,9 +274,6 @@ export default [
   ['正在发现…', 'Discovering…'],
   ['发送测试消息', 'Send test message'],
   ['正在发送…', 'Sending…'],
-  ['通知开关', 'Notification switch'],
-  ['关闭后保留设置，不再主动发送告警。', 'Settings are kept when disabled; alerts are not sent.'],
-  ['启用集群通知', 'Enable cluster notifications'],
   ['资源阈值', 'Resource thresholds'],
   ['应用于本机和所有已接入主机；资源占用和网络吞吐连续 3 次达到阈值，累计收发各自达到阈值后通知一次。', 'Applies to this server and all connected hosts; resource usage and network throughput must reach a threshold for 3 consecutive samples, while cumulative receive and send rules notify independently after reaching their thresholds.'],
   ['启用 CPU 通知', 'Enable CPU notifications'],

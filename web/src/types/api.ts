@@ -203,6 +203,7 @@ export interface ClusterHostSnapshot {
 }
 
 export interface ClusterHost {
+	trafficPeriod?: ClusterTrafficPeriod
 	lightHealth?: LightNodeHealth
   id: string
   isLocal: boolean
@@ -249,6 +250,7 @@ export interface LightNodeHealth {
 }
 
 export interface ClusterHostList {
+  hostDetails?: Record<string, ClusterHostDetails & { resourceVersion: string }>
   items: ClusterHost[]
   total: number
   remoteTotal: number
@@ -256,6 +258,26 @@ export interface ClusterHostList {
   pollIntervalSeconds: number
   nodeId: string
   hostOrder?: ClusterHostOrderPreference
+}
+
+export interface ClusterHostDetails {
+  expiresOn?: string
+  expiryReminderEnabled?: boolean
+  price?: string
+  trafficResetDay?: number
+  trafficTotalReceivedThresholdGiB?: number
+  trafficTotalSentThresholdGiB?: number
+}
+
+export interface ClusterTrafficPeriod {
+  id?: string
+  receivedBytes: number
+  sentBytes: number
+  available: boolean
+  startedAt: string
+  endsAt: string
+  partial: boolean
+  estimated: boolean
 }
 
 export interface ClusterHostOrderPreference {
@@ -309,6 +331,7 @@ export interface ClusterNotificationChannel extends ClusterNotificationTelegram 
 }
 
 export interface ClusterNotificationSnapshot {
+  localRecording?: boolean
   resources?: ClusterNotificationResources
   enabled: boolean
   locale: 'zh-CN' | 'zh-TW' | 'en-US'
@@ -344,7 +367,8 @@ export interface ClusterNotificationResources {
 
 export type PublicClusterShareHostState = 'online' | 'degraded' | 'offline' | 'pending'
 
-export interface PublicClusterShareHost {
+export interface PublicClusterShareHost extends Pick<ClusterHostDetails, 'expiresOn' | 'price' | 'trafficResetDay'> {
+	trafficPeriod?: ClusterTrafficPeriod
 	id: string
 	name: string
 	state: PublicClusterShareHostState
@@ -2483,4 +2507,30 @@ export interface DockerActionResult {
   action?: string
   status?: string
   resourceVersion?: string
+}
+
+export interface NotificationEvent {
+  id: string
+  createdAt: string
+  hostId: string
+  hostName: string
+  isLocal: boolean
+  rule: string
+  kind: 'alert' | 'recovery' | 'info'
+  message: string
+  relatedEventId?: string
+  delivery: 'local_only' | 'pending' | 'sent' | 'failed' | 'cancelled'
+  provider?: ClusterNotificationProvider
+  attempts: number
+  lastAttemptAt?: string
+  lastErrorCode?: string
+}
+
+export interface NotificationHistoryPage {
+  items: NotificationEvent[]
+  hosts: { id: string; name: string; isLocal: boolean }[]
+  nextCursor?: string
+  retentionDays: number
+  maxEvents: number
+  maxBytes: number
 }

@@ -39,18 +39,22 @@ type telegramState struct {
 }
 
 type alertState struct {
-	LastSampleAt     time.Time `json:"lastSampleAt,omitempty"`
-	RestartWindowAt  time.Time `json:"restartWindowAt,omitempty"`
-	RestartCount     int64     `json:"restartCount,omitempty"`
-	RestartBaseline  int64     `json:"restartBaseline,omitempty"`
-	Active           bool      `json:"active,omitempty"`
-	Consecutive      int       `json:"consecutive,omitempty"`
-	LastAttemptAt    time.Time `json:"lastAttemptAt,omitempty"`
-	LastNotifiedAt   time.Time `json:"lastNotifiedAt,omitempty"`
-	LastEventID      string    `json:"lastEventId,omitempty"`
-	PendingEventID   string    `json:"pendingEventId,omitempty"`
-	LastValue        float64   `json:"lastValue,omitempty"`
-	LastNetworkBytes uint64    `json:"lastNetworkBytes,omitempty"`
+	TrafficThresholdGiB int       `json:"trafficThresholdGiB,omitempty"`
+	TrafficCycle        string    `json:"trafficCycle,omitempty"`
+	ExpiryDate          string    `json:"expiryDate,omitempty"`
+	ExpiryNotifiedMask  uint8     `json:"expiryNotifiedMask,omitempty"`
+	LastSampleAt        time.Time `json:"lastSampleAt,omitempty"`
+	RestartWindowAt     time.Time `json:"restartWindowAt,omitempty"`
+	RestartCount        int64     `json:"restartCount,omitempty"`
+	RestartBaseline     int64     `json:"restartBaseline,omitempty"`
+	Active              bool      `json:"active,omitempty"`
+	Consecutive         int       `json:"consecutive,omitempty"`
+	LastAttemptAt       time.Time `json:"lastAttemptAt,omitempty"`
+	LastNotifiedAt      time.Time `json:"lastNotifiedAt,omitempty"`
+	LastEventID         string    `json:"lastEventId,omitempty"`
+	PendingEventID      string    `json:"pendingEventId,omitempty"`
+	LastValue           float64   `json:"lastValue,omitempty"`
+	LastNetworkBytes    uint64    `json:"lastNetworkBytes,omitempty"`
 	// Kept for decoding state written by the aggregate-threshold candidate.
 	LastNetworkTotalBytes uint64 `json:"lastNetworkTotalBytes,omitempty"`
 }
@@ -216,6 +220,16 @@ func validateAlertStates(states map[string]alertState) error {
 		return errors.New("notification state contains too many alert states")
 	}
 	for key, value := range states {
+		if value.TrafficThresholdGiB < 0 || value.TrafficThresholdGiB > MaxTrafficTotalThresholdGiB {
+			return errors.New("invalid traffic threshold")
+		}
+		if !validTrafficCycle(value.TrafficCycle) {
+			return errors.New("invalid traffic cycle")
+		}
+		if value.ExpiryNotifiedMask > 15 || (value.ExpiryDate == "" && value.ExpiryNotifiedMask != 0) ||
+			(value.ExpiryDate != "" && !validExpiryDate(value.ExpiryDate)) {
+			return errors.New("notification expiry state is invalid")
+		}
 		if !validAlertKey(key) || value.Consecutive < 0 || value.Consecutive > 5 || value.RestartCount < 0 || value.RestartBaseline < 0 ||
 			(value.LastEventID != "" && !validDisplayText(value.LastEventID, 160)) ||
 			(value.PendingEventID != "" && !validDisplayText(value.PendingEventID, 160)) ||
