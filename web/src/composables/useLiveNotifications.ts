@@ -3,6 +3,7 @@ import { useRouter } from 'vue-router'
 import { ApiError, api } from '@/lib/api'
 import { t } from '@/i18n'
 import { useToast } from '@/stores/toast'
+import { useDesktopMode } from '@/stores/desktopMode'
 
 const pollInterval = 15_000
 function excerpt(value: string, limit: number): string {
@@ -14,6 +15,7 @@ function excerpt(value: string, limit: number): string {
 export function useLiveNotifications(enabled: Readonly<Ref<boolean>>): void {
   const router = useRouter()
   const toast = useToast()
+  const desktop = useDesktopMode()
   let mounted = false
   let stopped = false
   let generation = 0
@@ -66,7 +68,14 @@ export function useLiveNotifications(enabled: Readonly<Ref<boolean>>): void {
         duration: 12_000,
         action: {
           label: t('notifications.viewHistory'),
-          run: () => { void router.push({ path: '/activity', query: { tab: 'notifications', event: newest.id } }) },
+          run: () => {
+            if (desktop.mode.value === 'desktop') {
+              const windowID = desktop.openWindow(`/activity?tab=notifications&event=${newest.id}`, 'route.activity', false, true)
+              if (!windowID) toast.show(t('desktop.windowLimitTitle'), { message: t('desktop.windowLimitMessage') })
+            } else {
+              void router.push({ path: '/activity', query: { tab: 'notifications', event: newest.id } })
+            }
+          },
         },
       })
     } catch (error) {

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useLiveNotifications } from './useLiveNotifications'
 import { ApiError } from '@/lib/api'
 import type { NotificationEvent } from '@/types/api'
+import { resetDesktopModeForTest, useDesktopMode } from '@/stores/desktopMode'
 
 const mocks = vi.hoisted(() => ({ history: vi.fn(), show: vi.fn(), remove: vi.fn(), push: vi.fn() }))
 vi.mock('@/lib/api', () => ({ ApiError: class extends Error { constructor(message: string, public status: number) { super(message) } }, api: { cluster: { notificationHistory: mocks.history } } }))
@@ -24,6 +25,7 @@ async function tick() { await vi.advanceTimersByTimeAsync(15_000); await flushPr
 beforeEach(() => {
   vi.useFakeTimers(); vi.clearAllMocks()
   enabled.value = true; visibility = 'visible'; online = true
+  resetDesktopModeForTest(); window.localStorage.clear()
   vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibility as DocumentVisibilityState)
   vi.spyOn(navigator, 'onLine', 'get').mockImplementation(() => online)
   mocks.show.mockReturnValue(42)
@@ -127,5 +129,32 @@ describe('live notifications', () => {
     await tick()
     expect(mocks.history).toHaveBeenCalledTimes(2)
     expect(mocks.show).not.toHaveBeenCalled()
+  })
+  it('opens and reuses the activity desktop window instead of the global router', async () => {
+    const desktop = useDesktopMode()
+    desktop.enterDesktop()
+    await open()
+    mocks.history.mockResolvedValue(page([event('11')]))
+    await tick(); mocks.show.mock.calls.at(-1)![1].action.run()
+    expect(desktop.windows.value).toHaveLength(1)
+    const windowID = desktop.windows.value[0]!.id
+    expect(desktop.windows.value[0]!.path).toBe('/activity?tab=notifications&event=11')
+    desktop.minimizeWindow(windowID)
+    mocks.history.mockResolvedValue(page([event('12')]))
+    await tick(); mocks.show.mock.calls.at(-1)![1].action.run()
+    expect(desktop.windows.value).toHaveLength(1)
+    expect(desktop.windows.value[0]).toMatchObject({ id: windowID, path: '/activity?tab=notifications&event=12', minimized: false })
+    expect(mocks.push).not.toHaveBeenCalled()
+  })
+  it('explains the desktop window limit without closing existing windows', async () => {
+    const desktop = useDesktopMode()
+    desktop.enterDesktop()
+    for (let index = 0; index < 8; index++) desktop.openWindow('/files', 'route.files', true)
+    await open()
+    mocks.history.mockResolvedValue(page([event('11')]))
+    await tick(); mocks.show.mock.calls.at(-1)![1].action.run()
+    expect(desktop.windows.value).toHaveLength(8)
+    expect(mocks.show.mock.calls.at(-1)![1].message).toBeTruthy()
+    expect(mocks.push).not.toHaveBeenCalled()
   })
 })
