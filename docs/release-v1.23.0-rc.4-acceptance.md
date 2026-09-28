@@ -63,8 +63,8 @@
 ## 分支与资源处置
 
 - `release/v1.23.0-candidate` 作为 1.23.0 序列唯一远端候选保留，精确 tip `595a3910`，待稳定版按规范归档。
-- 本轮三个来源分支的原 tip 已分别保存为远端 `archive/fix/classic-wallpaper-reduced-transparency-20260928=e56018e9`、`archive/feature/issue-19-native-distribution-20260928=96cc1a28`、`archive/fix/issue-21-mcp-version-20260928=65dabd61`；远端复核三者精确一致，原活跃远端引用均不存在。对应本地分支已改为 `archive/`、无旧 upstream，三个 clean 工作树暂保留供原任务核对；归档不代表生产上线。
-- 动态 3D 场景实验分支有未知未提交内容，原样保留，不计入本次候选；旧验收/历史分支不凭名称批量删除。本轮临时浏览器容器、网络和合成数据已清理，仓库外证据保留。验收记录分支将在同 SHA 候选与主线 CI 均通过后独立归档。
+- 本轮三个来源分支的原 tip 已分别保存为远端 `archive/fix/classic-wallpaper-reduced-transparency-20260928=e56018e9`、`archive/feature/issue-19-native-distribution-20260928=96cc1a28`、`archive/fix/issue-21-mcp-version-20260928=65dabd61`；远端复核三者精确一致，原活跃远端引用均不存在。对应本地分支已改为 `archive/`、无旧 upstream。Issue #19/#21 的两个 clean 工作树保留供原任务核对；本轮壁纸修复工作树回收未完整结束，见下条。归档不代表生产上线。
+- 动态 3D 场景实验分支有未知未提交内容，原样保留，不计入本次候选；旧验收/历史分支不凭名称批量删除。本轮临时浏览器容器、网络和合成数据已清理，仓库外证据保留。回收 `C:/GitHub/_codex-tasks/kpanel-classic-wallpaper-reduced-transparency` 时，`git worktree remove` 在 Windows 报 `Invalid argument`；Git worktree 登记已解除，目录仍有 `web` 内容，未使用 `--force` 或继续递归删除。该目录和来源归档提交保留，待确认文件句柄/路径原因后按第 13.1 节再处置；本次清理窗口 C 盘可用空间从 129533419520 增至 129641897984 字节，净变化 +108478464 字节，不能把它全归因于本操作。验收记录分支将在同 SHA 候选与主线 CI 均通过后独立归档。
 
 ## 交付节奏数据
 
@@ -80,7 +80,7 @@
 发现时间采用本轮最早保留的修正提交时间，用户首次遇到问题的精确时间未记录；恢复时间为公开 Release 时间，用户现场完成升级的时间未验证。
 
 <!-- kpanel-release-process-metrics:start -->
-- 已记录发布流程异常或无效证据拦截次数：1
+- 已记录发布流程异常或无效证据拦截次数：2
 - 其中生产写操作开始后异常次数：0
 <!-- kpanel-release-process-metrics:end -->
 
@@ -93,6 +93,15 @@
     "impact": "首次 L3 在预检阶段因业务上下文超过 50 个提交而停止，未运行测试；旧 run 不能作为发布证据。",
     "recoveryEvidence": "提交 595a3910 刷新稳定版业务基线；以此 SHA 重新生成的 L3 r2 于 2026-09-28T04:44:28Z 全部通过。",
     "permanentAction": "发布负责人在候选冻结前先执行业务上下文 freshness 预检，并在需要时更新到最近稳定版基线；保留原预检失败记录，不复用旧 L3。",
+    "historicalReleases": []
+  },
+  {
+    "fingerprint": "local-cleanup/worktree-remove/invalid-argument",
+    "position": "before-production-write",
+    "count": 1,
+    "impact": "发布收尾的本地工作树回收未完整完成；Git 登记已解除但 web 目录残留，空间回收仅部分成功。",
+    "recoveryEvidence": "远端 archive/fix/classic-wallpaper-reduced-transparency-20260928 精确保存 e56018e9；未强制删除残余目录，保留路径供后续核验。",
+    "permanentAction": "后续仅在核实 Windows 文件句柄和残余路径后按项目第 13.1 节处置；不使用 git worktree remove --force，也不对未知残余执行批量删除。",
     "historicalReleases": []
   }
 ]
