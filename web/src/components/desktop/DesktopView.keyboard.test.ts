@@ -71,7 +71,7 @@ describe('desktop window keyboard selection', () => {
     }
   })
 
-  it('starts on blank desktop, skips minimized/closing windows and handles close', async () => {
+  it('starts on blank desktop, restores minimized windows, skips closing windows and handles close', async () => {
     const ids = await openWindows(4)
     desktop.minimizeWindow(ids[1]!)
     shell(ids[2]!).classList.add('desktop-window--closing')
@@ -79,12 +79,46 @@ describe('desktop window keyboard selection', () => {
     await key()
     expect(desktop.focusedId.value).toBe(ids[0])
     await key()
+    expect(desktop.focusedId.value).toBe(ids[1])
+    expect(desktop.windows.value.find(item => item.id === ids[1])?.minimized).toBe(false)
+    expect(document.activeElement).toBe(shell(ids[1]!))
+    expect(shell(ids[1]!).hasAttribute('inert')).toBe(false)
+    await key()
     expect(desktop.focusedId.value).toBe(ids[3])
     desktop.closeWindow(ids[3]!)
+    desktop.closeWindow(ids[1]!)
     await nextTick()
     shell(ids[0]!).focus()
     expect((await key()).defaultPrevented).toBe(false)
-    expect(desktop.windows.value.find(item => item.id === ids[1])?.minimized).toBe(true)
+  })
+
+  it.each([false, true])('wakes only the selected window after D, reverse=%s', async (shiftKey) => {
+    const ids = await openWindows(3)
+    shell(ids[2]!).focus()
+    await key({ key: 'd' })
+    expect(desktop.windows.value.every(item => item.minimized)).toBe(true)
+    const selected = shiftKey ? ids[2]! : ids[0]!
+    expect((await key({ shiftKey })).defaultPrevented).toBe(true)
+    expect(desktop.windows.value.filter(item => !item.minimized).map(item => item.id)).toEqual([selected])
+    expect(document.activeElement).toBe(shell(selected))
+    expect(shell(selected).hasAttribute('inert')).toBe(false)
+    // D now operates on the window woken by Tab, not the old hidden group.
+    await key({ key: 'd' })
+    await key({ key: 'd' })
+    expect(desktop.windows.value.filter(item => !item.minimized).map(item => item.id)).toEqual([selected])
+    await key({ shiftKey })
+    expect(desktop.focusedId.value).toBe(ids[1])
+  })
+
+  it.each([false, true])('restores a single minimized window with Tab, reverse=%s', async (shiftKey) => {
+    const [id] = await openWindows(1)
+    desktop.minimizeWindow(id!)
+    await nextTick()
+    ;(wrapper.element as HTMLElement).focus()
+    expect((await key({ shiftKey })).defaultPrevented).toBe(true)
+    expect(desktop.windows.value[0]?.minimized).toBe(false)
+    expect(document.activeElement).toBe(shell(id!))
+    expect((await key({ shiftKey })).defaultPrevented).toBe(false)
   })
 
   it.each([0, 1])('preserves native Tab with %i windows', async (count) => {

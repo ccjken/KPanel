@@ -2518,16 +2518,21 @@ function onGlobalKeyDown(event: KeyboardEvent): void {
     }
     // Store order is stable; z-order changes on each activation and would make
     // three or more windows alternate between only the last two.
-    const windows = desktop.windows.value.filter((item) => !item.minimized
-      && desktopElement.value?.querySelector(`#desktop-window-${item.id}:not(.desktop-window--closing)`))
-    if (windows.length < 2) return
+    const windows = desktop.windows.value.filter((item) =>
+      desktopElement.value?.querySelector(`#desktop-window-${item.id}:not(.desktop-window--closing)`))
+    if (!windows.length || (windows.length === 1 && !windows[0]!.minimized)) return
     const current = windows.findIndex((item) => item.id === desktop.focusedId.value)
     const index = current < 0 ? (event.shiftKey ? windows.length - 1 : 0)
       : (current + (event.shiftKey ? -1 : 1) + windows.length) % windows.length
     const next = windows[index]!
     event.preventDefault()
-    desktop.focusWindow(next.id)
-    desktopElement.value?.querySelector<HTMLElement>(`#desktop-window-${next.id}`)?.focus({ preventScroll: true })
+    if (next.minimized) desktop.restoreWindow(next.id)
+    else desktop.focusWindow(next.id)
+    // Restored windows must lose inert before they can receive keyboard focus.
+    void nextTick(() => {
+      if (desktop.focusedId.value !== next.id || next.minimized) return
+      desktopElement.value?.querySelector<HTMLElement>(`#desktop-window-${next.id}`)?.focus({ preventScroll: true })
+    })
     return
   }
   const target = event.target
