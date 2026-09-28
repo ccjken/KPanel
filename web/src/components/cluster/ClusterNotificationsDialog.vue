@@ -342,8 +342,8 @@ onBeforeUnmount(() => {
       <template v-else-if="snapshot">
         <section class="cluster-notifications__local" :role="snapshot.localRecording === false ? 'alert' : 'status'">
           <strong>{{ phrase(snapshot.localRecording === false ? '本地记录暂时不可用' : '本地记录已启用') }}</strong>
-          <p>{{ phrase(snapshot.localRecording === false ? '请检查 KPanel 数据目录，恢复前无法保存新的通知。' : '未配置渠道或关闭外部推送时，事件仍会保存在活动记录中。') }}</p>
           <button class="button button--secondary" type="button" @click="viewHistory">{{ phrase('查看通知记录') }}</button>
+          <p v-if="snapshot.localRecording === false">{{ phrase('请检查 KPanel 数据目录，恢复前无法保存新的通知。') }}</p>
         </section>
         <section class="cluster-notifications__providers" aria-labelledby="cluster-notifications-provider-title">
           <div class="cluster-notifications__section-heading">
@@ -531,8 +531,10 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.cluster-notifications__local { padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-subtle); font-size: 14px; line-height: 1.5; }
-.cluster-notifications__local p { color: var(--text-soft); }
+.cluster-notifications__local { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-subtle); font-size: 14px; line-height: 1.5; }
+.cluster-notifications__local > strong { min-width: 0; overflow-wrap: anywhere; }
+.cluster-notifications__local > button { justify-self: end; }
+.cluster-notifications__local p { grid-column: 1 / -1; margin: 0; color: var(--text-soft); }
 .cluster-notifications {
   display: grid;
   gap: 14px;
