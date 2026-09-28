@@ -150,8 +150,6 @@ func (s *Server) handleCluster(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(r.URL.Path, "/api/v1/cluster/controllers/") &&
 		r.Method == http.MethodDelete:
 		s.handleClusterControllerDelete(w, r)
-	case r.URL.Path == serviceCheckNotificationsPath:
-		s.handleServiceCheckNotifications(w, r)
 	case r.URL.Path == clusterNotificationsPath || strings.HasPrefix(r.URL.Path, clusterNotificationsPath+"/"):
 		s.handleClusterNotifications(w, r)
 	case strings.HasPrefix(r.URL.Path, "/api/v1/cluster/hosts/"):

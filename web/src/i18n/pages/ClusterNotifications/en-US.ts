@@ -1,4 +1,6 @@
 export default [
+  ['启用服务异常通知', 'Enable service alerts'],
+  ['监控所有主机的全部服务检测项，新增项自动生效。连续 3 次失败告警，恢复后通知；默认关闭。', 'Monitor all service checks on every host, including new checks. Alert after 3 consecutive failures and notify on recovery. Off by default.'],
   ["服务异常通知", "Service alerts"],
   [
     "本机资源提醒",

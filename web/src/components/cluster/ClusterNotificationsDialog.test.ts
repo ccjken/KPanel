@@ -93,6 +93,30 @@ describe('withdrawn local resource notifications', () => {
 })
 
 describe('notification channels', () => {
+  it('defaults service alerts off and saves the global rule with existing settings', async () => {
+    const wrapper = await open()
+    const checkbox = wrapper.get('input[aria-label="启用服务异常通知"]')
+    expect((checkbox.element as HTMLInputElement).checked).toBe(false)
+    expect(wrapper.findAll('button').some(button => button.text() === '服务异常通知')).toBe(false)
+    await checkbox.setValue(true)
+    await wrapper.findAll('button').find(button => button.text() === '保存设置')!.trigger('click')
+    await flushPromises()
+    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ rules: expect.objectContaining({ serviceChecksEnabled: true }), expectedResourceVersion: 'v1' }))
+    mocks.read.mockResolvedValue({ ...snapshot(), rules: mocks.save.mock.calls[0]![0].rules, resourceVersion: 'v2' })
+    await wrapper.setProps({ open: false }); await wrapper.setProps({ open: true }); await flushPromises()
+    expect((wrapper.get('input[aria-label="启用服务异常通知"]').element as HTMLInputElement).checked).toBe(true)
+    await wrapper.get('input[aria-label="启用服务异常通知"]').setValue(false)
+    await wrapper.findAll('button').find(button => button.text() === '保存设置')!.trigger('click'); await flushPromises()
+    expect(mocks.save.mock.lastCall?.[0].rules.serviceChecksEnabled).toBe(false)
+  })
+  it('keeps the service checkbox selection when saving fails', async () => {
+    const wrapper = await open()
+    await wrapper.get('input[aria-label="启用服务异常通知"]').setValue(true)
+    mocks.save.mockRejectedValue(new Error('offline'))
+    await wrapper.findAll('button').find(button => button.text() === '保存设置')!.trigger('click'); await flushPromises()
+    expect((wrapper.get('input[aria-label="启用服务异常通知"]').element as HTMLInputElement).checked).toBe(true)
+    expect(wrapper.get('[role="alert"]').text()).toContain('通知操作失败')
+  })
   it('enables robot providers and saves a validated Webhook without rendering the secret', async () => {
     const wrapper = await open()
     const feishu = wrapper.findAll('button').find((button) => button.text().includes('飞书'))

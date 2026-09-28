@@ -289,6 +289,7 @@ export interface ClusterNotificationRules {
   trafficTotalSentThresholdGiB: number
   sshLoginEnabled: boolean
   hostOfflineEnabled: boolean
+  serviceChecksEnabled?: boolean
 }
 
 export type ClusterNotificationStatus = 'not_configured' | 'waiting_for_chat' | 'ready' | 'error'

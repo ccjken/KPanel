@@ -1,12 +1,9 @@
 package notification
 
-// Service check subscriptions and their outbox use an independent versioned
-// file. Older binaries can still decode notification-state.json on rollback.
+// A bounded durable outbox follows the global service notification rule.
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,37 +20,14 @@ import (
 	"github.com/kejilion/kejilion-panel/internal/contract"
 )
 
-const maxCheckSubscriptions = (cluster.MaxHosts + 1) * contract.MaxServiceChecks
+const maxCheckIncidents = (cluster.MaxHosts + 1) * (contract.MaxServiceChecks + 1)
 
-type CheckSubscription struct {
-	HostID   string `json:"hostId"`
-	CheckID  string `json:"checkId"`
-	Revision string `json:"revision"`
+type checkTarget struct {
+	HostID   string
+	CheckID  string
+	Revision string
 }
-type CheckAlertSettings struct {
-	Enabled       bool                `json:"enabled"`
-	Repeat        bool                `json:"repeat"`
-	Subscriptions []CheckSubscription `json:"subscriptions"`
-}
-type CheckAlertInput struct {
-	CheckAlertSettings
-	ExpectedResourceVersion string `json:"expectedResourceVersion"`
-}
-type CheckAlertHost struct {
-	IsLocal bool                          `json:"isLocal"`
-	ID      string                        `json:"id"`
-	Name    string                        `json:"name"`
-	State   cluster.HostState             `json:"state"`
-	Checks  *contract.ServiceCheckSummary `json:"checks"`
-}
-type CheckAlertSnapshot struct {
-	CheckAlertSettings
-	ResourceVersion string           `json:"resourceVersion"`
-	Hosts           []CheckAlertHost `json:"hosts"`
-	Pending         int              `json:"pending"`
-	LastError       string           `json:"lastError,omitempty"`
-	ChannelReady    bool             `json:"channelReady"`
-}
+
 type checkDelivery struct {
 	ID          uint64    `json:"id"`
 	Kind        string    `json:"kind"`
@@ -78,7 +52,6 @@ type checkIncident struct {
 }
 type checkAlertDisk struct {
 	SchemaVersion int                      `json:"schemaVersion"`
-	Settings      CheckAlertSettings       `json:"settings"`
 	Generation    uint64                   `json:"generation"`
 	Incidents     map[string]checkIncident `json:"incidents"`
 }
@@ -94,7 +67,7 @@ type CheckAlerts struct {
 
 func NewCheckAlerts(parent *Service) (*CheckAlerts, error) {
 	s := &CheckAlerts{parent: parent, path: filepath.Join(parent.store.directory, "service-check-alerts-v1.json"),
-		state: checkAlertDisk{SchemaVersion: 1, Settings: CheckAlertSettings{Subscriptions: []CheckSubscription{}}, Incidents: map[string]checkIncident{}}}
+		state: checkAlertDisk{SchemaVersion: 1, Incidents: map[string]checkIncident{}}}
 	data, err := readRegularFile(s.path, maxStateBytes, false)
 	if errors.Is(err, os.ErrNotExist) {
 		return s, nil
@@ -104,15 +77,19 @@ func NewCheckAlerts(parent *Service) (*CheckAlerts, error) {
 	}
 	d := json.NewDecoder(bytes.NewReader(data))
 	d.DisallowUnknownFields()
-	if err = d.Decode(&s.state); err != nil {
+	// Earlier local candidates stored subscriptions here. Accept their envelope
+	// without turning a narrow subscription into a fleet-wide opt-in.
+	var disk struct {
+		checkAlertDisk
+		LegacySettings json.RawMessage `json:"settings,omitempty"`
+	}
+	if err = d.Decode(&disk); err != nil {
 		return nil, err
 	}
+	s.state = disk.checkAlertDisk
 	var extra any
-	if d.Decode(&extra) != io.EOF || s.state.SchemaVersion != 1 || len(s.state.Incidents) > maxCheckSubscriptions+cluster.MaxHosts+1 || s.state.Incidents == nil {
+	if d.Decode(&extra) != io.EOF || s.state.SchemaVersion != 1 || len(s.state.Incidents) > maxCheckIncidents || s.state.Incidents == nil {
 		return nil, errors.New("invalid service check notification state")
-	}
-	if err = validateCheckSettings(s.state.Settings); err != nil {
-		return nil, err
 	}
 	for key, value := range s.state.Incidents {
 		if len(key) > 160 || !validDisplayText(value.HostID, 80) || !validDisplayText(value.Name, 192) || len(value.Target) > 253 || len(value.HostName) > 256 || value.Pending != nil && (value.Pending.ID == 0 || value.Pending.Attempts < 0 || value.Pending.Attempts > 20 || !validCheckDelivery(value.Pending.Kind)) {
@@ -129,27 +106,7 @@ func validCheckDelivery(kind string) bool {
 	}
 	return false
 }
-func checkSettingsVersion(value CheckAlertSettings) string {
-	data, _ := json.Marshal(value)
-	digest := sha256.Sum256(data)
-	return "sha256:" + hex.EncodeToString(digest[:])
-}
-func validateCheckSettings(value CheckAlertSettings) error {
-	if len(value.Subscriptions) > maxCheckSubscriptions {
-		return ErrInvalidSettings
-	}
-	seen := map[string]bool{}
-	for _, sub := range value.Subscriptions {
-		key := sub.HostID + ":" + sub.CheckID
-		if !validDisplayText(sub.HostID, 80) || strings.ContainsAny(sub.HostID, ":/\\") || !validDisplayText(sub.CheckID, 64) || strings.ContainsAny(sub.CheckID, ":/\\") || !validHexString(sub.Revision, 32) || seen[key] {
-			return ErrInvalidSettings
-		}
-		seen[key] = true
-	}
-	return nil
-}
 func cloneCheckDisk(value checkAlertDisk) checkAlertDisk {
-	value.Settings.Subscriptions = append([]CheckSubscription{}, value.Settings.Subscriptions...)
 	items := make(map[string]checkIncident, len(value.Incidents))
 	for key, item := range value.Incidents {
 		if item.Pending != nil {
@@ -166,7 +123,7 @@ func (s *CheckAlerts) commit(next checkAlertDisk) error {
 		return nil
 	}
 	data, err := json.Marshal(next)
-	if err != nil || len(data) > int(maxStateBytes) {
+	if err != nil || len(data) > int(maxStateBytes) || len(next.Incidents) > maxCheckIncidents {
 		s.lastError = "state_limit"
 		return errors.New("service check state exceeds limit")
 	}
@@ -180,79 +137,6 @@ func (s *CheckAlerts) commit(next checkAlertDisk) error {
 	}
 	return nil
 }
-func (s *CheckAlerts) Snapshot(ctx context.Context) CheckAlertSnapshot {
-	hosts := s.parent.hosts.Hosts(ctx)
-	settings := s.parent.Snapshot()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	state := cloneCheckDisk(s.state)
-	result := CheckAlertSnapshot{CheckAlertSettings: state.Settings, ResourceVersion: checkSettingsVersion(state.Settings), Hosts: []CheckAlertHost{}, LastError: s.lastError}
-	for _, host := range hosts.Items {
-		var checks *contract.ServiceCheckSummary
-		if host.LastSnapshot != nil {
-			checks = contract.CloneServiceCheckSummary(host.LastSnapshot.Telemetry.ServiceChecks)
-		}
-		result.Hosts = append(result.Hosts, CheckAlertHost{ID: host.ID, IsLocal: host.IsLocal, Name: host.Name, State: host.State, Checks: checks})
-	}
-	for _, item := range state.Incidents {
-		if item.Pending != nil {
-			result.Pending++
-		}
-	}
-	result.ChannelReady = settings.Enabled && settings.Channel.Ready
-	return result
-}
-func (s *CheckAlerts) Configure(ctx context.Context, input CheckAlertInput) (CheckAlertSnapshot, error) {
-	if err := validateCheckSettings(input.CheckAlertSettings); err != nil {
-		return CheckAlertSnapshot{}, err
-	}
-	hosts := s.parent.hosts.Hosts(ctx)
-	catalog := map[string]string{}
-	for _, host := range hosts.Items {
-		if host.LastSnapshot != nil && host.LastSnapshot.Telemetry.ServiceChecks != nil {
-			for _, item := range host.LastSnapshot.Telemetry.ServiceChecks.Items {
-				catalog[host.ID+":"+item.ID] = item.Revision
-			}
-		}
-	}
-	s.mu.Lock()
-	if input.ExpectedResourceVersion != checkSettingsVersion(s.state.Settings) {
-		s.mu.Unlock()
-		return CheckAlertSnapshot{}, ErrConflict
-	}
-	previous := map[string]string{}
-	for _, sub := range s.state.Settings.Subscriptions {
-		previous[sub.HostID+":"+sub.CheckID] = sub.Revision
-	}
-	for _, sub := range input.Subscriptions {
-		key := sub.HostID + ":" + sub.CheckID
-		// Existing offline subscriptions remain editable/removable without fresh telemetry.
-		if catalog[key] != sub.Revision && previous[key] != sub.Revision {
-			s.mu.Unlock()
-			return CheckAlertSnapshot{}, ErrInvalidSettings
-		}
-	}
-	next := cloneCheckDisk(s.state)
-	next.Settings = input.CheckAlertSettings
-	next.Settings.Subscriptions = append([]CheckSubscription{}, input.Subscriptions...)
-	allowed := map[string]string{}
-	for _, sub := range next.Settings.Subscriptions {
-		allowed[sub.HostID+":"+sub.CheckID] = sub.Revision
-		allowed[sub.HostID+":@sampler"] = "sampler"
-	}
-	for key, incident := range next.Incidents {
-		if !input.Enabled || allowed[key] != incident.Revision {
-			delete(next.Incidents, key)
-		}
-	}
-	err := s.commit(next)
-	s.mu.Unlock()
-	if err != nil {
-		return CheckAlertSnapshot{}, err
-	}
-	return s.Snapshot(ctx), nil
-}
-
 func (s *CheckAlerts) Start(parent context.Context) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -299,10 +183,41 @@ func (s *CheckAlerts) Close() {
 	s.wg.Wait()
 }
 
+// Targets are derived each round, so future hosts/checks need no settings save.
+func currentCheckTargets(hosts []cluster.Host, incidents map[string]checkIncident) []checkTarget {
+	targets := make([]checkTarget, 0)
+	for _, host := range hosts {
+		var summary *contract.ServiceCheckSummary
+		if host.LastSnapshot != nil {
+			summary = host.LastSnapshot.Telemetry.ServiceChecks
+		}
+		online := host.State == cluster.HostOnline || host.State == cluster.HostDegraded
+		if online && summary != nil && summary.Available {
+			for _, check := range summary.Items {
+				targets = append(targets, checkTarget{HostID: host.ID, CheckID: check.ID, Revision: check.Revision})
+			}
+			continue
+		}
+		// Retain pending events until a fresh catalog can prove a target was deleted.
+		found := false
+		for key, item := range incidents {
+			if item.HostID == host.ID && item.Revision != "sampler" {
+				targets = append(targets, checkTarget{HostID: host.ID, CheckID: strings.TrimPrefix(key, host.ID+":"), Revision: item.Revision})
+				found = true
+			}
+		}
+		_, tracked := incidents[host.ID+":@sampler"]
+		if !found && (tracked || summary != nil && !summary.Available) {
+			targets = append(targets, checkTarget{HostID: host.ID, CheckID: "@sampler", Revision: "sampler"})
+		}
+	}
+	return targets
+}
+
 func (s *CheckAlerts) evaluate(ctx context.Context) error {
-	channelEnabled := s.parent.store.stateSnapshot().Settings.Enabled
+	settings := s.parent.store.stateSnapshot().Settings
 	s.mu.Lock()
-	if !s.state.Settings.Enabled || len(s.state.Settings.Subscriptions) == 0 || !channelEnabled {
+	if !settings.Enabled || !settings.Rules.ServiceChecksEnabled {
 		next := cloneCheckDisk(s.state)
 		next.Incidents = map[string]checkIncident{}
 		err := s.commit(next)
@@ -314,11 +229,11 @@ func (s *CheckAlerts) evaluate(ctx context.Context) error {
 	defer cancel()
 	hosts := s.parent.hosts.Hosts(fetch)
 	now := s.parent.now()
-	channel := s.parent.store.stateSnapshot().Settings.Enabled
+	settings = s.parent.store.stateSnapshot().Settings
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	next := cloneCheckDisk(s.state)
-	if !next.Settings.Enabled || !channel {
+	if !settings.Enabled || !settings.Rules.ServiceChecksEnabled {
 		next.Incidents = map[string]checkIncident{}
 		return s.commit(next)
 	}
@@ -333,7 +248,7 @@ func (s *CheckAlerts) evaluate(ctx context.Context) error {
 		next.Generation++
 		item.Pending = &checkDelivery{ID: next.Generation, Kind: kind, CreatedAt: now, NextAttempt: now}
 	}
-	for _, sub := range next.Settings.Subscriptions {
+	for _, sub := range currentCheckTargets(hosts.Items, next.Incidents) {
 		key := sub.HostID + ":" + sub.CheckID
 		alive[key] = true
 		host, exists := hostMap[sub.HostID]
@@ -364,7 +279,7 @@ func (s *CheckAlerts) evaluate(ctx context.Context) error {
 		}
 		summary := host.LastSnapshot.Telemetry.ServiceChecks
 		// An unreadable checks file has no catalog. Only an available catalog
-		// can authoritatively say that a subscribed target was deleted.
+		// can authoritatively say that a monitored target was deleted.
 		if !summary.Available {
 			sampler[host.ID] = true
 			if item.Name != "" {
@@ -415,12 +330,8 @@ func (s *CheckAlerts) evaluate(ctx context.Context) error {
 				item.Active = true
 				item.Delivered = false
 				queue(&item, "down")
-			} else if item.Pending == nil && (!item.Delivered || next.Settings.Repeat && now.Sub(item.LastSent) >= 6*time.Hour) {
-				if item.Delivered {
-					queue(&item, "repeat")
-				} else {
-					queue(&item, "down")
-				}
+			} else if item.Pending == nil && !item.Delivered {
+				queue(&item, "down")
 			}
 		} else if sample.State == "up" && sample.Successes >= 2 && item.Active {
 			item.Active = false
@@ -432,7 +343,7 @@ func (s *CheckAlerts) evaluate(ctx context.Context) error {
 		}
 		next.Incidents[key] = item
 	}
-	// One sampler alert per host, regardless of the number of selected services.
+	// One sampler alert per host, regardless of the number of configured services.
 	for hostID, unavailable := range sampler {
 		host := hostMap[hostID]
 		key := hostID + ":@sampler"
@@ -476,18 +387,16 @@ func (s *CheckAlerts) evaluate(ctx context.Context) error {
 func (s *CheckAlerts) deliver(ctx context.Context) error {
 	settings := s.parent.store.stateSnapshot()
 	credential, configured, err := s.parent.store.credential()
-	if err != nil || !configured || !settings.Settings.Enabled || !settings.Telegram.HasChat || settings.Telegram.TokenFingerprint != tokenFingerprint(credential) {
+	if err != nil || !configured || !settings.Settings.Enabled || !settings.Settings.Rules.ServiceChecksEnabled || !settings.Telegram.HasChat || settings.Telegram.TokenFingerprint != tokenFingerprint(credential) {
 		return nil
 	}
 	provider, _ := DetectProvider(credential)
 	now := s.parent.now()
 	s.mu.Lock()
 	keys := []string{}
-	if s.state.Settings.Enabled {
-		for key, item := range s.state.Incidents {
-			if item.Pending != nil && !item.Pending.NextAttempt.After(now) {
-				keys = append(keys, key)
-			}
+	for key, item := range s.state.Incidents {
+		if item.Pending != nil && !item.Pending.NextAttempt.After(now) {
+			keys = append(keys, key)
 		}
 	}
 	sort.Slice(keys, func(i, j int) bool {
@@ -520,7 +429,7 @@ func (s *CheckAlerts) deliver(ctx context.Context) error {
 		}
 		s.mu.Lock()
 		item, ok := s.state.Incidents[key]
-		if !ok || item.Pending == nil || !s.state.Settings.Enabled {
+		if !ok || item.Pending == nil {
 			s.mu.Unlock()
 			continue
 		}

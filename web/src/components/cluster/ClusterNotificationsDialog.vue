@@ -2,7 +2,6 @@
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { CheckCircle2, LoaderCircle, RefreshCw, Send, ShieldCheck } from '@lucide/vue'
 import ModalDialog from '@/components/common/ModalDialog.vue'
-import ServiceCheckAlertsDialog from '@/components/monitoring/ServiceCheckAlertsDialog.vue'
 import { useI18n } from '@/i18n'
 import { phraseCatalogVersion, translatePhrase, usePhraseCatalog } from '@/i18n/phrase'
 import { ApiError, api } from '@/lib/api'
@@ -24,7 +23,6 @@ const emit = defineEmits<{
 }>()
 
 const loading = ref(false)
-const serviceAlertsOpen = ref(false)
 const saving = ref(false)
 const discovering = ref(false)
 const testing = ref(false)
@@ -50,6 +48,7 @@ const form = reactive({
   trafficTotalSentThresholdGiB: 100,
   sshLoginEnabled: true,
   hostOfflineEnabled: true,
+  serviceChecksEnabled: false,
   channelCredential: '',
 })
 
@@ -136,6 +135,7 @@ function applySnapshot(value: ClusterNotificationSnapshot): void {
   form.trafficTotalSentThresholdGiB = value.rules.trafficTotalSentThresholdGiB || 100
   form.sshLoginEnabled = value.rules.sshLoginEnabled
   form.hostOfflineEnabled = value.rules.hostOfflineEnabled
+  form.serviceChecksEnabled = value.rules.serviceChecksEnabled ?? false
   form.channelCredential = ''
   if (modalControl) {
     void nextTick(() => {
@@ -171,6 +171,7 @@ function rulesFromForm(): ClusterNotificationRules {
     trafficTotalSentThresholdGiB: form.trafficTotalSentThresholdGiB,
     sshLoginEnabled: form.sshLoginEnabled,
     hostOfflineEnabled: form.hostOfflineEnabled,
+    serviceChecksEnabled: form.serviceChecksEnabled,
   }
 }
 
@@ -496,6 +497,10 @@ onBeforeUnmount(() => {
             </div>
           </div>
           <div class="cluster-notifications__event-rules">
+            <label class="cluster-notifications__event-rule cluster-notifications__service-rule">
+              <span><strong>{{ phrase('服务异常通知') }}</strong><small>{{ phrase('监控所有主机的全部服务检测项，新增项自动生效。连续 3 次失败告警，恢复后通知；默认关闭。') }}</small></span>
+              <input v-model="form.serviceChecksEnabled" type="checkbox" :aria-label="phrase('启用服务异常通知')" />
+            </label>
             <label class="cluster-notifications__event-rule">
               <span><strong>{{ phrase('主机掉线 / 失联') }}</strong><small>{{ phrase('连续 3 次处于过期、离线、授权失败或协议异常状态时提醒。') }}</small></span>
               <input v-model="form.hostOfflineEnabled" type="checkbox" :aria-label="phrase('启用主机掉线通知')" />
@@ -515,7 +520,6 @@ onBeforeUnmount(() => {
     </div>
 
     <template #footer>
-      <button class="button button--secondary" type="button" :disabled="saving" @click="serviceAlertsOpen = true">{{ phrase('服务异常通知') }}</button>
       <button class="button button--secondary" type="button" :disabled="saving" @click="emit('close')">{{ phrase('关闭') }}</button>
       <button class="button button--primary" type="button" :disabled="saving || loading || !snapshot || saveBlocked" @click="save">
         <LoaderCircle v-if="saving" class="spin" :size="15" />
@@ -523,7 +527,6 @@ onBeforeUnmount(() => {
       </button>
     </template>
   </ModalDialog>
-  <ServiceCheckAlertsDialog v-if="serviceAlertsOpen" :open="serviceAlertsOpen" @close="serviceAlertsOpen = false" />
 </template>
 
 <style scoped>
@@ -873,6 +876,9 @@ onBeforeUnmount(() => {
   font-weight: 400;
   line-height: 1.4;
 }
+
+.cluster-notifications__service-rule strong { font-size: 14px; }
+.cluster-notifications__service-rule small { font-size: 13px; }
 
 .cluster-notifications__threshold {
   display: inline-flex;

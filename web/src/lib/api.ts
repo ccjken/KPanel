@@ -1,5 +1,4 @@
 import type { DockerImageUpdateResult } from '@/lib/dockerImageUpdate'
-import type { CheckAlertSettings, CheckAlertSnapshot } from '@/types/serviceCheckAlerts'
 import { TerminalStreamClient } from '@/lib/terminalStream'
 import type { PasskeyList } from '@/types/api'
 import type { ScenePack, ScenePackList, ScenePackSource } from '@/lib/scenePacks'
@@ -1663,9 +1662,6 @@ export const api = {
       request<ClusterShareSettings>('/cluster/share', { signal }),
     notifications: (signal?: AbortSignal): Promise<ClusterNotificationSnapshot> =>
       request<ClusterNotificationSnapshot>('/cluster/notifications', { signal }),
-    serviceCheckAlerts: (signal?: AbortSignal) => request<CheckAlertSnapshot>('/cluster/notifications/service-checks', { signal }),
-    updateServiceCheckAlerts: (body: CheckAlertSettings & { expectedResourceVersion: string }) =>
-      request<CheckAlertSnapshot>('/cluster/notifications/service-checks', { method: 'PUT', body }),
     updateNotifications: (body: {
       enabled: boolean
       locale: ClusterNotificationSnapshot['locale']

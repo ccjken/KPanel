@@ -14,7 +14,6 @@ import ErrorState from '@/components/feedback/ErrorState.vue'
 import LoadingState from '@/components/feedback/LoadingState.vue'
 import TrendChart, { type TrendSeries } from '@/components/monitoring/TrendChart.vue'
 import MonitoringChecksDialog from '@/components/monitoring/MonitoringChecksDialog.vue'
-import ServiceCheckAlertsDialog from '@/components/monitoring/ServiceCheckAlertsDialog.vue'
 import { ApiError, api } from '@/lib/api'
 import { applyClusterHostOrderPreference, readClusterHostOrder, sortClusterHosts, subscribeClusterHostOrder } from '@/lib/clusterHostOrder'
 import { detectOperatingSystemIdentity } from '@/lib/operatingSystem'
@@ -151,7 +150,6 @@ function monitoringCategoryVisible(category: Exclude<MonitoringCategoryId, 'all'
   return activeMonitoringCategory.value === 'all' || activeMonitoringCategory.value === category
 }
 const checksDialogOpen = ref(false)
-const serviceAlertsOpen = ref(false)
 const activeWindow = ref<MonitoringHistoryQuery>()
 const rootHistory = shallowRef<MonitoringHistory>()
 const updating = ref(false)
@@ -1245,7 +1243,6 @@ onBeforeUnmount(() => {
               {{ Math.max(1, Math.round((history.storage.operatorLatencyIntervalSeconds || 300) / 60)) }} 分钟
             </span>
             <span v-else-if="operatorLatencyRoutes.length">等待首次检测采样</span>
-            <button class="button button--secondary button--small" type="button" @click="serviceAlertsOpen = true">服务异常通知</button>
             <button
               class="button button--secondary button--small"
               type="button"
@@ -1344,7 +1341,6 @@ onBeforeUnmount(() => {
     </template>
   </section>
   <MonitoringChecksDialog :open="checksDialogOpen" @close="checksDialogOpen = false" @saved="handleChecksSaved" />
-  <ServiceCheckAlertsDialog v-if="serviceAlertsOpen" :open="serviceAlertsOpen" :host-id="selectedHostId" @close="serviceAlertsOpen = false" />
 </template>
 
 <style scoped>

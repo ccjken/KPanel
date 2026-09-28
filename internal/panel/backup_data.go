@@ -238,12 +238,7 @@ func sanitizeBackupFile(name string, data []byte) ([]byte, error) {
 	if name == "notifications/service-check-alerts-v1.json" {
 		value["incidents"] = json.RawMessage(`{}`)
 		value["generation"] = json.RawMessage(`0`)
-		var settings map[string]json.RawMessage
-		if err := json.Unmarshal(value["settings"], &settings); err != nil {
-			return nil, err
-		}
-		settings["enabled"] = json.RawMessage(`false`)
-		value["settings"], _ = json.Marshal(settings)
+
 	}
 	return json.Marshal(value)
 }
