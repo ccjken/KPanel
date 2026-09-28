@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [1.23.0-rc.3] - 2026-09-28
+
+本预览版修正 3D 场景加载占位层的亮度，并改善首次安装 Token 的复制体验。
+
+### Fixed
+
+- 3D 场景尚未加载完成时，桌面占位图保持暗色，避免启动过程中短暂变亮；加载状态不显示极光层。
+- 首次安装输出的初始化 Token 与标签之间保留空格，便于在终端中双击选中 Token。
+
+### Upgrade Notes
+
+- 本版只提升 GitHub prerelease 与 Docker `preview`；GitHub Latest、Docker `latest` 和生产部署继续保持 1.22.0。
+- 不改变 `kejilion.sh`、Agent 权限、持久化格式或数据库结构，`scriptLinkageState=not-required`。安装输出文案同步到应用市场配置，默认安装镜像仍使用 `latest`。
+
 ## [1.23.0-rc.2] - 2026-09-27
 
 本预览版整理上一 RC 后完成的壁纸切换和浅色导航改进。
