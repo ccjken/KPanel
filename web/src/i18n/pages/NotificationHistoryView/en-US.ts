@@ -66,20 +66,8 @@ export default [
     "Search"
   ],
   [
-    "更多筛选",
-    "More filters"
-  ],
-  [
-    "事件性质",
-    "Event kind"
-  ],
-  [
     "外部投递",
     "External delivery"
-  ],
-  [
-    "全部",
-    "All"
   ],
   [
     "告警",

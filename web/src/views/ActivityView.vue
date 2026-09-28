@@ -23,7 +23,7 @@ function selectTab(tab: ActivityTab): void {
 
 <template>
   <div class="page activity-page">
-    <div class="tab-bar activity-page__tabs" role="tablist" aria-label="活动记录类型">
+    <div class="activity-page__tabs" role="tablist" aria-label="活动记录类型">
       <button
         type="button"
         role="tab"
@@ -59,7 +59,39 @@ function selectTab(tab: ActivityTab): void {
 }
 
 .activity-page__tabs {
+  display: flex;
   align-self: flex-start;
   flex-wrap: wrap;
+  gap: 8px;
+}
+
+.activity-page__tabs button {
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.activity-page__tabs button:hover {
+  border-color: color-mix(in srgb, var(--brand) 38%, var(--border));
+  color: var(--text);
+}
+
+.activity-page__tabs button.is-active {
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--border));
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.activity-page__tabs button:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 </style>

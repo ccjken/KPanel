@@ -20,7 +20,7 @@ usePhraseCatalog((locale) => locale === 'en-US'
 function phrase(value: string): string { phraseCatalogVersion.value; return translatePhrase(value) }
 
 const route = useRoute()
-const filters = reactive({ days: '7', host: typeof route.query.host === 'string' ? route.query.host : '', rule: '', kind: '', delivery: '', search: '' })
+const filters = reactive({ days: '7', host: typeof route.query.host === 'string' ? route.query.host : '', rule: '', search: '' })
 const items = ref<NotificationEvent[]>([])
 const hostSystems = ref(new Map<string, OperatingSystemIdentity>())
 const hostController = new AbortController()
@@ -57,7 +57,7 @@ async function load(append = false): Promise<void> {
     items.value = []
     nextCursor.value = ''
     appliedFilters = { since: new Date(Date.now() - Number(filters.days) * 86400000).toISOString() }
-    for (const key of ['host', 'rule', 'kind', 'delivery', 'search'] as const) {
+    for (const key of ['host', 'rule', 'search'] as const) {
       const value = filters[key].trim()
       if (value) appliedFilters[key] = value
     }
@@ -81,7 +81,7 @@ async function load(append = false): Promise<void> {
   }
 }
 
-watch(() => [filters.days, filters.host, filters.rule, filters.kind, filters.delivery], () => void load())
+watch(() => [filters.days, filters.host, filters.rule], () => void load())
 watch(() => route.query.host, (host) => { filters.host = typeof host === 'string' ? host : '' })
 onMounted(() => {
   void load()
@@ -116,13 +116,6 @@ onBeforeUnmount(() => { requestID++; controller?.abort(); hostController.abort()
         <option value="">{{ phrase('全部类型') }}</option><option v-for="(label, key) in rules" :key="key" :value="key">{{ phrase(label) }}</option>
       </select></label>
       <button type="submit" class="button button--secondary" :disabled="loading"><RefreshCw :size="16" />{{ phrase('查询') }}</button>
-      <details class="notification-history__more">
-        <summary>{{ phrase('更多筛选') }}</summary>
-        <div>
-          <label class="field"><span>{{ phrase('事件性质') }}</span><select v-model="filters.kind"><option value="">{{ phrase('全部') }}</option><option v-for="(label, key) in kinds" :key="key" :value="key">{{ phrase(label) }}</option></select></label>
-          <label class="field"><span>{{ phrase('外部投递') }}</span><select v-model="filters.delivery"><option value="">{{ phrase('全部') }}</option><option v-for="(label, key) in deliveries" :key="key" :value="key">{{ phrase(label) }}</option></select></label>
-        </div>
-      </details>
     </form>
     <p class="notification-history__retention">{{ phrase('保留最近') }} {{ retention.days }} {{ phrase('天，最多') }} {{ retention.events }} {{ phrase('条；达到容量上限时清理最早记录。') }}</p>
     <LoadingState v-if="loading" />
@@ -168,9 +161,6 @@ onBeforeUnmount(() => { requestID++; controller?.abort(); hostController.abort()
 .notification-history__filters input, .notification-history__filters select { width: 100%; min-width: 0; min-height: 40px; font-size: 14px; }
 .notification-history__filters .notification-history__search { flex-basis: 240px; }
 .notification-history__search > div { display: flex; align-items: center; gap: 8px; }
-.notification-history__more { flex: 1 0 100%; font-size: 14px; }
-.notification-history__more > div { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; }
-.notification-history__more summary { cursor: pointer; width: fit-content; padding: 4px 0; }
 .notification-history__retention { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 0; }
 .notification-history__list { display: grid; gap: 12px; min-width: 0; }
 .notification-history__list > button { grid-column: 1 / -1; justify-self: center; }
@@ -200,7 +190,6 @@ onBeforeUnmount(() => { requestID++; controller?.abort(); hostController.abort()
 .notification-history__action .icon-button { width: 28px; height: 28px; }
 .notification-history__original { font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
 .notification-history__original p { white-space: pre-wrap; }
-.notification-history summary:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; border-radius: var(--radius-sm); }
 @container notification-history (max-width: 740px) {
   .notification-history__table, .notification-history__table tbody { display: block; }
   .notification-history__table thead { display: none; }
