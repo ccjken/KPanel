@@ -39,6 +39,7 @@ func (s *Service) deliverHistory(ctx context.Context, state persistedState, host
 	}
 	before := cloneHistory(history)
 	expiries := s.expirySnapshot()
+	limits := s.trafficLimitsSnapshot()
 	present := map[string]bool{}
 	cycles := map[string]string{}
 	cycleUnavailable := map[string]bool{}
@@ -54,13 +55,16 @@ func (s *Service) deliverHistory(ctx context.Context, state persistedState, host
 			continue
 		}
 		reason := ""
+		rules := effectiveTrafficRules(state.Settings.Rules, limits[event.HostID])
 		switch {
 		case !state.Settings.Enabled:
 			reason = "push_disabled"
 		case event.Rule == serverExpiryRuleKey && (!expiries[event.HostID].Enabled || expiries[event.HostID].ExpiresOn != event.ExpiryDate):
 			reason = "expiry_reminder_changed"
-		case !ruleEnabled(state.Settings.Rules, event.Rule):
+		case !ruleEnabled(rules, event.Rule):
 			reason = "rule_disabled"
+		case isCumulativeTrafficRule(event.Rule) && event.TrafficThresholdGiB != trafficThreshold(rules, event.Rule):
+			reason = "traffic_threshold_changed"
 		case !present[event.HostID]:
 			reason = "host_removed"
 		case (event.Rule == cumulativeTrafficReceivedRuleKey || event.Rule == cumulativeTrafficSentRuleKey) && !cycleUnavailable[event.HostID] && event.TrafficCycle != cycles[event.HostID]:
@@ -116,6 +120,14 @@ func (s *Service) deliverHistory(ctx context.Context, state persistedState, host
 	for _, i := range indices {
 		event := &history.Events[i]
 		// Host metadata can change while an earlier message in this batch is in flight.
+		if isCumulativeTrafficRule(event.Rule) {
+			current := effectiveTrafficRules(state.Settings.Rules, s.trafficLimitsSnapshot()[event.HostID])
+			if !ruleEnabled(current, event.Rule) || event.TrafficThresholdGiB != trafficThreshold(current, event.Rule) {
+				event.Delivery = "cancelled"
+				event.LastErrorCode = "traffic_threshold_changed"
+				continue
+			}
+		}
 		if event.Rule == serverExpiryRuleKey {
 			current := s.expirySnapshot()[event.HostID]
 			if !current.Enabled || current.ExpiresOn != event.ExpiryDate {

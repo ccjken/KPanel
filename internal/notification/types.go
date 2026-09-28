@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/kejilion/kejilion-panel/internal/contract"
 )
 
 const (
@@ -16,7 +18,7 @@ const (
 	DefaultTrafficTotalThresholdGiB = 100
 	DefaultSustainSamples           = 3
 	MaxTrafficThresholdMiB          = 1_048_576
-	MaxTrafficTotalThresholdGiB     = 1_048_576
+	MaxTrafficTotalThresholdGiB     = contract.MaxTrafficThresholdGiB
 	MaxAlertStates                  = 1_024
 	MaxTelegramTokenBytes           = 256
 	MaxChannelCredentialBytes       = 2_048

@@ -194,6 +194,13 @@ func NewServer(config Config, authService *auth.Service, storage *store.Store, a
 	trafficSource := &clusterTrafficSource{raw: clusterService, store: storage, location: timezoneSource.AccountingLocation, now: time.Now}
 	notifications, err := notification.NewService(notification.Config{
 		DataDir: config.DataDir, Hosts: trafficSource, Timezone: timezoneSource.Location,
+		HostTrafficLimits: func() map[string]notification.HostTrafficLimits {
+			result := make(map[string]notification.HostTrafficLimits)
+			for id, details := range storage.ClusterHostDetails() {
+				result[id] = notification.HostTrafficLimits{ReceivedGiB: details.TrafficTotalReceivedThresholdGiB, SentGiB: details.TrafficTotalSentThresholdGiB}
+			}
+			return result
+		},
 		HostExpiries: func() map[string]notification.HostExpiry {
 			result := make(map[string]notification.HostExpiry)
 			for id, details := range storage.ClusterHostDetails() {

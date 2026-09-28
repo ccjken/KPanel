@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kejilion/kejilion-panel/internal/cluster"
+	"github.com/kejilion/kejilion-panel/internal/contract"
 	"github.com/kejilion/kejilion-panel/internal/notification"
 	"github.com/kejilion/kejilion-panel/internal/store"
 )
@@ -21,7 +23,7 @@ func TestClusterHostDetailsAuthorizationLifecycleAndPublicWhitelist(t *testing.T
 	session, csrf := bootstrapCookies(t, s, tokenPath)
 	view := s.clusterHostsView(context.Background())
 	initial := view.HostDetails["local"].ResourceVersion
-	input := clusterHostDetailsInput{ClusterHostDetails: store.ClusterHostDetails{ExpiresOn: "2027-09-28", ExpiryReminderEnabled: true, Price: "$5/month", TrafficResetDay: 31}, ExpectedResourceVersion: initial}
+	input := clusterHostDetailsInput{ClusterHostDetails: store.ClusterHostDetails{ExpiresOn: "2027-09-28", ExpiryReminderEnabled: true, Price: "$5/month", TrafficResetDay: 31, TrafficTotalReceivedThresholdGiB: 512, TrafficTotalSentThresholdGiB: 1024}, ExpectedResourceVersion: initial}
 	body, _ := json.Marshal(input)
 	headers := map[string]string{"Content-Type": "application/json", "Origin": "http://panel.test", "X-CSRF-Token": csrf.Value}
 	for _, missing := range []string{"Origin", "X-CSRF-Token"} {
@@ -64,7 +66,7 @@ func TestClusterHostDetailsAuthorizationLifecycleAndPublicWhitelist(t *testing.T
 	if public.Items[0].Price != "$5/month" || public.Items[0].ExpiresOn != "2027-09-28" || public.Items[0].TrafficResetDay != 31 {
 		t.Fatalf("public metadata missing: %s", encoded)
 	}
-	for _, forbidden := range []string{"expiryReminderEnabled", "resourceVersion", "expectedResourceVersion", "origin", "peerFingerprint", "remoteNodeId"} {
+	for _, forbidden := range []string{"trafficTotalReceivedThresholdGiB", "trafficTotalSentThresholdGiB", "expiryReminderEnabled", "resourceVersion", "expectedResourceVersion", "origin", "peerFingerprint", "remoteNodeId"} {
 		if strings.Contains(string(encoded), `"`+forbidden+`"`) {
 			t.Fatalf("leaked %s", forbidden)
 		}
@@ -128,4 +130,46 @@ func TestClusterHostDetailsExpiryReminderReachesNotificationHistory(t *testing.T
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("saved host details did not reach the notification evaluator")
+}
+
+func TestClusterHostDetailsTrafficLimitsReachNotifications(t *testing.T) {
+	s, tokenPath := newTestServer(t)
+	session, csrf := bootstrapCookies(t, s, tokenPath)
+	headers := map[string]string{"Content-Type": "application/json", "Origin": "http://panel.test", "X-CSRF-Token": csrf.Value}
+	version := s.clusterHostsView(context.Background()).HostDetails["local"].ResourceVersion
+	for _, invalid := range []string{"-1", "1048577", "1.5", `"10"`} {
+		body := []byte(`{"trafficTotalSentThresholdGiB":` + invalid + `,"expectedResourceVersion":"` + version + `"}`)
+		result := authenticatedRequest(s, http.MethodPut, "/api/v1/cluster/hosts/local/details", body, session, csrf, headers)
+		if result.Code != http.StatusBadRequest && result.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("invalid %s: %d", invalid, result.Code)
+		}
+	}
+	input := clusterHostDetailsInput{ClusterHostDetails: store.ClusterHostDetails{TrafficTotalReceivedThresholdGiB: 2, TrafficTotalSentThresholdGiB: 10}, ExpectedResourceVersion: version}
+	body, _ := json.Marshal(input)
+	result := authenticatedRequest(s, http.MethodPut, "/api/v1/cluster/hosts/local/details", body, session, csrf, headers)
+	if result.Code != http.StatusOK {
+		t.Fatalf("save: %d %s", result.Code, result.Body.String())
+	}
+	now := time.Now()
+	s.clusterTraffic.raw = trafficTestHosts{host: cluster.Host{ID: "local", Name: "test", State: cluster.HostOnline, LastSnapshot: &cluster.HostSnapshot{ReceivedAt: now, Telemetry: contract.HostTelemetry{CollectedAt: now, Network: contract.NetworkSummary{ReceivedBytes: 3 << 30, SentBytes: 3 << 30}}}}}
+	s.notifications.Start(context.Background())
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		page, err := s.notifications.History(notification.HistoryQuery{Rule: "traffic-total-received"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(page.Items) == 1 {
+			if page.Items[0].Delivery != "local_only" || !strings.Contains(page.Items[0].Message, "2.0 GB") {
+				t.Fatalf("wrong override: %+v", page.Items)
+			}
+			sent, _ := s.notifications.History(notification.HistoryQuery{Rule: "traffic-total-sent"})
+			if len(sent.Items) != 0 {
+				t.Fatal("directions mixed")
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("saved traffic thresholds did not reach evaluator")
 }

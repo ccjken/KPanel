@@ -265,6 +265,8 @@ export interface ClusterHostDetails {
   expiryReminderEnabled?: boolean
   price?: string
   trafficResetDay?: number
+  trafficTotalReceivedThresholdGiB?: number
+  trafficTotalSentThresholdGiB?: number
 }
 
 export interface ClusterTrafficPeriod {

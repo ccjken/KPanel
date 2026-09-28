@@ -17,7 +17,7 @@ func TestClusterHostDetailsPersistenceConflictClearAndBoundedCleanup(t *testing.
 		t.Fatal(err)
 	}
 	initial := ClusterHostDetailsResourceVersion("local", ClusterHostDetails{})
-	value := ClusterHostDetails{ExpiresOn: "2028-02-29", ExpiryReminderEnabled: true, Price: "$5/month", TrafficResetDay: 31}
+	value := ClusterHostDetails{ExpiresOn: "2028-02-29", ExpiryReminderEnabled: true, Price: "$5/month", TrafficResetDay: 31, TrafficTotalReceivedThresholdGiB: 1024, TrafficTotalSentThresholdGiB: 2048}
 	if err := s.ReplaceClusterHostDetails("local", initial, value, []string{"local", "remote"}); err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestClusterHostDetailsIncludedInPanelBackup(t *testing.T) {
 	if err := source.CreateInitialAdmin(User{ID: "admin", Username: "admin", PasswordHash: strings.Repeat("h", 32), Role: "admin", CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
-	value := ClusterHostDetails{ExpiresOn: "2028-02-29", ExpiryReminderEnabled: true, Price: "¥99/年", TrafficResetDay: 31}
+	value := ClusterHostDetails{ExpiresOn: "2028-02-29", ExpiryReminderEnabled: true, Price: "¥99/年", TrafficResetDay: 31, TrafficTotalReceivedThresholdGiB: 1024, TrafficTotalSentThresholdGiB: 2048}
 	if err := source.ReplaceClusterHostDetails("local", ClusterHostDetailsResourceVersion("local", ClusterHostDetails{}), value, []string{"local"}); err != nil {
 		t.Fatal(err)
 	}
@@ -115,6 +115,8 @@ func TestClusterHostDetailsIncludedInPanelBackup(t *testing.T) {
 
 func TestClusterHostDetailsRejectInvalidInputAndRollbackWriteFailure(t *testing.T) {
 	for _, value := range []ClusterHostDetails{
+		{TrafficTotalReceivedThresholdGiB: -1}, {TrafficTotalReceivedThresholdGiB: 1_048_577},
+		{TrafficTotalSentThresholdGiB: -1}, {TrafficTotalSentThresholdGiB: 1_048_577},
 		{ExpiryReminderEnabled: true},
 		{ExpiresOn: "2027-02-29"}, {ExpiresOn: "2026-9-28"}, {ExpiresOn: "0000-01-01"},
 		{Price: strings.Repeat("贵", 41)}, {Price: "5\n/month"}, {Price: " 5 "}, {Price: string([]byte{0xff})},
@@ -140,7 +142,7 @@ func TestClusterHostDetailsRejectInvalidInputAndRollbackWriteFailure(t *testing.
 		t.Fatal(err)
 	}
 	s.path = filepath.Join(blocker, "state.json")
-	if err := s.ReplaceClusterHostDetails("local", version, ClusterHostDetails{Price: "$1"}, []string{"local"}); err == nil {
+	if err := s.ReplaceClusterHostDetails("local", version, ClusterHostDetails{Price: "$1", TrafficTotalReceivedThresholdGiB: 500, TrafficTotalSentThresholdGiB: 1000}, []string{"local"}); err == nil {
 		t.Fatal("write should fail")
 	}
 	if len(s.ClusterHostDetails()) != 0 {

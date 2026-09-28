@@ -2447,8 +2447,10 @@ createServer(async (request, response) => {
       send(response, 409, { code: 'cluster_host_details_changed' })
       return
     }
-    const { expiresOn = '', expiryReminderEnabled = false, price = '', trafficResetDay = 0 } = input
-    if (typeof expiryReminderEnabled !== 'boolean' || (expiryReminderEnabled && !expiresOn) ||
+    const { expiresOn = '', expiryReminderEnabled = false, price = '', trafficResetDay = 0,
+      trafficTotalReceivedThresholdGiB = 0, trafficTotalSentThresholdGiB = 0 } = input
+    if ([trafficTotalReceivedThresholdGiB, trafficTotalSentThresholdGiB].some(value => !Number.isInteger(value) || value < 0 || value > 1_048_576) ||
+        typeof expiryReminderEnabled !== 'boolean' || (expiryReminderEnabled && !expiresOn) ||
         !Number.isInteger(trafficResetDay) || trafficResetDay < 0 || trafficResetDay > 31 ||
         typeof price !== 'string' || [...price].length > 40 || /[\u0000-\u001f\u007f]/.test(price) ||
         (expiresOn && (!/^\d{4}-\d{2}-\d{2}$/.test(expiresOn) || !Number.isFinite(Date.parse(expiresOn)) || new Date(expiresOn).toISOString().slice(0, 10) !== expiresOn))) {
@@ -2456,7 +2458,7 @@ createServer(async (request, response) => {
       return
     }
     const resetChanged = trafficResetDay !== (mockHostDetails[id].trafficResetDay || 0)
-    mockHostDetails[id] = { expiresOn, expiryReminderEnabled, price: price.trim(), trafficResetDay, resourceVersion: mockRevision(900 + ++mockHostDetailsRevision) }
+    mockHostDetails[id] = { expiresOn, expiryReminderEnabled, price: price.trim(), trafficResetDay, trafficTotalReceivedThresholdGiB, trafficTotalSentThresholdGiB, resourceVersion: mockRevision(900 + ++mockHostDetailsRevision) }
     if (resetChanged) {
       mockTrafficPeriods.delete(id)
       const period = mockTrafficPeriod(visualClusterHosts.find(host => host.id === id))

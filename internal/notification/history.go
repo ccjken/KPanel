@@ -43,7 +43,8 @@ type Event struct {
 
 type storedEvent struct {
 	Event
-	TrafficCycle string `json:"trafficCycle,omitempty"`
+	TrafficThresholdGiB int    `json:"trafficThresholdGiB,omitempty"`
+	TrafficCycle        string `json:"trafficCycle,omitempty"`
 	// Binds delayed delivery to the expiry date that generated this reminder.
 	ExpiryDate string `json:"expiryDate,omitempty"`
 	// Never included in an API response. Bind retries to the original channel.
@@ -112,6 +113,9 @@ func validateHistory(state historyState) error {
 	}
 	var previous uint64
 	for _, event := range state.Events {
+		if event.TrafficThresholdGiB < 0 || event.TrafficThresholdGiB > MaxTrafficTotalThresholdGiB {
+			return errors.New("invalid traffic threshold")
+		}
 		if !validTrafficCycle(event.TrafficCycle) {
 			return errors.New("invalid traffic cycle")
 		}

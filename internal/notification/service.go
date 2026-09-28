@@ -32,12 +32,6 @@ const (
 	bytesPerGigabyte                     = uint64(1024 * 1024 * 1024)
 )
 
-var cumulativeTrafficAlertSuffixes = []string{
-	cumulativeTrafficReceivedAlertSuffix,
-	cumulativeTrafficSentAlertSuffix,
-	legacyCumulativeTrafficAlertSuffix,
-}
-
 type HostSource interface {
 	Hosts(context.Context) cluster.HostList
 }
@@ -51,6 +45,7 @@ type Config struct {
 	DataDir            string
 	Hosts              HostSource
 	HostExpiries       func() map[string]HostExpiry
+	HostTrafficLimits  func() map[string]HostTrafficLimits
 	Telegram           TelegramAPI
 	Robots             RobotAPI
 	Timezone           TimezoneSource
@@ -67,17 +62,18 @@ type trafficSample struct {
 }
 
 type Service struct {
-	store        *Store
-	history      *historyStore
-	hosts        HostSource
-	hostExpiries func() map[string]HostExpiry
-	telegram     TelegramAPI
-	robots       RobotAPI
-	timezone     TimezoneSource
-	now          func() time.Time
-	evaluation   time.Duration
-	sustain      int
-	repeat       time.Duration
+	store             *Store
+	history           *historyStore
+	hosts             HostSource
+	hostExpiries      func() map[string]HostExpiry
+	hostTrafficLimits func() map[string]HostTrafficLimits
+	telegram          TelegramAPI
+	robots            RobotAPI
+	timezone          TimezoneSource
+	now               func() time.Time
+	evaluation        time.Duration
+	sustain           int
+	repeat            time.Duration
 
 	opMu    sync.Mutex
 	mu      sync.Mutex
@@ -131,7 +127,7 @@ func NewService(config Config) (*Service, error) {
 	history := openHistory(store.directory, state)
 	historyState, _ := history.snapshot()
 	service := &Service{
-		store: store, history: history, hosts: config.Hosts, hostExpiries: config.HostExpiries, telegram: config.Telegram, robots: config.Robots, timezone: config.Timezone, now: config.Now,
+		store: store, history: history, hosts: config.Hosts, hostExpiries: config.HostExpiries, hostTrafficLimits: config.HostTrafficLimits, telegram: config.Telegram, robots: config.Robots, timezone: config.Timezone, now: config.Now,
 		evaluation: config.EvaluationInterval, sustain: config.SustainSamples,
 		repeat: config.RepeatInterval, alerts: make(map[string]alertState),
 		traffic: make(map[string]trafficSample),
@@ -277,9 +273,6 @@ func (s *Service) Configure(ctx context.Context, input UpdateInput) (Snapshot, e
 	next := state
 	next.Settings = Settings{Enabled: input.Enabled, Locale: locale, Rules: rules}
 	next.AlertStates = s.alertStateSnapshot()
-	if cumulativeTrafficRulesChanged(state.Settings.Rules, rules) {
-		removeCumulativeTrafficAlertStates(next.AlertStates)
-	}
 	// The aggregate state is not meaningful for the directional rules, even
 	// when the migrated settings happen to retain the same threshold value.
 	removeAlertStates(next.AlertStates, legacyCumulativeTrafficAlertSuffix)
@@ -529,13 +522,10 @@ func (s *Service) evaluate(parent context.Context) error {
 		return historyError(historyErr)
 	}
 	before := cloneHistory(history)
+	limits := s.trafficLimitsSnapshot()
+	reconcileTrafficThresholds(&history, state.Settings.Rules, limits)
 	s.replaceAlertStates(history.Alerts)
 	defer func() { current, _ := s.history.snapshot(); s.replaceAlertStates(current.Alerts) }()
-	if cumulativeTrafficRulesChanged(history.Rules, state.Settings.Rules) {
-		s.mu.Lock()
-		removeCumulativeTrafficAlertStates(s.alerts)
-		s.mu.Unlock()
-	}
 	history.Rules = state.Settings.Rules
 	credential, configured, credentialErr := s.store.credential()
 	canDeliver := state.Settings.Enabled && credentialErr == nil && configured && state.Telegram.HasChat && state.Telegram.TokenFingerprint == tokenFingerprint(credential)
@@ -557,6 +547,7 @@ func (s *Service) evaluate(parent context.Context) error {
 		}
 		if rule == cumulativeTrafficReceivedRuleKey || rule == cumulativeTrafficSentRuleKey {
 			event.TrafficCycle = trafficCycleKey(host)
+			event.TrafficThresholdGiB = trafficThreshold(effectiveTrafficRules(state.Settings.Rules, limits[host.ID]), rule)
 		}
 		if event.HostName == "" {
 			event.HostName = host.ID
@@ -596,7 +587,7 @@ func (s *Service) evaluate(parent context.Context) error {
 		if host.State != cluster.HostOnline && host.State != cluster.HostDegraded {
 			continue
 		}
-		rules := state.Settings.Rules
+		rules := effectiveTrafficRules(state.Settings.Rules, limits[host.ID])
 		if rules.CPUEnabled && cpuMetricAvailable(host.LastSnapshot.Telemetry) {
 			stateChanged = s.handleThreshold(host, "cpu", host.LastSnapshot.Telemetry.CPU.UsagePercent, float64(rules.CPUThresholdPercent), "%", now, locale, trySend) || stateChanged
 		}
@@ -733,13 +724,14 @@ func (s *Service) handleCumulativeThreshold(host cluster.Host, ruleKey string, v
 		return false
 	}
 	cycle := trafficCycleKey(host)
-	if state.TrafficCycle != cycle || (state.LastNetworkBytes > 0 && value < state.LastNetworkBytes) {
+	if state.TrafficCycle != cycle || (state.TrafficThresholdGiB != 0 && state.TrafficThresholdGiB != thresholdGiB) || (state.LastNetworkBytes > 0 && value < state.LastNetworkBytes) {
 		// Network counters are monotonic until an interface, host or agent
 		// restarts. A rollback starts a new accumulation cycle and must not
 		// generate a misleading recovery message.
 		state = alertState{}
 	}
 	state.TrafficCycle = cycle
+	state.TrafficThresholdGiB = thresholdGiB
 	state.LastNetworkBytes = value
 	state.Consecutive = 0
 	if value < thresholdBytes {
@@ -902,21 +894,6 @@ func removeAlertStates(states map[string]alertState, suffix string) {
 			delete(states, key)
 		}
 	}
-}
-
-func removeCumulativeTrafficAlertStates(states map[string]alertState) {
-	for _, suffix := range cumulativeTrafficAlertSuffixes {
-		removeAlertStates(states, suffix)
-	}
-}
-
-func cumulativeTrafficRulesChanged(previous, next Rules) bool {
-	previous = normalizeRules(previous)
-	next = normalizeRules(next)
-	return previous.TrafficTotalReceivedEnabled != next.TrafficTotalReceivedEnabled ||
-		previous.TrafficTotalReceivedThresholdGiB != next.TrafficTotalReceivedThresholdGiB ||
-		previous.TrafficTotalSentEnabled != next.TrafficTotalSentEnabled ||
-		previous.TrafficTotalSentThresholdGiB != next.TrafficTotalSentThresholdGiB
 }
 
 func (s *Service) pruneHostState(hosts []cluster.Host) bool {

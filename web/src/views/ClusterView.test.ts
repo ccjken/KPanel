@@ -117,7 +117,7 @@ interface ClusterBindings {
   lightEnrollmentConnected: Ref<boolean>
   lightEnrollmentState: Ref<'waiting' | 'registered' | 'connected' | 'expired'>
   editName: Ref<string>
-  editDetails: { expiresOn: string; expiryReminderEnabled: boolean; price: string; trafficResetDay: number | string; resourceVersion: string }
+  editDetails: { expiresOn: string; expiryReminderEnabled: boolean; price: string; trafficResetDay: number | string; trafficTotalReceivedThresholdGiB: number | string; trafficTotalSentThresholdGiB: number | string; resourceVersion: string }
   manageError: Ref<string>
   addForm: { name: string; accessCredential: string }
   load: (silent?: boolean) => Promise<void>
@@ -1233,6 +1233,53 @@ describe('ClusterView inventory and navigation', () => {
 
 
 describe('ClusterView optional server details', () => {
+  it('saves independent traffic limits together, reopens them and clears a direction without resetting usage', async () => {
+    const view = setupView()
+    const items = inventory()
+    const target = items.items[0]!
+    target.trafficPeriod = { available: true, receivedBytes: 123, sentBytes: 456, startedAt: '', endsAt: '', partial: true, estimated: false }
+    items.hostDetails = { [target.id]: { trafficResetDay: 15, resourceVersion: 'v1' } }
+    view.inventory.value = items
+    view.openManage(target)
+    expect(view.editDetails.trafficTotalReceivedThresholdGiB).toBe('')
+    view.editDetails.trafficTotalReceivedThresholdGiB = 500
+    view.editDetails.trafficTotalSentThresholdGiB = 1000
+    mocks.saveHostDetails.mockResolvedValueOnce({ trafficResetDay: 15, trafficTotalReceivedThresholdGiB: 500, trafficTotalSentThresholdGiB: 1000, resourceVersion: 'v2' })
+    await view.saveHost()
+    expect(mocks.saveHostDetails).toHaveBeenLastCalledWith(target.id, expect.objectContaining({ trafficTotalReceivedThresholdGiB: 500, trafficTotalSentThresholdGiB: 1000, expectedResourceVersion: 'v1' }))
+    view.openManage(target)
+    expect(view.editDetails.trafficTotalSentThresholdGiB).toBe(1000)
+    view.editDetails.trafficTotalReceivedThresholdGiB = ''
+    mocks.saveHostDetails.mockResolvedValueOnce({ trafficResetDay: 15, trafficTotalSentThresholdGiB: 1000, resourceVersion: 'v3' })
+    await view.saveHost()
+    expect(mocks.saveHostDetails).toHaveBeenLastCalledWith(target.id, expect.objectContaining({ trafficTotalReceivedThresholdGiB: 0, trafficTotalSentThresholdGiB: 1000 }))
+    expect(view.inventory.value?.items[0]?.trafficPeriod?.receivedBytes).toBe(123)
+    expect(mocks.hosts).not.toHaveBeenCalled()
+    await view.saveHost()
+    expect(mocks.saveHostDetails).toHaveBeenCalledTimes(2)
+  })
+
+  it('rejects invalid traffic limits and preserves the input after a failed save', async () => {
+    const view = setupView()
+    const items = inventory()
+    const target = items.items[0]!
+    items.hostDetails = { [target.id]: { resourceVersion: 'v1' } }
+    view.inventory.value = items
+    view.openManage(target)
+    for (const value of [-1, 1.5, 1048577, 'invalid']) {
+      view.editDetails.trafficTotalSentThresholdGiB = value
+      await view.saveHost()
+      expect(view.manageError.value).not.toBe('')
+    }
+    expect(mocks.saveHostDetails).not.toHaveBeenCalled()
+    view.editDetails.trafficTotalSentThresholdGiB = 100
+    mocks.saveHostDetails.mockRejectedValueOnce(new ApiError('Changed', 409, 'cluster_host_details_changed'))
+    await view.saveHost()
+    expect(view.editDetails.trafficTotalSentThresholdGiB).toBe(100)
+    expect(view.manageError.value).not.toBe('')
+    expect(mocks.toastSuccess).not.toHaveBeenCalled()
+  })
+
   it('saves and reopens the reminder checkbox, and clears it with the expiry date', async () => {
     const view = setupView()
     const items = inventory()
@@ -1245,7 +1292,7 @@ describe('ClusterView optional server details', () => {
     mocks.saveHostDetails.mockResolvedValueOnce({ expiresOn: '2028-02-29', expiryReminderEnabled: true, resourceVersion: 'details-v2' })
     await view.saveHost()
     expect(mocks.saveHostDetails).toHaveBeenCalledWith(target.id, {
-      expiresOn: '2028-02-29', expiryReminderEnabled: true, price: '', trafficResetDay: 0, expectedResourceVersion: 'details-v1',
+      expiresOn: '2028-02-29', expiryReminderEnabled: true, price: '', trafficResetDay: 0, trafficTotalReceivedThresholdGiB: 0, trafficTotalSentThresholdGiB: 0, expectedResourceVersion: 'details-v1',
     })
     view.openManage(target)
     expect(view.editDetails.expiryReminderEnabled).toBe(true)
@@ -1253,7 +1300,7 @@ describe('ClusterView optional server details', () => {
     mocks.saveHostDetails.mockResolvedValueOnce({ resourceVersion: 'details-v3' })
     await view.saveHost()
     expect(mocks.saveHostDetails).toHaveBeenLastCalledWith(target.id, {
-      expiresOn: '', price: '', trafficResetDay: 0, expectedResourceVersion: 'details-v2',
+      expiresOn: '', price: '', trafficResetDay: 0, trafficTotalReceivedThresholdGiB: 0, trafficTotalSentThresholdGiB: 0, expectedResourceVersion: 'details-v2',
     })
     view.openManage(target)
     expect(view.editDetails.expiryReminderEnabled).toBe(false)
@@ -1272,7 +1319,7 @@ describe('ClusterView optional server details', () => {
     expect(view.editDetails.expiryReminderEnabled).toBe(false)
     expect(view.manageError.value).not.toBe('')
     expect(mocks.saveHostDetails).toHaveBeenLastCalledWith(target.id, {
-      expiresOn: '2028-02-29', price: '', trafficResetDay: 0, expectedResourceVersion: 'details-v1',
+      expiresOn: '2028-02-29', price: '', trafficResetDay: 0, trafficTotalReceivedThresholdGiB: 0, trafficTotalSentThresholdGiB: 0, expectedResourceVersion: 'details-v1',
     })
   })
 
@@ -1291,7 +1338,7 @@ describe('ClusterView optional server details', () => {
 
     await view.saveHost()
 
-    expect(mocks.saveHostDetails).toHaveBeenCalledWith(target.id, { expiresOn: '2028-02-29', price: '$5/month', trafficResetDay: 15, expectedResourceVersion: 'details-v1' })
+    expect(mocks.saveHostDetails).toHaveBeenCalledWith(target.id, { expiresOn: '2028-02-29', price: '$5/month', trafficResetDay: 15, trafficTotalReceivedThresholdGiB: 0, trafficTotalSentThresholdGiB: 0, expectedResourceVersion: 'details-v1' })
     expect(mocks.rename).toHaveBeenCalledWith(target.id, { name: 'New name', expectedResourceVersion: target.resourceVersion })
     expect(view.inventory.value?.items[0]?.name).toBe('New name')
     expect(view.manageError.value).toBe('')
@@ -1451,7 +1498,7 @@ describe('ClusterView optional server details', () => {
     mocks.saveHostDetails.mockRejectedValueOnce(new ApiError('Changed', 409, 'cluster_host_details_changed'))
     await view.saveHost()
     expect(mocks.saveHostDetails).toHaveBeenLastCalledWith(target.id, {
-      expiresOn: '2028-02-29', price: '$5/month', trafficResetDay: 31, expectedResourceVersion: 'details-v1',
+      expiresOn: '2028-02-29', price: '$5/month', trafficResetDay: 31, trafficTotalReceivedThresholdGiB: 0, trafficTotalSentThresholdGiB: 0, expectedResourceVersion: 'details-v1',
     })
     expect(view.manageError.value).toContain('重新编辑')
     expect(view.editDetails.expiresOn).toBe('2028-02-29')
@@ -1462,7 +1509,7 @@ describe('ClusterView optional server details', () => {
     mocks.saveHostDetails.mockResolvedValueOnce({ resourceVersion: 'details-v3' })
     await view.saveHost()
     expect(mocks.saveHostDetails).toHaveBeenLastCalledWith(target.id, {
-      expiresOn: '', price: '', trafficResetDay: 0, expectedResourceVersion: 'details-v2',
+      expiresOn: '', price: '', trafficResetDay: 0, trafficTotalReceivedThresholdGiB: 0, trafficTotalSentThresholdGiB: 0, expectedResourceVersion: 'details-v2',
     })
     expect(view.inventory.value?.hostDetails?.[target.id]).toEqual({ resourceVersion: 'details-v3' })
     expect(view.manageError.value).toBe('')

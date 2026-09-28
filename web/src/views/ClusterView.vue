@@ -102,7 +102,8 @@ const shareOpen = ref(false)
 const notificationsOpen = ref(false)
 const adding = ref(false)
 const saving = ref(false)
-const editDetails = reactive({ expiresOn: '', expiryReminderEnabled: false, price: '', trafficResetDay: '' as number | string, resourceVersion: '' })
+const editDetails = reactive({ expiresOn: '', expiryReminderEnabled: false, price: '', trafficResetDay: '' as number | string,
+  trafficTotalReceivedThresholdGiB: '' as number | string, trafficTotalSentThresholdGiB: '' as number | string, resourceVersion: '' })
 watch(() => editDetails.expiresOn, date => { if (!date) editDetails.expiryReminderEnabled = false })
 const manageError = ref('')
 const savedDetails = ref<ClusterHostDetailsValue>({})
@@ -1049,11 +1050,13 @@ function openManage(host: ClusterHost): void {
   editName.value = host.name
   savedName.value = host.name
   const details = inventory.value?.hostDetails?.[host.id]
-  savedDetails.value = { expiresOn: details?.expiresOn || '', expiryReminderEnabled: Boolean(details?.expiryReminderEnabled), price: details?.price || '', trafficResetDay: details?.trafficResetDay || 0 }
+  savedDetails.value = { ...details }
   editDetails.expiresOn = details?.expiresOn || ''
   editDetails.expiryReminderEnabled = Boolean(details?.expiryReminderEnabled)
   editDetails.price = details?.price || ''
   editDetails.trafficResetDay = details?.trafficResetDay || ''
+  editDetails.trafficTotalReceivedThresholdGiB = details?.trafficTotalReceivedThresholdGiB || ''
+  editDetails.trafficTotalSentThresholdGiB = details?.trafficTotalSentThresholdGiB || ''
   editDetails.resourceVersion = details?.resourceVersion || ''
   manageError.value = ''
   manageOpen.value = true
@@ -1110,14 +1113,25 @@ async function saveHost(): Promise<void> {
   const host = selected.value
   if (!host || saving.value || deleting.value || enablingMutualFiles.value || !editName.value.trim()) return
   const name = editName.value.trim()
+  const trafficLimits = {
+    trafficTotalReceivedThresholdGiB: Number(editDetails.trafficTotalReceivedThresholdGiB),
+    trafficTotalSentThresholdGiB: Number(editDetails.trafficTotalSentThresholdGiB),
+  }
+  if (Object.values(trafficLimits).some(value => !Number.isInteger(value) || value < 0 || value > 1_048_576)) {
+    manageError.value = t('cluster.details.trafficLimitInvalid')
+    return
+  }
   const details = {
     expiresOn: editDetails.expiresOn, price: editDetails.price.trim(), trafficResetDay: Number(editDetails.trafficResetDay) || 0,
+    ...trafficLimits,
     ...(editDetails.expiresOn && editDetails.expiryReminderEnabled ? { expiryReminderEnabled: true } : {}),
   }
   const detailsChanged = details.expiresOn !== (savedDetails.value.expiresOn || '')
     || Boolean(details.expiryReminderEnabled) !== Boolean(savedDetails.value.expiryReminderEnabled)
     || details.price !== (savedDetails.value.price || '')
     || details.trafficResetDay !== (savedDetails.value.trafficResetDay || 0)
+    || details.trafficTotalReceivedThresholdGiB !== (savedDetails.value.trafficTotalReceivedThresholdGiB || 0)
+    || details.trafficTotalSentThresholdGiB !== (savedDetails.value.trafficTotalSentThresholdGiB || 0)
   const trafficResetChanged = details.trafficResetDay !== (savedDetails.value.trafficResetDay || 0)
   manageError.value = ''
   if (detailsChanged && !editDetails.resourceVersion) {
@@ -2162,6 +2176,18 @@ onBeforeUnmount(() => {
             <input v-model="editDetails.trafficResetDay" type="number" min="1" max="31" step="1" :placeholder="t('cluster.details.resetPlaceholder')" :disabled="saving || deleting || enablingMutualFiles" />
           </label>
           <small>{{ t('cluster.details.hint') }}</small>
+        </div>
+        <div class="cluster-manage__details form-stack">
+          <strong>{{ t('cluster.details.trafficLimits') }}</strong>
+          <label class="field">
+            {{ t('cluster.details.receivedLimit') }}
+            <input v-model="editDetails.trafficTotalReceivedThresholdGiB" type="number" min="1" max="1048576" step="1" :placeholder="t('cluster.details.inheritGlobal')" :disabled="saving || deleting || enablingMutualFiles" />
+          </label>
+          <label class="field">
+            {{ t('cluster.details.sentLimit') }}
+            <input v-model="editDetails.trafficTotalSentThresholdGiB" type="number" min="1" max="1048576" step="1" :placeholder="t('cluster.details.inheritGlobal')" :disabled="saving || deleting || enablingMutualFiles" />
+          </label>
+          <small>{{ t('cluster.details.trafficLimitsHint') }}</small>
         </div>
         <p v-if="manageError" class="cluster-manage__details-error" role="alert">{{ manageError }}</p>
         <div class="cluster-manage__identity">

@@ -10,17 +10,25 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/kejilion/kejilion-panel/internal/contract"
 )
 
 // ClusterHostDetails are optional, center-owned server metadata, not telemetry.
 type ClusterHostDetails struct {
-	ExpiresOn             string `json:"expiresOn,omitempty"`
-	ExpiryReminderEnabled bool   `json:"expiryReminderEnabled,omitempty"`
-	Price                 string `json:"price,omitempty"`
-	TrafficResetDay       int    `json:"trafficResetDay,omitempty"`
+	ExpiresOn                        string `json:"expiresOn,omitempty"`
+	ExpiryReminderEnabled            bool   `json:"expiryReminderEnabled,omitempty"`
+	Price                            string `json:"price,omitempty"`
+	TrafficResetDay                  int    `json:"trafficResetDay,omitempty"`
+	TrafficTotalReceivedThresholdGiB int    `json:"trafficTotalReceivedThresholdGiB,omitempty"`
+	TrafficTotalSentThresholdGiB     int    `json:"trafficTotalSentThresholdGiB,omitempty"`
 }
 
 func ValidateClusterHostDetails(value ClusterHostDetails) error {
+	if value.TrafficTotalReceivedThresholdGiB < 0 || value.TrafficTotalReceivedThresholdGiB > contract.MaxTrafficThresholdGiB ||
+		value.TrafficTotalSentThresholdGiB < 0 || value.TrafficTotalSentThresholdGiB > contract.MaxTrafficThresholdGiB {
+		return ErrInvalidRecord
+	}
 	if value.ExpiryReminderEnabled && value.ExpiresOn == "" {
 		return ErrInvalidRecord
 	}
