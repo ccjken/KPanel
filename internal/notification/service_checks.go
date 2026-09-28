@@ -300,6 +300,16 @@ func (s *CheckAlerts) Close() {
 }
 
 func (s *CheckAlerts) evaluate(ctx context.Context) error {
+	channelEnabled := s.parent.store.stateSnapshot().Settings.Enabled
+	s.mu.Lock()
+	if !s.state.Settings.Enabled || len(s.state.Settings.Subscriptions) == 0 || !channelEnabled {
+		next := cloneCheckDisk(s.state)
+		next.Incidents = map[string]checkIncident{}
+		err := s.commit(next)
+		s.mu.Unlock()
+		return err
+	}
+	s.mu.Unlock()
 	fetch, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 	hosts := s.parent.hosts.Hosts(fetch)
@@ -471,13 +481,6 @@ func (s *CheckAlerts) deliver(ctx context.Context) error {
 	}
 	provider, _ := DetectProvider(credential)
 	now := s.parent.now()
-	fetch, cancelFetch := context.WithTimeout(ctx, 8*time.Second)
-	hosts := s.parent.hosts.Hosts(fetch)
-	cancelFetch()
-	hostMap := map[string]cluster.Host{}
-	for _, host := range hosts.Items {
-		hostMap[host.ID] = host
-	}
 	s.mu.Lock()
 	keys := []string{}
 	if s.state.Settings.Enabled {
@@ -495,6 +498,16 @@ func (s *CheckAlerts) deliver(ctx context.Context) error {
 		return a.NextAttempt.Before(b.NextAttempt)
 	})
 	s.mu.Unlock()
+	if len(keys) == 0 {
+		return nil
+	}
+	fetch, cancelFetch := context.WithTimeout(ctx, 8*time.Second)
+	hosts := s.parent.hosts.Hosts(fetch)
+	cancelFetch()
+	hostMap := map[string]cluster.Host{}
+	for _, host := range hosts.Items {
+		hostMap[host.ID] = host
+	}
 	attempted := 0
 	consumed := map[string]bool{}
 	displayNow := s.parent.displayTime(ctx, now)

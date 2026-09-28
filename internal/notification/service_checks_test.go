@@ -284,6 +284,24 @@ func TestCheckAlertsBatchSameHostAndTraditionalLocale(t *testing.T) {
 type benchmarkCheckHosts struct{ value cluster.HostList }
 
 func (s benchmarkCheckHosts) Hosts(context.Context) cluster.HostList { return s.value }
+
+type unexpectedCheckHosts struct{ t *testing.T }
+
+func (s unexpectedCheckHosts) Hosts(context.Context) cluster.HostList {
+	s.t.Fatal("idle notification worker requested telemetry")
+	return cluster.HostList{}
+}
+func TestCheckAlertsIdleWorkersDoNotCollectTelemetry(t *testing.T) {
+	s, _, _, _ := checkAlertFixture(t)
+	s.parent.hosts = unexpectedCheckHosts{t}
+	// Enabled with no pending delivery still must avoid a duplicate host poll.
+	deliverChecks(t, s)
+	s.state.Settings.Enabled = false
+	evaluateChecks(t, s)
+	s.state.Settings.Enabled = true
+	s.state.Settings.Subscriptions = nil
+	evaluateChecks(t, s)
+}
 func BenchmarkServiceCheckEvaluationFullCluster(b *testing.B) {
 	now := time.Now().UTC()
 	source := benchmarkCheckHosts{}
