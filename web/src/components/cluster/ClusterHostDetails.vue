@@ -18,14 +18,18 @@ const { t } = useI18n()
 .host-details {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.2rem 0.65rem;
-  margin-top: 0.25rem;
+  gap: 0.3rem 0.4rem;
+  margin-top: 0.4rem;
   color: var(--text-soft);
   font-size: 0.8125rem;
   line-height: 1.5;
 }
 .host-details > span {
   min-width: 0;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-subtle);
   overflow-wrap: anywhere;
 }
 </style>
