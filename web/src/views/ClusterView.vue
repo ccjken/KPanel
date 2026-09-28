@@ -2810,8 +2810,6 @@ onBeforeUnmount(() => {
 .cluster-card__metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1px;
-  background: var(--border);
   border-bottom: 1px solid var(--border);
 }
 
@@ -2819,7 +2817,10 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 5px;
   padding: 12px;
-  background: var(--surface);
+}
+
+.cluster-card__metrics > .cluster-metric-link + .cluster-metric-link {
+  border-left: 1px solid var(--border);
 }
 
 .cluster-card__metrics span {
