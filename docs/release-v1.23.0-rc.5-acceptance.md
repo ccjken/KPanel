@@ -85,7 +85,7 @@
 <!-- kpanel-release-metrics:end -->
 
 <!-- kpanel-release-process-metrics:start -->
-- 已记录发布流程异常或无效证据拦截次数：3
+- 已记录发布流程异常或无效证据拦截次数：4
 - 其中生产写操作开始后异常次数：0
 <!-- kpanel-release-process-metrics:end -->
 
@@ -116,6 +116,15 @@
     "impact": "尝试把根元素 CSS zoom=2 当作浏览器 200% 缩放时导致媒体断点不匹配和关闭按钮不可达；该模拟证据已排除，不能证明真实浏览器 200% 的产品行为。",
     "recoveryEvidence": "重新运行有效的 1440×900 与 720×450 组合预览，主机资料弹窗无横向溢出、阈值回读及通知控件通过；真实 200% 仍列为未验证。",
     "permanentAction": "发布负责人在下一次 UI 验收前提供真实浏览器缩放的固定用例，2026-10-06 复核；取得浏览器缩放状态和同场景截图前不将该维度标记通过。",
+    "historicalReleases": []
+  },
+  {
+    "fingerprint": "acceptance-integration/powershell/array-match",
+    "position": "before-production-write",
+    "count": 1,
+    "impact": "验收记录候选 CI 成功后的主线快进预检，把 PowerShell 数组的 -notmatch 当成布尔值，误报远端已移动；预检先于推送终止，远端 main 未变化。",
+    "recoveryEvidence": "远端 main 仍为 56e22383、验收分支为 97e21d6c；改用结构化引用逐项核对并重跑同 SHA 验收记录 CI 后再快进。",
+    "permanentAction": "Windows Git 引用预检统一对单个精确 ref 值比较，避免把数组筛选结果用作布尔判断；下轮验收前固定该入口并回归。",
     "historicalReleases": []
   }
 ]
