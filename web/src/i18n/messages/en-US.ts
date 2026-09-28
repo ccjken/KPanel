@@ -2,6 +2,21 @@ import type { LocaleMessages } from './zh-CN'
 import { passkeyEnUS } from '../passkeys'
 
 export const enUSMessages = {
+  'cluster.details.title': "Server details (optional)",
+  'cluster.details.expiresOn': "Server expiry date",
+  'cluster.details.price': "Server price",
+  'cluster.details.resetDay': "Traffic reset day",
+  'cluster.details.pricePlaceholder': "e.g. $5/month, €50/year",
+  'cluster.details.resetPlaceholder': "Day 1–31 each month; leave blank to hide",
+  'cluster.details.hint': "Blank fields stay hidden. These details are also public when cluster sharing is enabled. The reset day is informational (month-end in shorter months); it does not clear traffic counters.",
+  'cluster.details.expirySummary': "Expires {date}",
+  'cluster.details.priceSummary': "Price {price}",
+  'cluster.details.resetSummary': "Traffic resets on day {day}",
+  'cluster.details.save': "Save server details",
+  'cluster.details.saved': "Server details saved",
+  'cluster.details.conflict': "Server details changed. Close this dialog and refresh the list before editing again.",
+  'cluster.details.invalid': "Check the date, price and reset day (1–31).",
+  'cluster.details.failed': "Could not save. Your input is preserved; please retry.",
   ...passkeyEnUS,
   'desktop.groupRename': 'Rename group',
   'desktop.groupHoldCreate': 'Hold briefly to create a group',

@@ -1,6 +1,21 @@
 import { passkeyZhCN } from '../passkeys'
 
 export const zhCNMessages = {
+  'cluster.details.title': "服务器信息（可选）",
+  'cluster.details.expiresOn': "服务器到期时间",
+  'cluster.details.price': "服务器价格",
+  'cluster.details.resetDay': "流量重置日",
+  'cluster.details.pricePlaceholder': "例如 ¥99/年、$5/月",
+  'cluster.details.resetPlaceholder': "每月 1–31 日，留空不显示",
+  'cluster.details.hint': "留空不显示；开启集群分享后也会公开。重置日仅作展示，短月份按月末理解，不会清零累计流量。",
+  'cluster.details.expirySummary': "到期 {date}",
+  'cluster.details.priceSummary': "价格 {price}",
+  'cluster.details.resetSummary': "流量每月 {day} 日重置",
+  'cluster.details.save': "保存服务器信息",
+  'cluster.details.saved': "服务器信息已保存",
+  'cluster.details.conflict': "服务器信息已被修改，请关闭窗口、刷新列表后重新编辑。",
+  'cluster.details.invalid': "请检查日期、价格和重置日（1–31）。",
+  'cluster.details.failed': "保存失败，输入已保留，请重试。",
   ...passkeyZhCN,
   'desktop.groupRename': '重命名分组',
   'desktop.groupHoldCreate': '停留片刻以创建分组',

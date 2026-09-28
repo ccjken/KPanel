@@ -2,6 +2,21 @@ import type { LocaleMessages } from './zh-CN'
 import { passkeyZhTW } from '../passkeys'
 
 export const zhTWMessages = {
+  'cluster.details.title': "伺服器資訊（選填）",
+  'cluster.details.expiresOn': "伺服器到期時間",
+  'cluster.details.price': "伺服器價格",
+  'cluster.details.resetDay': "流量重置日",
+  'cluster.details.pricePlaceholder': "例如 ¥99/年、$5/月",
+  'cluster.details.resetPlaceholder': "每月 1–31 日，留空不顯示",
+  'cluster.details.hint': "留空不顯示；開啟叢集分享後也會公開。重置日僅作顯示，短月份按月底理解，不會清零累計流量。",
+  'cluster.details.expirySummary': "到期 {date}",
+  'cluster.details.priceSummary': "價格 {price}",
+  'cluster.details.resetSummary': "流量每月 {day} 日重置",
+  'cluster.details.save': "儲存伺服器資訊",
+  'cluster.details.saved': "伺服器資訊已儲存",
+  'cluster.details.conflict': "伺服器資訊已被修改，請關閉視窗、重新整理清單後再編輯。",
+  'cluster.details.invalid': "請檢查日期、價格和重置日（1–31）。",
+  'cluster.details.failed': "儲存失敗，輸入已保留，請重試。",
   ...passkeyZhTW,
   'desktop.groupRename': '重新命名分組',
   'desktop.groupHoldCreate': '停留片刻以建立群組',

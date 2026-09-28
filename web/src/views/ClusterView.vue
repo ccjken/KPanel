@@ -41,6 +41,7 @@ import ModalDialog from '@/components/common/ModalDialog.vue'
 import ClusterNotificationsDialog from '@/components/cluster/ClusterNotificationsDialog.vue'
 import ClusterTemporarySortMenu from '@/components/cluster/ClusterTemporarySortMenu.vue'
 import LightNodeHealth from '@/components/cluster/LightNodeHealth.vue'
+import ClusterHostDetails from '@/components/cluster/ClusterHostDetails.vue'
 import EmptyState from '@/components/feedback/EmptyState.vue'
 import ErrorState from '@/components/feedback/ErrorState.vue'
 import LoadingState from '@/components/feedback/LoadingState.vue'
@@ -100,6 +101,8 @@ const shareOpen = ref(false)
 const notificationsOpen = ref(false)
 const adding = ref(false)
 const saving = ref(false)
+const editDetails = reactive({ expiresOn: '', price: '', trafficResetDay: '' as number | string, resourceVersion: '' })
+const detailsError = ref('')
 const deleting = ref(false)
 const enablingMutualFiles = ref(false)
 const generatingCode = ref(false)
@@ -1024,6 +1027,12 @@ function openManage(host: ClusterHost): void {
   selected.value = host
   editResourceVersion.value = host.resourceVersion
   editName.value = host.name
+  const details = inventory.value?.hostDetails?.[host.id]
+  editDetails.expiresOn = details?.expiresOn || ''
+  editDetails.price = details?.price || ''
+  editDetails.trafficResetDay = details?.trafficResetDay || ''
+  editDetails.resourceVersion = details?.resourceVersion || ''
+  detailsError.value = ''
   manageOpen.value = true
 }
 
@@ -1089,6 +1098,34 @@ async function saveName(): Promise<void> {
     toast.success('主机名称已更新')
   } catch (reason) {
     toast.danger('保存失败', friendlyError(reason, '请刷新后重试。'))
+  } finally {
+    saving.value = false
+  }
+}
+
+async function saveDetails(): Promise<void> {
+  const host = selected.value
+  if (!host || saving.value || deleting.value || enablingMutualFiles.value || !editDetails.resourceVersion) return
+  saving.value = true
+  detailsError.value = ''
+  try {
+    const updated = await api.cluster.saveHostDetails(host.id, {
+      expiresOn: editDetails.expiresOn,
+      price: editDetails.price.trim(),
+      trafficResetDay: Number(editDetails.trafficResetDay) || 0,
+      expectedResourceVersion: editDetails.resourceVersion,
+    })
+    if (inventory.value) {
+      inventory.value.hostDetails = { ...inventory.value.hostDetails, [host.id]: updated }
+    }
+    editDetails.resourceVersion = updated.resourceVersion
+    toast.success(t('cluster.details.saved'))
+  } catch (reason) {
+    detailsError.value = reason instanceof ApiError && reason.code === 'cluster_host_details_changed'
+      ? t('cluster.details.conflict')
+      : reason instanceof ApiError && reason.code === 'cluster_host_details_invalid'
+        ? t('cluster.details.invalid')
+        : t('cluster.details.failed')
   } finally {
     saving.value = false
   }
@@ -1195,11 +1232,6 @@ function transportSecurityDescription(host: ClusterHost): string {
     return '集群监控数据端到端加密；普通浏览器管理页面仍是 HTTP'
   }
   return '验证目标证书并通过 TLS 加密集群连接'
-}
-
-function shortFingerprint(value?: string): string {
-  if (!value || value.length <= 26) return value || ''
-  return `${value.slice(0, 16)}…${value.slice(-8)}`
 }
 
 function onVisibilityChange(): void {
@@ -1454,16 +1486,7 @@ onBeforeUnmount(() => {
             >
               {{ displayHostAddress(host) || phrase('公网 IP 未获取') }}
             </span>
-            <small
-              v-if="!host.isLocal && host.peerFingerprint"
-              class="cluster-card__fingerprint"
-              :title="host.peerFingerprint"
-            >
-              身份指纹 {{ shortFingerprint(host.peerFingerprint) }}
-            </small>
-            <small v-else-if="host.kind === 'light_node'" class="cluster-card__fingerprint">
-              {{ phrase(lightNodeCapabilitySummary(host)) }}
-            </small>
+            <ClusterHostDetails :details="inventory?.hostDetails?.[host.id]" />
           </div>
           <button
             class="icon-button icon-button--small"
@@ -1650,7 +1673,7 @@ onBeforeUnmount(() => {
           <ShieldCheck :size="19" />
           <span>
             <strong>{{ phrase('公开字段经过白名单过滤') }}</strong>
-            <small>{{ phrase('仅展示名称、状态、地区、系统和资源使用情况；不公开 IP、面板地址、节点 ID、身份指纹、错误详情、版本或管理入口。') }}</small>
+            <small>{{ phrase('展示名称、状态、地区、系统、资源使用情况及已填写的服务器信息；不公开 IP、面板地址、节点 ID、身份指纹、错误详情、版本或管理入口。') }}</small>
           </span>
         </section>
 
@@ -2074,6 +2097,26 @@ onBeforeUnmount(() => {
           {{ phrase('显示名称') }}
           <input v-model="editName" maxlength="80" autocomplete="off" />
         </label>
+        <form class="cluster-manage__details form-stack" @submit.prevent="saveDetails">
+          <strong>{{ t('cluster.details.title') }}</strong>
+          <label class="field">
+            {{ t('cluster.details.expiresOn') }}
+            <input v-model="editDetails.expiresOn" type="date" min="0001-01-01" max="9999-12-31" />
+          </label>
+          <label class="field">
+            {{ t('cluster.details.price') }}
+            <input v-model="editDetails.price" maxlength="40" :placeholder="t('cluster.details.pricePlaceholder')" />
+          </label>
+          <label class="field">
+            {{ t('cluster.details.resetDay') }}
+            <input v-model="editDetails.trafficResetDay" type="number" min="1" max="31" step="1" :placeholder="t('cluster.details.resetPlaceholder')" />
+          </label>
+          <small>{{ t('cluster.details.hint') }}</small>
+          <p v-if="detailsError" class="cluster-manage__details-error" role="alert">{{ detailsError }}</p>
+          <button class="button button--secondary" type="submit" :disabled="saving || deleting || enablingMutualFiles || !editDetails.resourceVersion">
+            {{ t('cluster.details.save') }}
+          </button>
+        </form>
         <div class="cluster-manage__identity">
           <template v-if="selected.kind !== 'light_node'">
             <span>{{ phrase('目标地址') }}</span><code>{{ displayHostAddress(selected) }}</code>
@@ -2085,6 +2128,9 @@ onBeforeUnmount(() => {
             </code>
           </template>
           <span>{{ phrase('连接方式') }}</span><code>{{ phrase(transportSecurityLabel(selected)) }}</code>
+          <template v-if="selected.kind === 'light_node'">
+            <span>{{ phrase('轻量节点') }}</span><span>{{ phrase(lightNodeCapabilitySummary(selected)) }}</span>
+          </template>
           <template v-if="selected.peerFingerprint">
             <span>{{ phrase('身份指纹') }}</span><code>{{ selected.peerFingerprint }}</code>
           </template>
@@ -2156,6 +2202,12 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.cluster-manage__details {
+  padding-block: 1rem;
+  border-block: 1px solid var(--border);
+}
+.cluster-manage__details small { font-size: 0.8125rem; line-height: 1.5; color: var(--text-soft); }
+.cluster-manage__details-error { color: var(--danger); }
 .cluster-page {
   --cluster-accent: #6d5dfc;
   align-content: start;
@@ -2605,18 +2657,6 @@ onBeforeUnmount(() => {
 
 .cluster-card__origin:is(a, button):hover {
   color: var(--brand);
-}
-
-.cluster-card__fingerprint {
-  display: block;
-  max-width: 100%;
-  margin-top: 3px;
-  overflow: hidden;
-  color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .cluster-origin-help.is-secure {

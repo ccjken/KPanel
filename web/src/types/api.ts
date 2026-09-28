@@ -249,6 +249,7 @@ export interface LightNodeHealth {
 }
 
 export interface ClusterHostList {
+  hostDetails?: Record<string, ClusterHostDetails & { resourceVersion: string }>
   items: ClusterHost[]
   total: number
   remoteTotal: number
@@ -256,6 +257,12 @@ export interface ClusterHostList {
   pollIntervalSeconds: number
   nodeId: string
   hostOrder?: ClusterHostOrderPreference
+}
+
+export interface ClusterHostDetails {
+  expiresOn?: string
+  price?: string
+  trafficResetDay?: number
 }
 
 export interface ClusterHostOrderPreference {
@@ -344,7 +351,7 @@ export interface ClusterNotificationResources {
 
 export type PublicClusterShareHostState = 'online' | 'degraded' | 'offline' | 'pending'
 
-export interface PublicClusterShareHost {
+export interface PublicClusterShareHost extends ClusterHostDetails {
 	id: string
 	name: string
 	state: PublicClusterShareHostState

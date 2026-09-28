@@ -211,7 +211,7 @@ export default [
   ['公开链接已复制', 'Public link copied'],
   ['公开链接已重置', 'Public link reset'],
   ['公开链接重置失败', 'Could not reset public link'],
-  ['仅展示名称、状态、地区、系统和资源使用情况；不公开 IP、面板地址、节点 ID、身份指纹、错误详情、版本或管理入口。', 'Only names, status, location, operating systems, and resource usage are shown. IP addresses, panel origins, node IDs, fingerprints, error details, versions, and management links are never exposed.'],
+  ['展示名称、状态、地区、系统、资源使用情况及已填写的服务器信息；不公开 IP、面板地址、节点 ID、身份指纹、错误详情、版本或管理入口。', 'Names, status, location, operating systems, resource usage, and configured server details are shown. IP addresses, panel origins, node IDs, fingerprints, error details, versions, and management links are never exposed.'],
   ['默认关闭；关闭后现有链接立即返回 404。', 'Disabled by default. Existing links return 404 immediately after sharing is disabled.'],
   ['分享设置保存失败', 'Could not save sharing settings'],
   ['分享设置读取失败', 'Could not load sharing settings'],

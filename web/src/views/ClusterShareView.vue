@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ClusterHostDetails from '@/components/cluster/ClusterHostDetails.vue'
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
@@ -290,6 +291,7 @@ onBeforeUnmount(() => {
                 <span>{{ locationLabel(host) }}</span>
                 <em>{{ host.location.isp || '网络信息未公开' }}</em>
               </p>
+              <ClusterHostDetails :details="host" />
             </div>
             <div class="share-card__aside">
               <span class="share-status" :class="`is-${host.state}`">

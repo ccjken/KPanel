@@ -59,19 +59,22 @@ type publicClusterShareSnapshot struct {
 }
 
 type publicClusterShareHost struct {
-	ID            string                     `json:"id"`
-	Name          string                     `json:"name"`
-	State         string                     `json:"state"`
-	OS            string                     `json:"os,omitempty"`
-	Architecture  string                     `json:"architecture,omitempty"`
-	UptimeSeconds uint64                     `json:"uptimeSeconds,omitempty"`
-	Load          publicClusterShareLoad     `json:"load,omitempty"`
-	CPU           publicClusterShareCPU      `json:"cpu,omitempty"`
-	Memory        publicClusterShareCapacity `json:"memory,omitempty"`
-	Disk          publicClusterShareCapacity `json:"disk,omitempty"`
-	Network       publicClusterShareNetwork  `json:"network,omitempty"`
-	Location      publicClusterShareLocation `json:"location,omitempty"`
-	CollectedAt   *time.Time                 `json:"collectedAt,omitempty"`
+	ExpiresOn       string                     `json:"expiresOn,omitempty"`
+	Price           string                     `json:"price,omitempty"`
+	TrafficResetDay int                        `json:"trafficResetDay,omitempty"`
+	ID              string                     `json:"id"`
+	Name            string                     `json:"name"`
+	State           string                     `json:"state"`
+	OS              string                     `json:"os,omitempty"`
+	Architecture    string                     `json:"architecture,omitempty"`
+	UptimeSeconds   uint64                     `json:"uptimeSeconds,omitempty"`
+	Load            publicClusterShareLoad     `json:"load,omitempty"`
+	CPU             publicClusterShareCPU      `json:"cpu,omitempty"`
+	Memory          publicClusterShareCapacity `json:"memory,omitempty"`
+	Disk            publicClusterShareCapacity `json:"disk,omitempty"`
+	Network         publicClusterShareNetwork  `json:"network,omitempty"`
+	Location        publicClusterShareLocation `json:"location,omitempty"`
+	CollectedAt     *time.Time                 `json:"collectedAt,omitempty"`
 }
 
 type publicClusterShareLoad struct {
@@ -324,6 +327,7 @@ func (s *Server) clusterShareSnapshot(ctx context.Context, value store.ClusterSh
 		return s.clusterShareCache.value
 	}
 	inventory := s.cluster.Hosts(ctx)
+	details := s.store.ClusterHostDetails()
 	result := publicClusterShareSnapshot{
 		Title: value.Title, Description: value.Description, GeneratedAt: now,
 		Items: make([]publicClusterShareHost, 0, len(inventory.Items)),
@@ -334,7 +338,10 @@ func (s *Server) clusterShareSnapshot(ctx context.Context, value store.ClusterSh
 	for _, host := range orderClusterShareHosts(inventory.Items, value.HostOrder) {
 		item := publicClusterShareHost{
 			ID: publicClusterShareHostID(value.Token, host.ID), Name: host.Name,
-			State: publicClusterShareState(host.State),
+			State:           publicClusterShareState(host.State),
+			ExpiresOn:       details[host.ID].ExpiresOn,
+			Price:           details[host.ID].Price,
+			TrafficResetDay: details[host.ID].TrafficResetDay,
 		}
 		if item.State == "online" {
 			result.Online++

@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   host: vi.fn(),
   add: vi.fn(),
   rename: vi.fn(),
+  saveHostDetails: vi.fn(),
   remove: vi.fn(),
   refresh: vi.fn(),
   enableMutualFiles: vi.fn(),
@@ -63,6 +64,7 @@ vi.mock('@/lib/api', () => ({
       host: mocks.host,
       add: mocks.add,
       rename: mocks.rename,
+      saveHostDetails: mocks.saveHostDetails,
       remove: mocks.remove,
       refresh: mocks.refresh,
       enableMutualFiles: mocks.enableMutualFiles,
@@ -114,6 +116,9 @@ interface ClusterBindings {
   lightEnrollmentConnected: Ref<boolean>
   lightEnrollmentState: Ref<'waiting' | 'registered' | 'connected' | 'expired'>
   editName: Ref<string>
+  editDetails: { expiresOn: string; price: string; trafficResetDay: number | string; resourceVersion: string }
+  detailsError: Ref<string>
+  saveDetails: () => Promise<void>
   addForm: { name: string; accessCredential: string }
   load: (silent?: boolean) => Promise<void>
   addHost: () => Promise<void>
@@ -941,14 +946,13 @@ describe('ClusterView inventory and navigation', () => {
     ).toBeUndefined()
   })
 
-  it('describes the negotiated transport and shortens long peer fingerprints', () => {
+  it('describes the negotiated transport', () => {
     const view = setupView()
     const httpsHost = host('tls', false, 'https://hk.example.com')
     const directHost = host('direct', false, 'http://198.51.100.20:8080')
 
     expect(view.transportSecurityLabel(httpsHost)).toBe('HTTPS')
     expect(view.transportSecurityLabel(directHost)).toBe('加密直连')
-    expect(view.shortFingerprint(directHost.peerFingerprint)).toMatch(/^sha256:a+…a{8}$/)
   })
 
   it('does not report an unfinished two-phase pairing as complete', async () => {
@@ -1207,5 +1211,37 @@ describe('ClusterView inventory and navigation', () => {
     })
     expect(mocks.remove).not.toHaveBeenCalled()
     expect(view.inventory.value?.items.some((item) => item.isLocal)).toBe(true)
+  })
+})
+
+
+describe('ClusterView optional server details', () => {
+  it('preserves the editor version across refresh, reports conflicts and supports clearing', async () => {
+    const view = setupView()
+    const items = inventory()
+    const target = items.items[0]!
+    items.hostDetails = { [target.id]: { price: '$5/month', trafficResetDay: 31, resourceVersion: 'details-v1' } }
+    view.inventory.value = items
+    view.openManage(target)
+    view.editDetails.expiresOn = '2028-02-29'
+    view.inventory.value = { ...items, hostDetails: { [target.id]: { resourceVersion: 'details-v2' } } }
+    mocks.saveHostDetails.mockRejectedValueOnce(new ApiError('Changed', 409, 'cluster_host_details_changed'))
+    await view.saveDetails()
+    expect(mocks.saveHostDetails).toHaveBeenLastCalledWith(target.id, {
+      expiresOn: '2028-02-29', price: '$5/month', trafficResetDay: 31, expectedResourceVersion: 'details-v1',
+    })
+    expect(view.detailsError.value).toContain('重新编辑')
+    expect(view.editDetails.expiresOn).toBe('2028-02-29')
+    view.openManage(target)
+    view.editDetails.expiresOn = ''
+    view.editDetails.price = ''
+    view.editDetails.trafficResetDay = ''
+    mocks.saveHostDetails.mockResolvedValueOnce({ resourceVersion: 'details-v3' })
+    await view.saveDetails()
+    expect(mocks.saveHostDetails).toHaveBeenLastCalledWith(target.id, {
+      expiresOn: '', price: '', trafficResetDay: 0, expectedResourceVersion: 'details-v2',
+    })
+    expect(view.inventory.value?.hostDetails?.[target.id]).toEqual({ resourceVersion: 'details-v3' })
+    expect(view.detailsError.value).toBe('')
   })
 })

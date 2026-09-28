@@ -23,6 +23,7 @@ import type {
   AuthStatus,
   ClusterController,
   ClusterHost,
+  ClusterHostDetails,
   ClusterHostList,
   ClusterHostOrderPreference,
   ClusterLightBatchEnrollment,
@@ -1698,6 +1699,8 @@ export const api = {
       request<PublicClusterShareSnapshot>(`/public/cluster-share/${encodeURIComponent(token)}`, { signal }),
     host: (id: string, signal?: AbortSignal): Promise<ClusterHost> =>
       request<ClusterHost>(`/cluster/hosts/${encodeURIComponent(id)}`, { signal }),
+    saveHostDetails: (id: string, body: ClusterHostDetails & { expectedResourceVersion: string }): Promise<ClusterHostDetails & { resourceVersion: string }> =>
+      request(`/cluster/hosts/${encodeURIComponent(id)}/details`, { method: 'PUT', body }),
     add: (body: { name?: string; origin: string; pairingCode: string }): Promise<ClusterHost> =>
       request<ClusterHost>('/cluster/hosts', { method: 'POST', body }),
     rename: (
