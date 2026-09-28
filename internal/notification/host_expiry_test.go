@@ -224,3 +224,78 @@ func TestHostExpiryCancelsPendingAfterUncheckRenewalOrRemoval(t *testing.T) {
 		})
 	}
 }
+
+type expiryMultiHostSource struct{ hosts []cluster.Host }
+
+func (s expiryMultiHostSource) Hosts(context.Context) cluster.HostList {
+	return cluster.HostList{Items: s.hosts, Total: len(s.hosts), MaxHosts: cluster.MaxHosts}
+}
+
+type expiryAfterFirstTelegram struct {
+	notificationTestTelegram
+	afterFirst func()
+}
+
+func (s *expiryAfterFirstTelegram) SendMessage(ctx context.Context, credential string, chatID int64, message string) error {
+	if err := s.notificationTestTelegram.SendMessage(ctx, credential, chatID, message); err != nil {
+		return err
+	}
+	if s.messageCount() == 1 && s.afterFirst != nil {
+		s.afterFirst()
+	}
+	return nil
+}
+func TestHostExpiryRetryCancellationDuringBatch(t *testing.T) {
+	for _, change := range []string{"uncheck", "renew", "clear"} {
+		t.Run(change, func(t *testing.T) {
+			now := time.Date(2026, 9, 23, 8, 0, 0, 0, time.UTC)
+			first := newNotificationTestHost(now).host
+			second := first
+			second.ID, second.Name = "host-2", "Second host"
+			clock := &notificationTestClock{now: now}
+			details := map[string]HostExpiry{
+				first.ID:  {ExpiresOn: "2026-09-30", Enabled: true},
+				second.ID: {ExpiresOn: "2026-09-30", Enabled: true},
+			}
+			tg := &expiryAfterFirstTelegram{}
+			s, err := NewService(Config{DataDir: t.TempDir(), Hosts: expiryMultiHostSource{[]cluster.Host{first, second}}, Telegram: tg, Now: clock.Now,
+				HostExpiries: func() map[string]HostExpiry {
+					result := map[string]HostExpiry{}
+					for id, value := range details {
+						result[id] = value
+					}
+					return result
+				},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer s.Close()
+			if _, err := s.Configure(context.Background(), UpdateInput{Enabled: true, Rules: DefaultRules(), TelegramBotToken: testBotToken, ExpectedResourceVersion: s.Snapshot().ResourceVersion}); err != nil {
+				t.Fatal(err)
+			}
+			tg.sendErr = errors.New("channel unavailable")
+			tickHistory(t, s, clock, 1)
+			if len(expiryEvents(t, s)) != 2 {
+				t.Fatal("setup did not create two pending retries")
+			}
+			tg.sendErr = nil
+			tg.afterFirst = func() {
+				switch change {
+				case "uncheck":
+					details[second.ID] = HostExpiry{ExpiresOn: "2026-09-30"}
+				case "renew":
+					details[second.ID] = HostExpiry{ExpiresOn: "2027-09-30", Enabled: true}
+				case "clear":
+					delete(details, second.ID)
+				}
+			}
+			clock.Advance(5 * time.Minute)
+			tickHistory(t, s, clock, 1)
+			events := expiryEvents(t, s)
+			if tg.messageCount() != 1 || events[0].Delivery != "cancelled" || events[0].LastErrorCode != "expiry_reminder_changed" {
+				t.Fatalf("disabled unsent retry was delivered: sends=%d second=%+v", tg.messageCount(), events[0])
+			}
+		})
+	}
+}

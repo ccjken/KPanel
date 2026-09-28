@@ -106,6 +106,15 @@ func (s *Service) deliverHistory(ctx context.Context, state persistedState, host
 	channel := state.Telegram
 	for _, i := range indices {
 		event := &history.Events[i]
+		// Host metadata can change while an earlier message in this batch is in flight.
+		if event.Rule == serverExpiryRuleKey {
+			current := s.expirySnapshot()[event.HostID]
+			if !current.Enabled || current.ExpiresOn != event.ExpiryDate {
+				event.Delivery = "cancelled"
+				event.LastErrorCode = "expiry_reminder_changed"
+				continue
+			}
+		}
 		sendCtx, cancel := context.WithTimeout(ctx, channelSendTimeout)
 		err := s.sendChannel(sendCtx, event.Provider, credential, channel, event.Message)
 		cancel()
