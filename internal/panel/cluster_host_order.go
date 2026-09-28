@@ -22,15 +22,22 @@ type clusterHostOrderResponse struct {
 
 type clusterHostsResponse struct {
 	cluster.HostList
-	HostOrder clusterHostOrderResponse `json:"hostOrder"`
+	HostOrder   clusterHostOrderResponse              `json:"hostOrder"`
+	HostDetails map[string]clusterHostDetailsResponse `json:"hostDetails"`
 }
 
 func (s *Server) clusterHostsView(ctx context.Context) clusterHostsResponse {
 	hosts := s.cluster.Hosts(ctx)
 	value, configured, version := s.store.ClusterHostOrder()
+	values := s.store.ClusterHostDetails()
+	details := make(map[string]clusterHostDetailsResponse, len(hosts.Items))
+	for _, host := range hosts.Items {
+		details[host.ID] = clusterHostDetailsView(host.ID, values[host.ID])
+	}
 	return clusterHostsResponse{
-		HostList:  hosts,
-		HostOrder: clusterHostOrderView(value, configured, version),
+		HostList:    hosts,
+		HostOrder:   clusterHostOrderView(value, configured, version),
+		HostDetails: details,
 	}
 }
 

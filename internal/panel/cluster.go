@@ -187,6 +187,15 @@ func (s *Server) handleClusterHost(w http.ResponseWriter, r *http.Request) {
 		s.handleClusterHostRefresh(w, r, id)
 		return
 	}
+	if strings.HasSuffix(rest, "/details") {
+		id := strings.TrimSuffix(rest, "/details")
+		if id == "" || strings.Contains(id, "/") {
+			s.writeProblem(w, r, http.StatusNotFound, "route_not_found", "Route not found", "")
+			return
+		}
+		s.handleClusterHostDetails(w, r, id)
+		return
+	}
 	if strings.HasSuffix(rest, "/mutual-files") {
 		id := strings.TrimSuffix(rest, "/mutual-files")
 		if strings.Contains(id, "/") || r.Method != http.MethodPost {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, useId, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from '@/i18n'
 import { phraseCatalogVersion, translatePhrase, usePhraseCatalog } from '@/i18n/phrase'
@@ -41,6 +41,7 @@ import ModalDialog from '@/components/common/ModalDialog.vue'
 import ClusterNotificationsDialog from '@/components/cluster/ClusterNotificationsDialog.vue'
 import ClusterTemporarySortMenu from '@/components/cluster/ClusterTemporarySortMenu.vue'
 import LightNodeHealth from '@/components/cluster/LightNodeHealth.vue'
+import ClusterHostDetails from '@/components/cluster/ClusterHostDetails.vue'
 import EmptyState from '@/components/feedback/EmptyState.vue'
 import ErrorState from '@/components/feedback/ErrorState.vue'
 import LoadingState from '@/components/feedback/LoadingState.vue'
@@ -76,6 +77,7 @@ import { useToast } from '@/stores/toast'
 import type {
   ClusterController,
   ClusterHost,
+  ClusterHostDetails as ClusterHostDetailsValue,
   ClusterHostList,
   ClusterLightBatchEnrollment,
   ClusterLightEnrollment,
@@ -100,6 +102,11 @@ const shareOpen = ref(false)
 const notificationsOpen = ref(false)
 const adding = ref(false)
 const saving = ref(false)
+const editDetails = reactive({ expiresOn: '', price: '', trafficResetDay: '' as number | string, resourceVersion: '' })
+const manageError = ref('')
+const savedDetails = ref<ClusterHostDetailsValue>({})
+const savedName = ref('')
+const manageFormID = `cluster-manage-${useId()}`
 const deleting = ref(false)
 const enablingMutualFiles = ref(false)
 const generatingCode = ref(false)
@@ -266,15 +273,23 @@ const temporarySortOptions = computed(() => [
   { value: 'memory' as const, label: phrase('内存使用率') },
   { value: 'disk' as const, label: phrase('磁盘使用率') },
   { value: 'traffic' as const, label: phrase('总流量（收发合计）') },
+  { value: 'expiresOn' as const, label: t('cluster.details.expiresOn') },
+  { value: 'price' as const, label: t('cluster.details.price') },
 ])
 const filteredHosts = computed(() => sortClusterHostsTemporarily(
   matchingHosts.value,
   temporarySortKey.value,
   temporarySortDirection.value,
+  inventory.value?.hostDetails,
 ))
-const temporarySortDirectionLabel = computed(() => temporarySortDirection.value === 'desc'
+const temporarySortDirectionLabel = computed(() => temporarySortKey.value === 'expiresOn'
+  ? t(temporarySortDirection.value === 'asc' ? 'cluster.details.sortEarlier' : 'cluster.details.sortLater')
+  : temporarySortDirection.value === 'desc'
   ? phrase('当前从高到低；切换为从低到高')
   : phrase('当前从低到高；切换为从高到低'))
+function onTemporarySortChange(key: ClusterHostTemporarySortKey): void {
+  if (key === 'expiresOn' || key === 'price') temporarySortDirection.value = 'asc'
+}
 const hostOrderControlTitle = computed(() => {
   if (hostOrderSaving.value) return phrase('正在保存主机顺序')
   if (search.value.trim()) return phrase('清除搜索后可调整顺序')
@@ -462,9 +477,12 @@ async function load(silent = false): Promise<void> {
   loadInFlight = true
   if (!silent && !inventory.value) loading.value = true
   else refreshing.value = true
-  loadController = new AbortController()
+  const controller = new AbortController()
+  loadController = controller
   try {
-    inventory.value = await api.cluster.hosts(loadController.signal)
+    const freshInventory = await api.cluster.hosts(controller.signal)
+    if (controller.signal.aborted) return
+    inventory.value = freshInventory
     await applyPanelHostOrder(inventory.value.items, inventory.value.hostOrder)
     if (selected.value) {
       const fresh = inventory.value.items.find((host) => host.id === selected.value?.id)
@@ -1024,6 +1042,14 @@ function openManage(host: ClusterHost): void {
   selected.value = host
   editResourceVersion.value = host.resourceVersion
   editName.value = host.name
+  savedName.value = host.name
+  const details = inventory.value?.hostDetails?.[host.id]
+  savedDetails.value = { expiresOn: details?.expiresOn || '', price: details?.price || '', trafficResetDay: details?.trafficResetDay || 0 }
+  editDetails.expiresOn = details?.expiresOn || ''
+  editDetails.price = details?.price || ''
+  editDetails.trafficResetDay = details?.trafficResetDay || ''
+  editDetails.resourceVersion = details?.resourceVersion || ''
+  manageError.value = ''
   manageOpen.value = true
 }
 
@@ -1074,21 +1100,55 @@ async function enableMutualFiles(): Promise<void> {
   }
 }
 
-async function saveName(): Promise<void> {
+async function saveHost(): Promise<void> {
   const host = selected.value
-  if (!host || saving.value || enablingMutualFiles.value || !editName.value.trim()) return
+  if (!host || saving.value || deleting.value || enablingMutualFiles.value || !editName.value.trim()) return
+  const name = editName.value.trim()
+  const details = { expiresOn: editDetails.expiresOn, price: editDetails.price.trim(), trafficResetDay: Number(editDetails.trafficResetDay) || 0 }
+  const detailsChanged = details.expiresOn !== (savedDetails.value.expiresOn || '')
+    || details.price !== (savedDetails.value.price || '')
+    || details.trafficResetDay !== (savedDetails.value.trafficResetDay || 0)
+  manageError.value = ''
+  if (detailsChanged && !editDetails.resourceVersion) {
+    manageError.value = t('cluster.details.unavailable')
+    return
+  }
   saving.value = true
+  let phase: 'details' | 'name' = 'details'
+  let detailsWritten = false
   try {
-    const updated = await api.cluster.rename(host.id, {
-      name: editName.value.trim(),
-      expectedResourceVersion: editResourceVersion.value,
-    })
-    upsertHost(updated)
-    selected.value = updated
-    editResourceVersion.value = updated.resourceVersion
-    toast.success('主机名称已更新')
+    if (detailsChanged) {
+      const updated = await api.cluster.saveHostDetails(host.id, {
+        ...details, expectedResourceVersion: editDetails.resourceVersion,
+      })
+      // A request started before this write may contain stale inventory.
+      loadController?.abort()
+      if (inventory.value) inventory.value.hostDetails = { ...inventory.value.hostDetails, [host.id]: updated }
+      editDetails.resourceVersion = updated.resourceVersion
+      savedDetails.value = { ...updated }
+      detailsWritten = true
+    }
+    phase = 'name'
+    if (name !== savedName.value) {
+      const updated = await api.cluster.rename(host.id, { name, expectedResourceVersion: editResourceVersion.value })
+      loadController?.abort()
+      upsertHost(updated)
+      selected.value = updated
+      editResourceVersion.value = updated.resourceVersion
+      savedName.value = updated.name
+    }
+    toast.success(t('cluster.details.saved'))
   } catch (reason) {
-    toast.danger('保存失败', friendlyError(reason, '请刷新后重试。'))
+    if (phase === 'details') {
+      manageError.value = reason instanceof ApiError && reason.code === 'cluster_host_details_changed'
+        ? t('cluster.details.conflict')
+        : reason instanceof ApiError && reason.code === 'cluster_host_details_invalid'
+          ? t('cluster.details.invalid')
+          : t('cluster.details.failed')
+    } else {
+      manageError.value = (detailsWritten ? `${t('cluster.details.nameFailedAfterDetails')} ` : '')
+        + friendlyError(reason, t('cluster.details.failed'))
+    }
   } finally {
     saving.value = false
   }
@@ -1197,11 +1257,6 @@ function transportSecurityDescription(host: ClusterHost): string {
   return '验证目标证书并通过 TLS 加密集群连接'
 }
 
-function shortFingerprint(value?: string): string {
-  if (!value || value.length <= 26) return value || ''
-  return `${value.slice(0, 16)}…${value.slice(-8)}`
-}
-
 function onVisibilityChange(): void {
   if (!document.hidden && windowActive.value) void load(true)
 }
@@ -1302,6 +1357,8 @@ onBeforeUnmount(() => {
           <div class="cluster-sort" role="group" aria-label="临时主机排序">
             <ClusterTemporarySortMenu
               v-model="temporarySortKey"
+              :title="temporarySortKey === 'price' ? t('cluster.details.priceSortHint') : undefined"
+              @update:model-value="onTemporarySortChange"
               :options="temporarySortOptions"
               :label="phrase('临时排序方式')"
               :prefix="phrase('临时排序')"
@@ -1454,16 +1511,7 @@ onBeforeUnmount(() => {
             >
               {{ displayHostAddress(host) || phrase('公网 IP 未获取') }}
             </span>
-            <small
-              v-if="!host.isLocal && host.peerFingerprint"
-              class="cluster-card__fingerprint"
-              :title="host.peerFingerprint"
-            >
-              身份指纹 {{ shortFingerprint(host.peerFingerprint) }}
-            </small>
-            <small v-else-if="host.kind === 'light_node'" class="cluster-card__fingerprint">
-              {{ phrase(lightNodeCapabilitySummary(host)) }}
-            </small>
+            <ClusterHostDetails :details="inventory?.hostDetails?.[host.id]" />
           </div>
           <button
             class="icon-button icon-button--small"
@@ -1650,7 +1698,7 @@ onBeforeUnmount(() => {
           <ShieldCheck :size="19" />
           <span>
             <strong>{{ phrase('公开字段经过白名单过滤') }}</strong>
-            <small>{{ phrase('仅展示名称、状态、地区、系统和资源使用情况；不公开 IP、面板地址、节点 ID、身份指纹、错误详情、版本或管理入口。') }}</small>
+            <small>{{ phrase('展示名称、状态、地区、系统、资源使用情况及已填写的服务器信息；不公开 IP、面板地址、节点 ID、身份指纹、错误详情、版本或管理入口。') }}</small>
           </span>
         </section>
 
@@ -2069,11 +2117,28 @@ onBeforeUnmount(() => {
       size="small"
       @close="closeManage"
     >
-      <div v-if="selected" class="form-stack">
+      <form v-if="selected" :id="manageFormID" class="form-stack" @submit.prevent="saveHost">
         <label class="field">
           {{ phrase('显示名称') }}
-          <input v-model="editName" maxlength="80" autocomplete="off" />
+          <input v-model="editName" required maxlength="80" autocomplete="off" :disabled="saving || deleting || enablingMutualFiles" />
         </label>
+        <div class="cluster-manage__details form-stack">
+          <strong>{{ t('cluster.details.title') }}</strong>
+          <label class="field">
+            {{ t('cluster.details.expiresOn') }}
+            <input v-model="editDetails.expiresOn" type="date" min="0001-01-01" max="9999-12-31" :disabled="saving || deleting || enablingMutualFiles" />
+          </label>
+          <label class="field">
+            {{ t('cluster.details.price') }}
+            <input v-model="editDetails.price" maxlength="40" :placeholder="t('cluster.details.pricePlaceholder')" :disabled="saving || deleting || enablingMutualFiles" />
+          </label>
+          <label class="field">
+            {{ t('cluster.details.resetDay') }}
+            <input v-model="editDetails.trafficResetDay" type="number" min="1" max="31" step="1" :placeholder="t('cluster.details.resetPlaceholder')" :disabled="saving || deleting || enablingMutualFiles" />
+          </label>
+          <small>{{ t('cluster.details.hint') }}</small>
+        </div>
+        <p v-if="manageError" class="cluster-manage__details-error" role="alert">{{ manageError }}</p>
         <div class="cluster-manage__identity">
           <template v-if="selected.kind !== 'light_node'">
             <span>{{ phrase('目标地址') }}</span><code>{{ displayHostAddress(selected) }}</code>
@@ -2085,6 +2150,9 @@ onBeforeUnmount(() => {
             </code>
           </template>
           <span>{{ phrase('连接方式') }}</span><code>{{ phrase(transportSecurityLabel(selected)) }}</code>
+          <template v-if="selected.kind === 'light_node'">
+            <span>{{ phrase('轻量节点') }}</span><span>{{ phrase(lightNodeCapabilitySummary(selected)) }}</span>
+          </template>
           <template v-if="selected.peerFingerprint">
             <span>{{ phrase('身份指纹') }}</span><code>{{ selected.peerFingerprint }}</code>
           </template>
@@ -2129,7 +2197,7 @@ onBeforeUnmount(() => {
           <Bell :size="16" /> {{ phrase('查看通知记录') }}
         </RouterLink>
         <LightNodeHealth v-if="selected.kind === 'light_node'" :health="selected.lightHealth" />
-      </div>
+      </form>
       <template #footer>
         <button
           v-if="selected && !selected.isLocal"
@@ -2144,12 +2212,12 @@ onBeforeUnmount(() => {
         <button class="button button--secondary" type="button" :disabled="saving || deleting || enablingMutualFiles" @click="closeManage">{{ phrase('关闭') }}</button>
         <button
           class="button button--primary"
-          type="button"
+          type="submit"
+          :form="manageFormID"
           :disabled="saving || deleting || enablingMutualFiles || !editName.trim()"
-          @click="saveName"
         >
           <LoaderCircle v-if="saving" class="spin" :size="16" />
-          <Check v-else :size="16" /> {{ phrase('保存名称') }}
+          <Check v-else :size="16" /> {{ t('cluster.details.save') }}
         </button>
       </template>
     </ModalDialog>
@@ -2159,6 +2227,12 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.cluster-manage__details {
+  padding-block: 1rem;
+  border-block: 1px solid var(--border);
+}
+.cluster-manage__details small { font-size: 0.8125rem; line-height: 1.5; color: var(--text-soft); }
+.cluster-manage__details-error { color: var(--danger); }
 .cluster-page {
   --cluster-accent: #6d5dfc;
   align-content: start;
@@ -2608,18 +2682,6 @@ onBeforeUnmount(() => {
 
 .cluster-card__origin:is(a, button):hover {
   color: var(--brand);
-}
-
-.cluster-card__fingerprint {
-  display: block;
-  max-width: 100%;
-  margin-top: 3px;
-  overflow: hidden;
-  color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .cluster-origin-help.is-secure {

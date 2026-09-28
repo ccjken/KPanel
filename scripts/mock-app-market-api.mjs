@@ -644,6 +644,14 @@ const mockNotificationEvents = Array.from({ length: 64 }, (_, index) => {
     lastAttemptAt: attempts ? new Date(timestamp + 30000).toISOString() : undefined,
   }
 })
+let mockHostDetailsRevision = 1
+let mockHostNameRevision = 1
+const mockHostDetails = Object.fromEntries(visualClusterHosts.map((host, index) => [host.id, {
+  ...(index === 0 ? { expiresOn: '2027-09-28', price: '¥99/年', trafficResetDay: 15 } : {}),
+  ...(index === 1 ? { expiresOn: '2026-12-31', price: '¥12/月', trafficResetDay: 1 } : {}),
+  ...(index === 2 ? { expiresOn: '2027-03-15', price: '$5/月' } : {}),
+  resourceVersion: mockRevision(900),
+}]))
 
 let mockNotificationRevision = 1
 let mockNotificationSnapshot = {
@@ -718,6 +726,9 @@ function visualClusterPublicSnapshot() {
       id: host.id,
       name: host.name,
       state: ['online', 'offline', 'pending'].includes(host.state) ? host.state : 'degraded',
+      expiresOn: mockHostDetails[host.id]?.expiresOn,
+      price: mockHostDetails[host.id]?.price,
+      trafficResetDay: mockHostDetails[host.id]?.trafficResetDay,
       os: telemetry?.os,
       architecture: telemetry?.architecture,
       uptimeSeconds: telemetry?.uptimeSeconds,
@@ -2369,12 +2380,57 @@ createServer(async (request, response) => {
   if (request.method === 'GET' && url.pathname === '/api/v1/cluster/hosts') {
     send(response, 200, {
       items: visualClusterHosts,
+      hostDetails: mockHostDetails,
       total: visualClusterHosts.length,
       remoteTotal: visualClusterHosts.filter((host) => !host.isLocal).length,
       maxHosts: 100,
       pollIntervalSeconds: 30,
       nodeId: 'local-node',
     })
+    return
+  }
+  const hostNameMatch = url.pathname.match(/^\/api\/v1\/cluster\/hosts\/([^/]+)$/)
+  if (request.method === 'PATCH' && hostNameMatch) {
+    const host = visualClusterHosts.find(item => item.id === hostNameMatch[1])
+    const input = await readJSON(request)
+    if (!host) {
+      send(response, 404, { code: 'cluster_host_not_found' })
+      return
+    }
+    if (input.expectedResourceVersion !== host.resourceVersion) {
+      send(response, 409, { code: 'cluster_conflict' })
+      return
+    }
+    if (typeof input.name !== 'string' || !input.name.trim() || [...input.name.trim()].length > 80) {
+      send(response, 422, { code: 'validation_failed' })
+      return
+    }
+    host.name = input.name.trim()
+    host.resourceVersion = mockRevision(1000 + ++mockHostNameRevision)
+    send(response, 200, host)
+    return
+  }
+  const hostDetailsMatch = url.pathname.match(/^\/api\/v1\/cluster\/hosts\/([^/]+)\/details$/)
+  if (request.method === 'PUT' && hostDetailsMatch) {
+    const id = hostDetailsMatch[1]
+    const input = await readJSON(request)
+    if (!Object.hasOwn(mockHostDetails, id)) {
+      send(response, 404, { code: 'cluster_host_not_found' })
+      return
+    }
+    if (input.expectedResourceVersion !== mockHostDetails[id].resourceVersion) {
+      send(response, 409, { code: 'cluster_host_details_changed' })
+      return
+    }
+    const { expiresOn = '', price = '', trafficResetDay = 0 } = input
+    if (!Number.isInteger(trafficResetDay) || trafficResetDay < 0 || trafficResetDay > 31 ||
+        typeof price !== 'string' || [...price].length > 40 || /[\u0000-\u001f\u007f]/.test(price) ||
+        (expiresOn && (!/^\d{4}-\d{2}-\d{2}$/.test(expiresOn) || !Number.isFinite(Date.parse(expiresOn)) || new Date(expiresOn).toISOString().slice(0, 10) !== expiresOn))) {
+      send(response, 422, { code: 'cluster_host_details_invalid' })
+      return
+    }
+    mockHostDetails[id] = { expiresOn, price: price.trim(), trafficResetDay, resourceVersion: mockRevision(900 + ++mockHostDetailsRevision) }
+    send(response, 200, mockHostDetails[id])
     return
   }
   if (request.method === 'GET' && url.pathname === '/api/v1/terminal-commands') {

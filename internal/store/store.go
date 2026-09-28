@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -163,14 +164,15 @@ type diskState struct {
 	Sessions      []Session `json:"sessions"`
 	// Audit is read only to migrate records written before audit history
 	// moved to its own database; it is never persisted again.
-	Audit            []AuditEvent      `json:"audit,omitempty"`
-	LoginAttempts    []LoginAttempt    `json:"loginAttempts"`
-	SecurityEntrance SecurityEntrance  `json:"securityEntrance,omitempty"`
-	PasskeyOrigin    string            `json:"passkeyOrigin,omitempty"`
-	ClusterShare     ClusterShare      `json:"clusterShare,omitempty"`
-	ClusterHostOrder *ClusterHostOrder `json:"clusterHostOrder,omitempty"`
-	Appearance       *Appearance       `json:"appearance,omitempty"`
-	FileShares       []FileShare       `json:"fileShares,omitempty"`
+	Audit              []AuditEvent                  `json:"audit,omitempty"`
+	LoginAttempts      []LoginAttempt                `json:"loginAttempts"`
+	SecurityEntrance   SecurityEntrance              `json:"securityEntrance,omitempty"`
+	PasskeyOrigin      string                        `json:"passkeyOrigin,omitempty"`
+	ClusterShare       ClusterShare                  `json:"clusterShare,omitempty"`
+	ClusterHostOrder   *ClusterHostOrder             `json:"clusterHostOrder,omitempty"`
+	ClusterHostDetails map[string]ClusterHostDetails `json:"clusterHostDetails,omitempty"`
+	Appearance         *Appearance                   `json:"appearance,omitempty"`
+	FileShares         []FileShare                   `json:"fileShares,omitempty"`
 }
 
 // Store is a small, single-node persistence layer. It deliberately stores only
@@ -242,6 +244,9 @@ func Open(path string) (*Store, error) {
 			if err := ValidateClusterHostOrder(s.data.ClusterHostOrder.IDs); err != nil {
 				return nil, fmt.Errorf("validate cluster host order: %w", err)
 			}
+		}
+		if err := validateClusterHostDetailsMap(s.data.ClusterHostDetails); err != nil {
+			return nil, fmt.Errorf("validate cluster host details: %w", err)
 		}
 	case errors.Is(err, os.ErrNotExist):
 		if err := s.persistLocked(); err != nil {
@@ -1149,17 +1154,18 @@ func cloneDiskState(source diskState) diskState {
 		users[index] = cloneUser(users[index])
 	}
 	return diskState{
-		SchemaVersion:    source.SchemaVersion,
-		Users:            users,
-		Sessions:         append([]Session(nil), source.Sessions...),
-		Audit:            append([]AuditEvent(nil), source.Audit...),
-		LoginAttempts:    append([]LoginAttempt(nil), source.LoginAttempts...),
-		SecurityEntrance: source.SecurityEntrance,
-		PasskeyOrigin:    source.PasskeyOrigin,
-		ClusterShare:     cloneClusterShare(source.ClusterShare),
-		ClusterHostOrder: cloneClusterHostOrder(source.ClusterHostOrder),
-		Appearance:       cloneAppearance(source.Appearance),
-		FileShares:       cloneFileShares(source.FileShares),
+		SchemaVersion:      source.SchemaVersion,
+		Users:              users,
+		Sessions:           append([]Session(nil), source.Sessions...),
+		Audit:              append([]AuditEvent(nil), source.Audit...),
+		LoginAttempts:      append([]LoginAttempt(nil), source.LoginAttempts...),
+		SecurityEntrance:   source.SecurityEntrance,
+		PasskeyOrigin:      source.PasskeyOrigin,
+		ClusterShare:       cloneClusterShare(source.ClusterShare),
+		ClusterHostOrder:   cloneClusterHostOrder(source.ClusterHostOrder),
+		ClusterHostDetails: maps.Clone(source.ClusterHostDetails),
+		Appearance:         cloneAppearance(source.Appearance),
+		FileShares:         cloneFileShares(source.FileShares),
 	}
 }
 

@@ -3,7 +3,8 @@ import { createSSRApp, ssrContextKey, type ComputedRef, type Ref } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ClusterShareView from './ClusterShareView.vue'
 import { ApiError } from '@/lib/api'
-import type { PublicClusterShareSnapshot } from '@/types/api'
+import type { ClusterHostTemporarySortKey } from '@/lib/clusterHostTemporarySort'
+import type { PublicClusterShareHost, PublicClusterShareSnapshot } from '@/types/api'
 
 const mocks = vi.hoisted(() => ({
   publicShare: vi.fn(),
@@ -28,6 +29,11 @@ vi.mock('@/lib/api', () => ({
 }))
 
 interface ShareBindings {
+  sortKey: Ref<ClusterHostTemporarySortKey>
+  changeSort: (key: ClusterHostTemporarySortKey) => void
+  sortDirection: Ref<'asc' | 'desc'>
+  search: Ref<string>
+  filteredHosts: ComputedRef<PublicClusterShareHost[]>
   snapshot: Ref<PublicClusterShareSnapshot | undefined>
   loading: Ref<boolean>
   refreshing: Ref<boolean>
@@ -90,6 +96,67 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('ClusterShareView anonymous snapshot', () => {
+  it.each(['cpu', 'memory', 'disk', 'traffic'] as const)('sorts public %s in both directions with pending hosts last and refreshes the order', async key => {
+    const view = setupView()
+    const data = publicSnapshot()
+    const host = data.items[0]!
+    const high: PublicClusterShareHost = {
+      ...host, id: 'high', name: 'node high',
+      cpu: { ...host.cpu, usagePercent: 90 },
+      memory: { ...host.memory, usagePercent: 90 },
+      disk: { ...host.disk, usagePercent: 90 },
+      // The sum is larger even though received traffic is lower.
+      network: { ...host.network, receivedBytes: 512, sentBytes: 4096 },
+    }
+    data.items = [
+      { ...host, id: 'pending', name: 'pending', state: 'pending', collectedAt: undefined },
+      { ...host, id: 'low', name: 'node low' }, high, { ...high, id: 'equal' },
+    ]
+    view.snapshot.value = data
+    view.changeSort(key)
+    expect(view.sortDirection.value).toBe('desc')
+    expect(view.filteredHosts.value.map(h => h.id)).toEqual(['high', 'equal', 'low', 'pending'])
+    view.sortDirection.value = 'asc'
+    expect(view.filteredHosts.value.map(h => h.id)).toEqual(['low', 'high', 'equal', 'pending'])
+    view.search.value = 'node'
+    expect(view.filteredHosts.value.map(h => h.id)).toEqual(['low', 'high', 'equal'])
+    view.sortDirection.value = 'desc'
+    expect(view.filteredHosts.value.map(h => h.id)).toEqual(['high', 'equal', 'low'])
+
+    const refreshed = { ...data, items: data.items.map(h => h.id === 'low' ? { ...high, id: 'low' } : h) }
+    mocks.publicShare.mockResolvedValueOnce(refreshed)
+    await view.load(true)
+    expect(view.filteredHosts.value.map(h => h.id)).toEqual(['low', 'high', 'equal'])
+    view.search.value = ''
+    view.changeSort('custom')
+    expect(view.filteredHosts.value.map(h => h.id)).toEqual(['pending', 'low', 'high', 'equal'])
+    expect(data.items.map(h => h.id)).toEqual(['pending', 'low', 'high', 'equal'])
+    expect(mocks.setItem).not.toHaveBeenCalled()
+  })
+
+  it('sorts public details and keeps filtering and the original public order intact', () => {
+    const view = setupView()
+    const data = publicSnapshot()
+    const host = data.items[0]!
+    data.items = [
+      { ...host, id: 'late', name: 'node late', expiresOn: '2028-01-01', price: '$120/year' },
+      { ...host, id: 'early', name: 'node early', expiresOn: '2027-01-01', price: '$12/month' },
+      { ...host, id: 'empty', name: 'empty' },
+    ]
+    view.snapshot.value = data
+    view.sortKey.value = 'expiresOn'
+    expect(view.filteredHosts.value.map(h => h.id)).toEqual(['early', 'late', 'empty'])
+    view.sortKey.value = 'price'
+    expect(view.filteredHosts.value.map(h => h.id)).toEqual(['late', 'early', 'empty'])
+    view.sortDirection.value = 'desc'
+    view.search.value = 'node'
+    expect(view.filteredHosts.value.map(h => h.id)).toEqual(['early', 'late'])
+    view.sortKey.value = 'custom'
+    expect(view.filteredHosts.value.map(h => h.id)).toEqual(['late', 'early'])
+    expect(data.items.map(h => h.id)).toEqual(['late', 'early', 'empty'])
+    expect(mocks.setItem).not.toHaveBeenCalled()
+  })
+
   it('loads exactly one allowlisted public endpoint without session state', async () => {
     const expected = publicSnapshot()
     mocks.publicShare.mockResolvedValueOnce(expected)

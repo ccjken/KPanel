@@ -1,6 +1,6 @@
 <script lang="ts">
 export interface ClusterTemporarySortOption {
-  value: 'custom' | 'cpu' | 'memory' | 'disk' | 'traffic'
+  value: 'custom' | 'cpu' | 'memory' | 'disk' | 'traffic' | 'expiresOn' | 'price'
   label: string
 }
 </script>
@@ -8,6 +8,8 @@ export interface ClusterTemporarySortOption {
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId } from 'vue'
 import {
+  CalendarClock,
+  Coins,
   Check,
   ChevronDown,
   Gauge,
@@ -37,6 +39,8 @@ const sortIcons = {
   memory: MemoryStick,
   disk: HardDrive,
   traffic: Network,
+  expiresOn: CalendarClock,
+  price: Coins,
 } satisfies Record<ClusterHostTemporarySortKey, typeof Gauge>
 
 const selected = computed(() => props.options.find((option) => option.value === props.modelValue)!)
