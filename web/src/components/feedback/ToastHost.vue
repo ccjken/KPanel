@@ -32,6 +32,8 @@ function activate(item: Readonly<Toast>): void {
 </template>
 
 <style scoped>
+.toast-region { max-width: calc(100% - 20px); }
+.toast--actionable { max-height: calc(100dvh - 36px); overflow-y: auto; }
 .toast--actionable .toast__body { min-width: 0; overflow-wrap: anywhere; }
 .toast--actionable .toast__body strong,
 .toast--actionable .toast__body p { font-size: 14px; line-height: 1.5; }
