@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/kejilion/kejilion-panel/internal/cluster"
+	"github.com/kejilion/kejilion-panel/internal/contract"
 	"github.com/kejilion/kejilion-panel/internal/notification"
 	"github.com/kejilion/kejilion-panel/internal/store"
 )
@@ -42,7 +43,18 @@ func (s *clusterTrafficSource) account(ctx context.Context, hosts cluster.HostLi
 				Sent: snapshot.Telemetry.Network.SentBytes, Uptime: snapshot.Telemetry.UptimeSeconds}
 		}
 	}
-	periods, _ := s.store.UpdateClusterTraffic(samples, ids, s.now(), s.location(ctx))
+	location := s.location(ctx)
+	periods := make(map[string]contract.TrafficPeriod)
+	if location == nil {
+		for id, details := range s.store.ClusterHostDetails() {
+			if details.TrafficResetDay > 0 {
+				periods[id] = contract.TrafficPeriod{}
+			}
+		}
+	} else {
+		// Write failures return unavailable periods without consuming the cursors.
+		periods, _ = s.store.UpdateClusterTraffic(samples, ids, s.now(), location)
+	}
 	// Copy the inventory, leaving raw snapshots and real-time rates untouched.
 	hosts.Items = append([]cluster.Host(nil), hosts.Items...)
 	for i := range hosts.Items {

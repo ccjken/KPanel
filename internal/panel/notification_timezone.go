@@ -22,6 +22,7 @@ type notificationTimezoneSource struct {
 
 	mu        sync.Mutex
 	location  *time.Location
+	known     bool
 	checkedAt time.Time
 }
 
@@ -34,12 +35,19 @@ func (s *notificationTimezoneSource) Location(ctx context.Context) *time.Locatio
 	now := time.Now()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.location != nil && now.Sub(s.checkedAt) < notificationTimezoneRefreshInterval {
+	refreshInterval := notificationTimezoneRefreshInterval
+	if !s.known {
+		refreshInterval = 30 * time.Second
+	}
+	if s.location != nil && now.Sub(s.checkedAt) < refreshInterval {
 		return s.location
 	}
 	s.checkedAt = now
 
 	location := fallback
+	if s.known {
+		location = s.location
+	}
 	if s.agent != nil {
 		if ctx == nil {
 			ctx = context.Background()
@@ -53,6 +61,7 @@ func (s *notificationTimezoneSource) Location(ctx context.Context) *time.Locatio
 				if value := strings.TrimSpace(summary.Management.Timezone); value != "" {
 					if loaded, loadErr := time.LoadLocation(value); loadErr == nil {
 						location = loaded
+						s.known = true
 					}
 				}
 			}
@@ -61,4 +70,16 @@ func (s *notificationTimezoneSource) Location(ctx context.Context) *time.Locatio
 
 	s.location = location
 	return location
+}
+
+// Accounting cannot guess a cycle timezone on startup. Once known, transient
+// Agent failures retain it; an explicit successful timezone change replaces it.
+func (s *notificationTimezoneSource) AccountingLocation(ctx context.Context) *time.Location {
+	s.Location(ctx)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.known {
+		return nil
+	}
+	return s.location
 }

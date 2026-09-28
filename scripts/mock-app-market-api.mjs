@@ -656,15 +656,27 @@ const mockHostDetails = Object.fromEntries(visualClusterHosts.map((host, index) 
 
 let mockNotificationRevision = 1
 // Presentation fixtures only; durable accounting is exercised by backend tests.
+const mockTrafficPeriods = new Map()
 function mockTrafficPeriod(host) {
-  if (!mockHostDetails[host.id]?.trafficResetDay) return undefined
-  return {
+  const day = mockHostDetails[host.id]?.trafficResetDay
+  if (!day) return undefined
+  if (mockTrafficPeriods.has(host.id)) return mockTrafficPeriods.get(host.id)
+  const now = new Date()
+  const boundary = offset => {
+    const first = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1))
+    const last = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate()
+    return new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), Math.min(day, last)))
+  }
+  const offset = now < boundary(0) ? -1 : 0
+  const period = {
     receivedBytes: host.id === visualClusterHosts[0].id ? 2 * 1024 ** 3 : 512 * 1024 ** 2,
     sentBytes: 256 * 1024 ** 2,
     available: Boolean(host.lastSnapshot),
-    startedAt: '2026-09-15T00:00:00Z', endsAt: '2026-10-15T00:00:00Z',
+    startedAt: boundary(offset).toISOString(), endsAt: boundary(offset + 1).toISOString(),
     partial: true, estimated: false,
   }
+  mockTrafficPeriods.set(host.id, period)
+  return period
 }
 let mockNotificationSnapshot = {
   localRecording: true,
@@ -2443,7 +2455,13 @@ createServer(async (request, response) => {
       send(response, 422, { code: 'cluster_host_details_invalid' })
       return
     }
+    const resetChanged = trafficResetDay !== (mockHostDetails[id].trafficResetDay || 0)
     mockHostDetails[id] = { expiresOn, expiryReminderEnabled, price: price.trim(), trafficResetDay, resourceVersion: mockRevision(900 + ++mockHostDetailsRevision) }
+    if (resetChanged) {
+      mockTrafficPeriods.delete(id)
+      const period = mockTrafficPeriod(visualClusterHosts.find(host => host.id === id))
+      if (period) { period.receivedBytes = 0; period.sentBytes = 0 }
+    }
     send(response, 200, mockHostDetails[id])
     return
   }

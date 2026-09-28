@@ -191,7 +191,7 @@ func NewServer(config Config, authService *auth.Service, storage *store.Store, a
 		return nil, fmt.Errorf("initialize remote download jobs: %w", err)
 	}
 	timezoneSource := newNotificationTimezoneSource(agent)
-	trafficSource := &clusterTrafficSource{raw: clusterService, store: storage, location: timezoneSource.Location, now: time.Now}
+	trafficSource := &clusterTrafficSource{raw: clusterService, store: storage, location: timezoneSource.AccountingLocation, now: time.Now}
 	notifications, err := notification.NewService(notification.Config{
 		DataDir: config.DataDir, Hosts: trafficSource, Timezone: timezoneSource.Location,
 		HostExpiries: func() map[string]notification.HostExpiry {

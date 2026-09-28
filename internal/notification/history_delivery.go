@@ -41,9 +41,11 @@ func (s *Service) deliverHistory(ctx context.Context, state persistedState, host
 	expiries := s.expirySnapshot()
 	present := map[string]bool{}
 	cycles := map[string]string{}
+	cycleUnavailable := map[string]bool{}
 	for _, host := range hosts {
 		present[host.ID] = true
 		cycles[host.ID] = trafficCycleKey(host)
+		cycleUnavailable[host.ID] = host.TrafficPeriod != nil && !host.TrafficPeriod.Available
 	}
 	indices := []int{}
 	for i := range history.Events {
@@ -61,7 +63,7 @@ func (s *Service) deliverHistory(ctx context.Context, state persistedState, host
 			reason = "rule_disabled"
 		case !present[event.HostID]:
 			reason = "host_removed"
-		case (event.Rule == cumulativeTrafficReceivedRuleKey || event.Rule == cumulativeTrafficSentRuleKey) && event.TrafficCycle != cycles[event.HostID]:
+		case (event.Rule == cumulativeTrafficReceivedRuleKey || event.Rule == cumulativeTrafficSentRuleKey) && !cycleUnavailable[event.HostID] && event.TrafficCycle != cycles[event.HostID]:
 			reason = "traffic_cycle_changed"
 		case credential != "" && event.ChannelFingerprint != tokenFingerprint(credential):
 			reason = "channel_changed"
@@ -71,6 +73,9 @@ func (s *Service) deliverHistory(ctx context.Context, state persistedState, host
 		if reason != "" {
 			event.Delivery = "cancelled"
 			event.LastErrorCode = reason
+			continue
+		}
+		if (event.Rule == cumulativeTrafficReceivedRuleKey || event.Rule == cumulativeTrafficSentRuleKey) && cycleUnavailable[event.HostID] {
 			continue
 		}
 		if !ready || len(indices) >= maxMessagesPerEvaluation ||

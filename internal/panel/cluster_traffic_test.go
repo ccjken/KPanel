@@ -57,6 +57,12 @@ func TestClusterTrafficSourceBackgroundAndRawIsolation(t *testing.T) {
 	if first.TrafficPeriod == nil || !first.TrafficPeriod.Available || first.TrafficPeriod.ReceivedBytes != 0 {
 		t.Fatalf("baseline: %+v", first.TrafficPeriod)
 	}
+	source.location = func(context.Context) *time.Location { return nil }
+	unavailable := source.Hosts(context.Background()).Items[0]
+	if unavailable.TrafficPeriod == nil || unavailable.TrafficPeriod.Available || unavailable.LastSnapshot.Telemetry.Network.ReceivedBytes != 1000 {
+		t.Fatal("unknown timezone fell back to raw totals")
+	}
+	source.location = func(context.Context) *time.Location { return time.UTC }
 	now = now.Add(30 * time.Second)
 	raw.host.LastSnapshot.Telemetry.CollectedAt = now
 	raw.host.LastSnapshot.ReceivedAt = now
