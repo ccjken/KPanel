@@ -17,4 +17,10 @@ describe('classic wallpaper level', () => {
     expect(boot).toContain(`read('${CLASSIC_WALLPAPER_KEY}')`)
     expect(boot).toContain("classicLevel === 'ambient' || classicLevel === 'clear'")
   })
+
+  it('keeps an explicitly selected wallpaper visible when the browser reduces transparency', () => {
+    const css = readFileSync(resolve(__dirname, '../styles/classicWallpaper.css'), 'utf8')
+    expect(css).not.toMatch(/@media[^\{]*prefers-reduced-transparency/)
+    expect(css).toMatch(/@media\s*\(forced-colors:\s*active\)/)
+  })
 })

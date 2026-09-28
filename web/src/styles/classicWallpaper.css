@@ -19,6 +19,7 @@
   background: var(--desktop-wallpaper-base);
 }
 
+.classic-backdrop__image,
 .classic-backdrop__wallpaper.desktop-wallpaper-host {
   position: absolute;
   /* Blur pulls in transparent edges; overscan so the frame stays filled. */
@@ -26,6 +27,10 @@
   width: auto;
   height: auto;
   filter: blur(var(--classic-wallpaper-blur)) saturate(var(--classic-wallpaper-saturate));
+}
+
+.classic-backdrop__image {
+  background: var(--classic-wallpaper-image, url('/wallpapers/kpanel-desktop.webp')) var(--desktop-wallpaper-position, center) / cover no-repeat;
 }
 
 /*
@@ -155,7 +160,9 @@ body:has(.classic-backdrop) {
   --auth-wallpaper-veil-end: 86%;
 }
 
-@media (prefers-reduced-transparency: reduce), (forced-colors: active) {
+/* The explicit show-through choice keeps its wallpaper with reduced transparency.
+ * Forced-colors still uses solid surfaces for high-contrast legibility. */
+@media (forced-colors: active) {
   :root[data-classic-wallpaper] .auth-layout__brand {
     background: var(--auth-brand-background);
   }

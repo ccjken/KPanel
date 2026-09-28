@@ -52,6 +52,7 @@ import {
 import { readSidebarCollapsed, writeSidebarCollapsed } from '@/lib/sidebarPreference'
 import { useClassicWallpaper } from '@/lib/classicWallpaper'
 import { customWallpaperFromID, useDesktopWallpaper } from '@/lib/desktopWallpapers'
+import { scenePackFromWallpaper } from '@/lib/scenePacks'
 import { startAppearanceSync, stopAppearanceSync } from '@/lib/appearanceSync'
 import DesktopWallpaper from '@/components/desktop/DesktopWallpaper.vue'
 import {
@@ -140,6 +141,7 @@ const classicBackdrop = computed(() => !desktopActive.value && classicWallpaper.
 // A 3D scene pack chosen as the wallpaper (in desktop mode or Settings) keeps running behind the
 // classic pages. Desktop mode may have changed it, so the choice is re-read on the way back.
 const wallpaperChoice = useDesktopWallpaper()
+const classicScenePack = computed(() => classicBackdrop.value ? scenePackFromWallpaper(wallpaperChoice.id.value) : undefined)
 watch(desktopActive, (active) => { if (!active) wallpaperChoice.refresh() }, { immediate: true })
 const DESKTOP_ENTRY_NOTICE_KEY = 'kpanel:desktop-entry-notice:v2'
 
@@ -321,7 +323,8 @@ watch(
 <template>
   <div class="app-shell">
     <div v-if="classicBackdrop" class="classic-backdrop" aria-hidden="true">
-      <DesktopWallpaper class="classic-backdrop__wallpaper" :wallpaper-id="wallpaperChoice.id.value" :revision="wallpaperChoice.sceneRevision.value" :covered="false" />
+      <DesktopWallpaper v-if="classicScenePack" class="classic-backdrop__wallpaper" :wallpaper-id="wallpaperChoice.id.value" :revision="wallpaperChoice.sceneRevision.value" :covered="false" />
+      <div v-else class="classic-backdrop__image" />
       <div class="classic-backdrop__veil" />
     </div>
     <Transition name="fade">
