@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/kejilion/kejilion-panel/internal/notification"
 	"github.com/kejilion/kejilion-panel/internal/store"
 )
 
@@ -19,7 +21,7 @@ func TestClusterHostDetailsAuthorizationLifecycleAndPublicWhitelist(t *testing.T
 	session, csrf := bootstrapCookies(t, s, tokenPath)
 	view := s.clusterHostsView(context.Background())
 	initial := view.HostDetails["local"].ResourceVersion
-	input := clusterHostDetailsInput{ClusterHostDetails: store.ClusterHostDetails{ExpiresOn: "2027-09-28", Price: "$5/month", TrafficResetDay: 31}, ExpectedResourceVersion: initial}
+	input := clusterHostDetailsInput{ClusterHostDetails: store.ClusterHostDetails{ExpiresOn: "2027-09-28", ExpiryReminderEnabled: true, Price: "$5/month", TrafficResetDay: 31}, ExpectedResourceVersion: initial}
 	body, _ := json.Marshal(input)
 	headers := map[string]string{"Content-Type": "application/json", "Origin": "http://panel.test", "X-CSRF-Token": csrf.Value}
 	for _, missing := range []string{"Origin", "X-CSRF-Token"} {
@@ -59,7 +61,7 @@ func TestClusterHostDetailsAuthorizationLifecycleAndPublicWhitelist(t *testing.T
 	if public.Items[0].Price != "$5/month" || public.Items[0].ExpiresOn != "2027-09-28" || public.Items[0].TrafficResetDay != 31 {
 		t.Fatalf("public metadata missing: %s", encoded)
 	}
-	for _, forbidden := range []string{"resourceVersion", "expectedResourceVersion", "origin", "peerFingerprint", "remoteNodeId"} {
+	for _, forbidden := range []string{"expiryReminderEnabled", "resourceVersion", "expectedResourceVersion", "origin", "peerFingerprint", "remoteNodeId"} {
 		if strings.Contains(string(encoded), `"`+forbidden+`"`) {
 			t.Fatalf("leaked %s", forbidden)
 		}
@@ -74,6 +76,12 @@ func TestClusterHostDetailsAuthorizationLifecycleAndPublicWhitelist(t *testing.T
 		t.Fatalf("invalid day: %d", result.Code)
 	}
 	input.ClusterHostDetails = store.ClusterHostDetails{}
+	input.ExpiryReminderEnabled = true
+	body, _ = json.Marshal(input)
+	if result = authenticatedRequest(s, http.MethodPut, path, body, session, csrf, headers); result.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("reminder without date: %d", result.Code)
+	}
+	input.ExpiryReminderEnabled = false
 	body, _ = json.Marshal(input)
 	if result = authenticatedRequest(s, http.MethodPut, path, body, session, csrf, headers); result.Code != http.StatusOK {
 		t.Fatalf("clear: %d", result.Code)
@@ -86,4 +94,35 @@ func TestClusterHostDetailsAuthorizationLifecycleAndPublicWhitelist(t *testing.T
 	if result = authenticatedRequest(s, http.MethodPut, "/api/v1/cluster/hosts/missing/details", body, session, csrf, headers); result.Code != http.StatusNotFound {
 		t.Fatalf("unknown host: %d", result.Code)
 	}
+}
+
+func TestClusterHostDetailsExpiryReminderReachesNotificationHistory(t *testing.T) {
+	s, tokenPath := newTestServer(t)
+	session, csrf := bootstrapCookies(t, s, tokenPath)
+	input := clusterHostDetailsInput{
+		ClusterHostDetails:      store.ClusterHostDetails{ExpiresOn: time.Now().AddDate(0, 0, 7).Format("2006-01-02"), ExpiryReminderEnabled: true},
+		ExpectedResourceVersion: s.clusterHostsView(context.Background()).HostDetails["local"].ResourceVersion,
+	}
+	body, _ := json.Marshal(input)
+	result := authenticatedRequest(s, http.MethodPut, "/api/v1/cluster/hosts/local/details", body, session, csrf,
+		map[string]string{"Content-Type": "application/json", "Origin": "http://panel.test", "X-CSRF-Token": csrf.Value})
+	if result.Code != http.StatusOK {
+		t.Fatalf("save: %d %s", result.Code, result.Body.String())
+	}
+	s.notifications.Start(context.Background())
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		page, err := s.notifications.History(notification.HistoryQuery{Rule: "server-expiry"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(page.Items) == 1 {
+			if page.Items[0].HostID != "local" || page.Items[0].Delivery != "local_only" || !strings.Contains(page.Items[0].Message, input.ExpiresOn) {
+				t.Fatalf("unexpected expiry event: %+v", page.Items[0])
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("saved host details did not reach the notification evaluator")
 }

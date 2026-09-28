@@ -192,6 +192,13 @@ func NewServer(config Config, authService *auth.Service, storage *store.Store, a
 	timezoneSource := newNotificationTimezoneSource(agent)
 	notifications, err := notification.NewService(notification.Config{
 		DataDir: config.DataDir, Hosts: clusterService, Timezone: timezoneSource.Location,
+		HostExpiries: func() map[string]notification.HostExpiry {
+			result := make(map[string]notification.HostExpiry)
+			for id, details := range storage.ClusterHostDetails() {
+				result[id] = notification.HostExpiry{ExpiresOn: details.ExpiresOn, Enabled: details.ExpiryReminderEnabled}
+			}
+			return result
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("initialize notifications: %w", err)

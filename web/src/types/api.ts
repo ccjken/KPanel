@@ -261,6 +261,7 @@ export interface ClusterHostList {
 
 export interface ClusterHostDetails {
   expiresOn?: string
+  expiryReminderEnabled?: boolean
   price?: string
   trafficResetDay?: number
 }
@@ -352,7 +353,7 @@ export interface ClusterNotificationResources {
 
 export type PublicClusterShareHostState = 'online' | 'degraded' | 'offline' | 'pending'
 
-export interface PublicClusterShareHost extends ClusterHostDetails {
+export interface PublicClusterShareHost extends Pick<ClusterHostDetails, 'expiresOn' | 'price' | 'trafficResetDay'> {
 	id: string
 	name: string
 	state: PublicClusterShareHostState

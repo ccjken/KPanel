@@ -117,7 +117,7 @@ interface ClusterBindings {
   lightEnrollmentConnected: Ref<boolean>
   lightEnrollmentState: Ref<'waiting' | 'registered' | 'connected' | 'expired'>
   editName: Ref<string>
-  editDetails: { expiresOn: string; price: string; trafficResetDay: number | string; resourceVersion: string }
+  editDetails: { expiresOn: string; expiryReminderEnabled: boolean; price: string; trafficResetDay: number | string; resourceVersion: string }
   manageError: Ref<string>
   addForm: { name: string; accessCredential: string }
   load: (silent?: boolean) => Promise<void>
@@ -1233,6 +1233,49 @@ describe('ClusterView inventory and navigation', () => {
 
 
 describe('ClusterView optional server details', () => {
+  it('saves and reopens the reminder checkbox, and clears it with the expiry date', async () => {
+    const view = setupView()
+    const items = inventory()
+    const target = items.items[0]!
+    items.hostDetails = { [target.id]: { expiresOn: '2028-02-29', resourceVersion: 'details-v1' } }
+    view.inventory.value = items
+    view.openManage(target)
+    expect(view.editDetails.expiryReminderEnabled).toBe(false)
+    view.editDetails.expiryReminderEnabled = true
+    mocks.saveHostDetails.mockResolvedValueOnce({ expiresOn: '2028-02-29', expiryReminderEnabled: true, resourceVersion: 'details-v2' })
+    await view.saveHost()
+    expect(mocks.saveHostDetails).toHaveBeenCalledWith(target.id, {
+      expiresOn: '2028-02-29', expiryReminderEnabled: true, price: '', trafficResetDay: 0, expectedResourceVersion: 'details-v1',
+    })
+    view.openManage(target)
+    expect(view.editDetails.expiryReminderEnabled).toBe(true)
+    view.editDetails.expiresOn = ''
+    mocks.saveHostDetails.mockResolvedValueOnce({ resourceVersion: 'details-v3' })
+    await view.saveHost()
+    expect(mocks.saveHostDetails).toHaveBeenLastCalledWith(target.id, {
+      expiresOn: '', price: '', trafficResetDay: 0, expectedResourceVersion: 'details-v2',
+    })
+    view.openManage(target)
+    expect(view.editDetails.expiryReminderEnabled).toBe(false)
+  })
+
+  it('keeps the checkbox edit after a conflict and saves unchecking without changing the date', async () => {
+    const view = setupView()
+    const items = inventory()
+    const target = items.items[0]!
+    items.hostDetails = { [target.id]: { expiresOn: '2028-02-29', expiryReminderEnabled: true, resourceVersion: 'details-v1' } }
+    view.inventory.value = items
+    view.openManage(target)
+    view.editDetails.expiryReminderEnabled = false
+    mocks.saveHostDetails.mockRejectedValueOnce(new ApiError('Changed', 409, 'cluster_host_details_changed'))
+    await view.saveHost()
+    expect(view.editDetails.expiryReminderEnabled).toBe(false)
+    expect(view.manageError.value).not.toBe('')
+    expect(mocks.saveHostDetails).toHaveBeenLastCalledWith(target.id, {
+      expiresOn: '2028-02-29', price: '', trafficResetDay: 0, expectedResourceVersion: 'details-v1',
+    })
+  })
+
   it('saves changed details and name with one action and skips unchanged values afterward', async () => {
     const view = setupView()
     const items = inventory()

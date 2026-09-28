@@ -43,6 +43,8 @@ type Event struct {
 
 type storedEvent struct {
 	Event
+	// Binds delayed delivery to the expiry date that generated this reminder.
+	ExpiryDate string `json:"expiryDate,omitempty"`
 	// Never included in an API response. Bind retries to the original channel.
 	ChannelFingerprint string `json:"channelFingerprint,omitempty"`
 }
@@ -109,6 +111,10 @@ func validateHistory(state historyState) error {
 	}
 	var previous uint64
 	for _, event := range state.Events {
+		if (event.Rule == serverExpiryRuleKey && !validExpiryDate(event.ExpiryDate)) ||
+			(event.Rule != serverExpiryRuleKey && event.ExpiryDate != "") {
+			return errors.New("invalid notification expiry event")
+		}
 		id, err := strconv.ParseUint(event.ID, 10, 64)
 		if err != nil || id <= previous || id > state.Sequence || event.CreatedAt.IsZero() ||
 			!validDisplayText(event.HostID, 256) || !validDisplayText(event.HostName, 1024) ||
@@ -125,7 +131,7 @@ func validateHistory(state historyState) error {
 
 func validEventRule(value string) bool {
 	switch value {
-	case "cpu", "memory", "disk", "traffic", cumulativeTrafficReceivedRuleKey, cumulativeTrafficSentRuleKey, "availability", "ssh":
+	case "cpu", "memory", "disk", "traffic", cumulativeTrafficReceivedRuleKey, cumulativeTrafficSentRuleKey, "availability", "ssh", serverExpiryRuleKey:
 		return true
 	}
 	return false

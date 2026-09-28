@@ -3,6 +3,9 @@ import { passkeyZhCN } from '../passkeys'
 export const zhCNMessages = {
   'cluster.details.title': "服务器信息（可选）",
   'cluster.details.expiresOn': "服务器到期时间",
+  'cluster.details.expiryReminder': "到期提醒",
+  'cluster.details.expiryReminderRequiresDate': "请先设置服务器到期时间",
+  'cluster.details.expiryReminderHint': "按当前 KPanel 时区，提前 7、3、1 天及到期当天各提醒一次；写入通知记录，开启外部推送时同步发送。",
   'cluster.details.price': "服务器价格",
   'cluster.details.resetDay': "流量重置日",
   'cluster.details.pricePlaceholder': "例如 ¥99/年、$5/月",

@@ -15,6 +15,17 @@ function event(rule: string, kind: NotificationEvent['kind'], body: string, loca
 
 describe('notification summaries', () => {
   it.each([
+    ['zh-CN', '到期日期：2026-10-05\n剩余天数：7'],
+    ['zh-TW', '到期日期：2026-10-05\n剩餘天數：7'],
+    ['en-US', 'Expiry date: 2026-10-05\nDays remaining: 7'],
+  ])('summarizes %s server expiry reminders', (locale, body) => {
+    const reminder = event('server-expiry', 'info', body, locale)
+    reminder.message = reminder.message.replace('✅', '⏰')
+    expect(summarizeNotification(reminder)).toEqual({ fields: [
+      { label: '到期日期', value: '2026-10-05' }, { label: '剩余天数', value: '7' },
+    ], text: '' })
+  })
+  it.each([
     ['cpu', 'CPU 使用率', '100.0%', '90.0%'], ['memory', '内存使用率', '92.6%', '90.0%'],
     ['disk', '磁盘使用率', '91.7%', '90.0%'], ['traffic', '网络吞吐', '160.0 MiB/s', '100.0 MiB/s'],
     ['traffic-total-received', '累计接收', '108.6 GB', '100.0 GB'], ['traffic-total-sent', '累计传送', '102.4 GB', '100.0 GB'],

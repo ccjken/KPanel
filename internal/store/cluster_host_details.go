@@ -12,14 +12,18 @@ import (
 	"unicode/utf8"
 )
 
-// ClusterHostDetails are optional, center-owned display metadata, not telemetry.
+// ClusterHostDetails are optional, center-owned server metadata, not telemetry.
 type ClusterHostDetails struct {
-	ExpiresOn       string `json:"expiresOn,omitempty"`
-	Price           string `json:"price,omitempty"`
-	TrafficResetDay int    `json:"trafficResetDay,omitempty"`
+	ExpiresOn             string `json:"expiresOn,omitempty"`
+	ExpiryReminderEnabled bool   `json:"expiryReminderEnabled,omitempty"`
+	Price                 string `json:"price,omitempty"`
+	TrafficResetDay       int    `json:"trafficResetDay,omitempty"`
 }
 
 func ValidateClusterHostDetails(value ClusterHostDetails) error {
+	if value.ExpiryReminderEnabled && value.ExpiresOn == "" {
+		return ErrInvalidRecord
+	}
 	if value.TrafficResetDay < 0 || value.TrafficResetDay > 31 ||
 		!utf8.ValidString(value.Price) || utf8.RuneCountInString(value.Price) > 40 ||
 		value.Price != strings.TrimSpace(value.Price) {

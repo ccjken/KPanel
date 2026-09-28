@@ -607,6 +607,7 @@ visualClusterHosts.push(
     city: 'Singapore', country: 'Singapore', countryCode: 'SG' }),
 )
 const mockNotificationScenarios = [
+  { host: 0, rule: 'server-expiry', kind: 'info', body: `到期日期：${new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)}\n剩余天数：7`, delivery: 'local_only' },
   { host: 1, rule: 'cpu', kind: 'recovery', body: '已恢复：CPU 使用率 当前 6.2%', delivery: 'local_only' },
   { host: 1, rule: 'cpu', kind: 'alert', body: 'CPU 使用率达到 100.0%\n阈值：90.0%', delivery: 'local_only' },
   { host: 2, rule: 'availability', kind: 'recovery', body: '连接已恢复，当前状态：在线', delivery: 'sent' },
@@ -631,7 +632,7 @@ const mockNotificationEvents = Array.from({ length: 64 }, (_, index) => {
   const timestamp = mockNotificationStartedAt - Math.floor(index / mockNotificationScenarios.length) * 86400000 - (index % mockNotificationScenarios.length + 1) * 600000
   const createdAt = new Date(timestamp).toISOString()
   const when = `${new Date(timestamp + 8 * 3600000).toISOString().slice(0, 19).replace('T', ' ')} (UTC+08:00)`
-  const title = scenario.kind === 'alert' ? '⚠️ [KPanel 集群告警]' : scenario.kind === 'recovery' ? '✅ [KPanel 集群通知]' : '🔐 [KPanel 集群通知]'
+  const title = scenario.rule === 'server-expiry' ? '⏰ [KPanel 集群通知]' : scenario.kind === 'alert' ? '⚠️ [KPanel 集群告警]' : scenario.kind === 'recovery' ? '✅ [KPanel 集群通知]' : '🔐 [KPanel 集群通知]'
   const message = scenario.rule === 'ssh'
     ? `${title}\n\n主机：${host.name}\nSSH 登录：${when}\n${scenario.body}\n\n发送时间：${when}`
     : `${title}\n\n主机：${host.name}\n${scenario.body}\n\n时间：${when}`
@@ -2422,14 +2423,15 @@ createServer(async (request, response) => {
       send(response, 409, { code: 'cluster_host_details_changed' })
       return
     }
-    const { expiresOn = '', price = '', trafficResetDay = 0 } = input
-    if (!Number.isInteger(trafficResetDay) || trafficResetDay < 0 || trafficResetDay > 31 ||
+    const { expiresOn = '', expiryReminderEnabled = false, price = '', trafficResetDay = 0 } = input
+    if (typeof expiryReminderEnabled !== 'boolean' || (expiryReminderEnabled && !expiresOn) ||
+        !Number.isInteger(trafficResetDay) || trafficResetDay < 0 || trafficResetDay > 31 ||
         typeof price !== 'string' || [...price].length > 40 || /[\u0000-\u001f\u007f]/.test(price) ||
         (expiresOn && (!/^\d{4}-\d{2}-\d{2}$/.test(expiresOn) || !Number.isFinite(Date.parse(expiresOn)) || new Date(expiresOn).toISOString().slice(0, 10) !== expiresOn))) {
       send(response, 422, { code: 'cluster_host_details_invalid' })
       return
     }
-    mockHostDetails[id] = { expiresOn, price: price.trim(), trafficResetDay, resourceVersion: mockRevision(900 + ++mockHostDetailsRevision) }
+    mockHostDetails[id] = { expiresOn, expiryReminderEnabled, price: price.trim(), trafficResetDay, resourceVersion: mockRevision(900 + ++mockHostDetailsRevision) }
     send(response, 200, mockHostDetails[id])
     return
   }

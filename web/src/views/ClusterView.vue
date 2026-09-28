@@ -102,7 +102,8 @@ const shareOpen = ref(false)
 const notificationsOpen = ref(false)
 const adding = ref(false)
 const saving = ref(false)
-const editDetails = reactive({ expiresOn: '', price: '', trafficResetDay: '' as number | string, resourceVersion: '' })
+const editDetails = reactive({ expiresOn: '', expiryReminderEnabled: false, price: '', trafficResetDay: '' as number | string, resourceVersion: '' })
+watch(() => editDetails.expiresOn, date => { if (!date) editDetails.expiryReminderEnabled = false })
 const manageError = ref('')
 const savedDetails = ref<ClusterHostDetailsValue>({})
 const savedName = ref('')
@@ -1044,8 +1045,9 @@ function openManage(host: ClusterHost): void {
   editName.value = host.name
   savedName.value = host.name
   const details = inventory.value?.hostDetails?.[host.id]
-  savedDetails.value = { expiresOn: details?.expiresOn || '', price: details?.price || '', trafficResetDay: details?.trafficResetDay || 0 }
+  savedDetails.value = { expiresOn: details?.expiresOn || '', expiryReminderEnabled: Boolean(details?.expiryReminderEnabled), price: details?.price || '', trafficResetDay: details?.trafficResetDay || 0 }
   editDetails.expiresOn = details?.expiresOn || ''
+  editDetails.expiryReminderEnabled = Boolean(details?.expiryReminderEnabled)
   editDetails.price = details?.price || ''
   editDetails.trafficResetDay = details?.trafficResetDay || ''
   editDetails.resourceVersion = details?.resourceVersion || ''
@@ -1104,8 +1106,12 @@ async function saveHost(): Promise<void> {
   const host = selected.value
   if (!host || saving.value || deleting.value || enablingMutualFiles.value || !editName.value.trim()) return
   const name = editName.value.trim()
-  const details = { expiresOn: editDetails.expiresOn, price: editDetails.price.trim(), trafficResetDay: Number(editDetails.trafficResetDay) || 0 }
+  const details = {
+    expiresOn: editDetails.expiresOn, price: editDetails.price.trim(), trafficResetDay: Number(editDetails.trafficResetDay) || 0,
+    ...(editDetails.expiresOn && editDetails.expiryReminderEnabled ? { expiryReminderEnabled: true } : {}),
+  }
   const detailsChanged = details.expiresOn !== (savedDetails.value.expiresOn || '')
+    || Boolean(details.expiryReminderEnabled) !== Boolean(savedDetails.value.expiryReminderEnabled)
     || details.price !== (savedDetails.value.price || '')
     || details.trafficResetDay !== (savedDetails.value.trafficResetDay || 0)
   manageError.value = ''
@@ -2124,10 +2130,16 @@ onBeforeUnmount(() => {
         </label>
         <div class="cluster-manage__details form-stack">
           <strong>{{ t('cluster.details.title') }}</strong>
-          <label class="field">
-            {{ t('cluster.details.expiresOn') }}
-            <input v-model="editDetails.expiresOn" type="date" min="0001-01-01" max="9999-12-31" :disabled="saving || deleting || enablingMutualFiles" />
-          </label>
+          <div class="field">
+            <div class="cluster-manage__expiry-label">
+              <label :for="`${manageFormID}-expiry`">{{ t('cluster.details.expiresOn') }}</label>
+              <label class="cluster-manage__expiry-reminder" :title="t(editDetails.expiresOn ? 'cluster.details.expiryReminderHint' : 'cluster.details.expiryReminderRequiresDate')">
+                <input v-model="editDetails.expiryReminderEnabled" type="checkbox" :disabled="!editDetails.expiresOn || saving || deleting || enablingMutualFiles" />
+                <span>{{ t('cluster.details.expiryReminder') }}</span>
+              </label>
+            </div>
+            <input :id="`${manageFormID}-expiry`" v-model="editDetails.expiresOn" type="date" min="0001-01-01" max="9999-12-31" :disabled="saving || deleting || enablingMutualFiles" />
+          </div>
           <label class="field">
             {{ t('cluster.details.price') }}
             <input v-model="editDetails.price" maxlength="40" :placeholder="t('cluster.details.pricePlaceholder')" :disabled="saving || deleting || enablingMutualFiles" />
@@ -2232,6 +2244,9 @@ onBeforeUnmount(() => {
   border-block: 1px solid var(--border);
 }
 .cluster-manage__details small { font-size: 0.8125rem; line-height: 1.5; color: var(--text-soft); }
+.cluster-manage__expiry-label { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.cluster-manage__expiry-reminder { display: inline-flex; align-items: center; gap: 7px; font-size: .875rem; cursor: pointer; }
+.cluster-manage__expiry-reminder input { flex: 0 0 auto; width: 16px; height: 16px; min-height: 16px; padding: 0; margin: 0; accent-color: var(--brand); }
 .cluster-manage__details-error { color: var(--danger); }
 .cluster-page {
   --cluster-accent: #6d5dfc;

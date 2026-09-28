@@ -4,6 +4,9 @@ import { passkeyZhTW } from '../passkeys'
 export const zhTWMessages = {
   'cluster.details.title': "伺服器資訊（選填）",
   'cluster.details.expiresOn': "伺服器到期時間",
+  'cluster.details.expiryReminder': "到期提醒",
+  'cluster.details.expiryReminderRequiresDate': "請先設定伺服器到期時間",
+  'cluster.details.expiryReminderHint': "依目前 KPanel 時區，提前 7、3、1 天及到期當天各提醒一次；寫入通知記錄，開啟外部推播時同步傳送。",
   'cluster.details.price': "伺服器價格",
   'cluster.details.resetDay': "流量重置日",
   'cluster.details.pricePlaceholder': "例如 ¥99/年、$5/月",

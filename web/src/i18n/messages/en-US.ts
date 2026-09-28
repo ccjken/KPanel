@@ -4,6 +4,9 @@ import { passkeyEnUS } from '../passkeys'
 export const enUSMessages = {
   'cluster.details.title': "Server details (optional)",
   'cluster.details.expiresOn': "Server expiry date",
+  'cluster.details.expiryReminder': "Expiry reminder",
+  'cluster.details.expiryReminderRequiresDate': "Set a server expiry date first",
+  'cluster.details.expiryReminderHint': "Using this KPanel's timezone, notify once 7, 3 and 1 days before expiry and on the expiry date. Save to notification history and send through the enabled external channel.",
   'cluster.details.price': "Server price",
   'cluster.details.resetDay': "Traffic reset day",
   'cluster.details.pricePlaceholder': "e.g. $5/month, €50/year",

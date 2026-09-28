@@ -50,6 +50,7 @@ type TimezoneSource func(context.Context) *time.Location
 type Config struct {
 	DataDir            string
 	Hosts              HostSource
+	HostExpiries       func() map[string]HostExpiry
 	Telegram           TelegramAPI
 	Robots             RobotAPI
 	Timezone           TimezoneSource
@@ -66,16 +67,17 @@ type trafficSample struct {
 }
 
 type Service struct {
-	store      *Store
-	history    *historyStore
-	hosts      HostSource
-	telegram   TelegramAPI
-	robots     RobotAPI
-	timezone   TimezoneSource
-	now        func() time.Time
-	evaluation time.Duration
-	sustain    int
-	repeat     time.Duration
+	store        *Store
+	history      *historyStore
+	hosts        HostSource
+	hostExpiries func() map[string]HostExpiry
+	telegram     TelegramAPI
+	robots       RobotAPI
+	timezone     TimezoneSource
+	now          func() time.Time
+	evaluation   time.Duration
+	sustain      int
+	repeat       time.Duration
 
 	opMu    sync.Mutex
 	mu      sync.Mutex
@@ -129,7 +131,7 @@ func NewService(config Config) (*Service, error) {
 	history := openHistory(store.directory, state)
 	historyState, _ := history.snapshot()
 	service := &Service{
-		store: store, history: history, hosts: config.Hosts, telegram: config.Telegram, robots: config.Robots, timezone: config.Timezone, now: config.Now,
+		store: store, history: history, hosts: config.Hosts, hostExpiries: config.HostExpiries, telegram: config.Telegram, robots: config.Robots, timezone: config.Timezone, now: config.Now,
 		evaluation: config.EvaluationInterval, sustain: config.SustainSamples,
 		repeat: config.RepeatInterval, alerts: make(map[string]alertState),
 		traffic: make(map[string]trafficSample),
@@ -543,12 +545,16 @@ func (s *Service) evaluate(parent context.Context) error {
 	hosts := s.hosts.Hosts(fetchCtx)
 	now := s.displayTime(parent, s.now())
 	locale := normalizeNotificationLocale(state.Settings.Locale)
+	expiries := s.expirySnapshot()
 	stateChanged := s.pruneHostState(hosts.Items)
 	trySend := func(host cluster.Host, rule, kind, message string) (bool, bool) {
 		history.Sequence++
 		event := storedEvent{Event: Event{ID: fmt.Sprint(history.Sequence), CreatedAt: now.UTC(), HostID: host.ID,
 			HostName: safeMessageText(host.Name), IsLocal: host.IsLocal || host.ID == cluster.LocalHostID,
 			Rule: rule, Kind: kind, Message: message, Delivery: "local_only"}}
+		if rule == serverExpiryRuleKey {
+			event.ExpiryDate = expiries[host.ID].ExpiresOn
+		}
 		if event.HostName == "" {
 			event.HostName = host.ID
 		}
@@ -570,6 +576,7 @@ func (s *Service) evaluate(parent context.Context) error {
 		return true, true
 	}
 	for _, host := range hosts.Items {
+		stateChanged = s.handleHostExpiry(host, expiries[host.ID], now, locale, trySend) || stateChanged
 		if host.LastSnapshot == nil {
 			if state.Settings.Rules.HostOfflineEnabled {
 				stateChanged = s.handleAvailability(host, now, locale, trySend) || stateChanged
