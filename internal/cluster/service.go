@@ -850,6 +850,9 @@ func (s *Service) SignedSummary(ctx context.Context, request *http.Request) (Fed
 }
 
 func telemetryForFederation(value contract.HostTelemetry, capabilities string) contract.HostTelemetry {
+	if !hasFederationCapability(capabilities, ServiceChecksCapability) {
+		value.ServiceChecks = nil
+	}
 	if !hasFederationCapability(capabilities, SSHLoginCapability) {
 		value.SSHLogin = nil
 	}
@@ -1509,6 +1512,11 @@ func cleanRateSubject(value string) string {
 }
 
 func cloneTelemetry(value contract.HostTelemetry) contract.HostTelemetry {
+	if contract.ValidServiceCheckSummary(value.ServiceChecks, value.CollectedAt) {
+		value.ServiceChecks = contract.CloneServiceCheckSummary(value.ServiceChecks)
+	} else {
+		value.ServiceChecks = nil
+	}
 	value.OSLike = append([]string(nil), value.OSLike...)
 	if value.SSHLogin != nil {
 		copy := *value.SSHLogin

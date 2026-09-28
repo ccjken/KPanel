@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { CheckCircle2, LoaderCircle, RefreshCw, Send, ShieldCheck } from '@lucide/vue'
 import ModalDialog from '@/components/common/ModalDialog.vue'
+import ServiceCheckAlertsDialog from '@/components/monitoring/ServiceCheckAlertsDialog.vue'
 import { useI18n } from '@/i18n'
 import { phraseCatalogVersion, translatePhrase, usePhraseCatalog } from '@/i18n/phrase'
 import { ApiError, api } from '@/lib/api'
@@ -23,6 +24,7 @@ const emit = defineEmits<{
 }>()
 
 const loading = ref(false)
+const serviceAlertsOpen = ref(false)
 const saving = ref(false)
 const discovering = ref(false)
 const testing = ref(false)
@@ -513,6 +515,7 @@ onBeforeUnmount(() => {
     </div>
 
     <template #footer>
+      <button class="button button--secondary" type="button" :disabled="saving" @click="serviceAlertsOpen = true">{{ phrase('服务异常通知') }}</button>
       <button class="button button--secondary" type="button" :disabled="saving" @click="emit('close')">{{ phrase('关闭') }}</button>
       <button class="button button--primary" type="button" :disabled="saving || loading || !snapshot || saveBlocked" @click="save">
         <LoaderCircle v-if="saving" class="spin" :size="15" />
@@ -520,6 +523,7 @@ onBeforeUnmount(() => {
       </button>
     </template>
   </ModalDialog>
+  <ServiceCheckAlertsDialog v-if="serviceAlertsOpen" :open="serviceAlertsOpen" @close="serviceAlertsOpen = false" />
 </template>
 
 <style scoped>

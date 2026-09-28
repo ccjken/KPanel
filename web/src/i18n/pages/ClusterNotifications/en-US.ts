@@ -1,4 +1,5 @@
 export default [
+  ["服务异常通知", "Service alerts"],
   [
     "本机资源提醒",
     "Local resource alerts"

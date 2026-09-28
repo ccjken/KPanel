@@ -52,6 +52,7 @@ type nodeConfig struct {
 	ReportInterval int    `json:"reportIntervalSeconds"`
 	SSHLogin       bool   `json:"sshLogin,omitempty"`
 	Health         bool   `json:"-"`
+	ServiceChecks  bool   `json:"-"`
 }
 
 type tokenWire struct {
@@ -221,8 +222,9 @@ func runEnroll(arguments []string) error {
 	config := nodeConfig{
 		SchemaVersion: 1, Origin: target.Origin, NodeID: response.NodeID,
 		ReportingKey: response.ReportingKey, ReportInterval: response.ReportInterval,
-		SSHLogin: hasResponseCapability(responseHeaders, cluster.SSHLoginCapability),
-		Health:   hasResponseCapability(responseHeaders, cluster.LightHealthCapability),
+		SSHLogin:      hasResponseCapability(responseHeaders, cluster.SSHLoginCapability),
+		Health:        hasResponseCapability(responseHeaders, cluster.LightHealthCapability),
+		ServiceChecks: hasResponseCapability(responseHeaders, cluster.ServiceChecksCapability),
 	}
 	if terminalEnabled {
 		config.TargetNodeID = response.TargetNodeID
@@ -349,10 +351,16 @@ func collectAndReport(
 	if config.Health {
 		payload.Health = collectLightHealth(ctx)
 	}
+	if config.ServiceChecks {
+		payload.Telemetry.ServiceChecks = readNodeCheckStatus()
+	}
 	return sendLightReport(ctx, config, secret, payload, previousReportLatency)
 }
 
 func sendLightReport(ctx context.Context, config nodeConfig, secret []byte, payload reportRequest, previousReportLatency *int64) (nodeConfig, int64, error) {
+	if !config.ServiceChecks {
+		payload.Telemetry.ServiceChecks = nil
+	}
 	if !config.Health {
 		payload.Health = nil
 	}
@@ -367,8 +375,9 @@ func sendLightReport(ctx context.Context, config nodeConfig, secret []byte, payl
 	var response reportResponse
 	requestStartedAt := time.Now()
 	status, responseHeaders, err := postRawJSONWithStatusAndHeaders(ctx, config.Origin+lightReportPath, body, headers, &response)
-	if err != nil && (config.SSHLogin || config.Health) && shouldRetryLightReportWithoutSSHLogin(status) {
+	if err != nil && (config.SSHLogin || config.Health || config.ServiceChecks) && shouldRetryLightReportWithoutSSHLogin(status) {
 		payload.Telemetry.SSHLogin = nil
+		payload.Telemetry.ServiceChecks = nil
 		payload.Health = nil
 		body, err = json.Marshal(payload)
 		if err == nil {
@@ -388,6 +397,7 @@ func sendLightReport(ctx context.Context, config nodeConfig, secret []byte, payl
 func enableSSHLoginCapability(config nodeConfig, headers http.Header) nodeConfig {
 	config.SSHLogin = hasResponseCapability(headers, cluster.SSHLoginCapability)
 	config.Health = hasResponseCapability(headers, cluster.LightHealthCapability)
+	config.ServiceChecks = hasResponseCapability(headers, cluster.ServiceChecksCapability)
 	return config
 }
 

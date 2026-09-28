@@ -592,6 +592,7 @@ if (process.env.KPANEL_MOCK_CLUSTER_FIXTURE) {
 }
 
 let mockNotificationRevision = 1
+let mockServiceAlerts = { enabled: false, repeat: false, subscriptions: [], resourceVersion: 'service-alerts-1', pending: 0 }
 let mockNotificationSnapshot = {
   enabled: false,
   locale: 'zh-CN',
@@ -1552,6 +1553,21 @@ createServer(async (request, response) => {
   if (request.method === 'GET' && url.pathname === '/api/v1/cluster/notifications') {
     mockNotificationSnapshot.resources.observedAt = new Date().toISOString()
     send(response, 200, mockNotificationSnapshot)
+    return
+  }
+  if (url.pathname === '/api/v1/cluster/notifications/service-checks' && ['GET', 'PUT'].includes(request.method)) {
+    if (request.method === 'PUT') {
+      const input = await readJSON(request)
+      if (input.expectedResourceVersion !== mockServiceAlerts.resourceVersion) {
+        send(response, 409, { code: 'cluster_notifications_changed', title: 'Settings changed' }); return
+      }
+      mockServiceAlerts = { ...mockServiceAlerts, enabled: Boolean(input.enabled), repeat: Boolean(input.repeat), subscriptions: input.subscriptions || [], resourceVersion: `service-alerts-${Date.now()}` }
+    }
+    send(response, 200, { ...mockServiceAlerts, channelReady: mockNotificationSnapshot.enabled && mockNotificationSnapshot.channel.ready,
+      hosts: visualClusterHosts.map(host => ({ id: host.id, isLocal: host.isLocal, name: host.name, state: host.state,
+        checks: { epoch: 'a'.repeat(32), sequence: 3, available: true, intervalSeconds: 300,
+          items: [{ id: 'http-health', revision: 'b'.repeat(32), name: '网站健康检查', kind: 'http', target: 'example.com', state: 'up', checkedAt: new Date().toISOString() },
+            { id: 'tcp-database', revision: 'c'.repeat(32), name: '数据库连接', kind: 'tcp', target: 'database.internal:5432', state: 'down', checkedAt: new Date().toISOString() }] } })) })
     return
   }
   if (request.method === 'PUT' && url.pathname === '/api/v1/cluster/notifications') {

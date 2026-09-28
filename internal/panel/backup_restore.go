@@ -80,6 +80,10 @@ func validatePanelRestoreConfig(c Config, value panelBackupData, directory strin
 	if err != nil {
 		return err
 	}
+	if _, err := notification.NewCheckAlerts(ns); err != nil {
+		_ = ns.Close()
+		return err
+	}
 	return ns.Close()
 }
 

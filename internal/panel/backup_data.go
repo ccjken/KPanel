@@ -54,7 +54,7 @@ func panelBackupPath(name string) bool {
 	case "terminal-commands":
 		return name == "terminal-commands/commands.json"
 	case "notifications":
-		return name == "notifications/notification-state.json" || name == "notifications/telegram-bot-token"
+		return name == "notifications/notification-state.json" || name == "notifications/telegram-bot-token" || name == "notifications/service-check-alerts-v1.json"
 	}
 	return false
 }
@@ -228,6 +228,16 @@ func sanitizeBackupFile(name string, data []byte) ([]byte, error) {
 	}
 	if name == "notifications/notification-state.json" {
 		delete(value, "alertStates")
+		var settings map[string]json.RawMessage
+		if err := json.Unmarshal(value["settings"], &settings); err != nil {
+			return nil, err
+		}
+		settings["enabled"] = json.RawMessage(`false`)
+		value["settings"], _ = json.Marshal(settings)
+	}
+	if name == "notifications/service-check-alerts-v1.json" {
+		value["incidents"] = json.RawMessage(`{}`)
+		value["generation"] = json.RawMessage(`0`)
 		var settings map[string]json.RawMessage
 		if err := json.Unmarshal(value["settings"], &settings); err != nil {
 			return nil, err
