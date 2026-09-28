@@ -597,6 +597,15 @@ const mockNotificationHosts = [
   { id: 'preview-es', name: '西班牙（演示）', isLocal: false },
   { id: 'preview-production', name: '生产环境（演示）', isLocal: false },
 ]
+// Give notification preview hosts matching inventory entries for their OS marks.
+visualClusterHosts.push(
+  visualClusterHost({ id: 'preview-es', name: '西班牙（演示）', hostname: 'preview-es', isLocal: false, state: 'online',
+    os: 'Ubuntu 24.04 LTS', osId: 'ubuntu', uptimeSeconds: 432000, receivedBytes: 8 * 1024 ** 3, sentBytes: 3 * 1024 ** 3,
+    city: 'Madrid', country: 'Spain', countryCode: 'ES' }),
+  visualClusterHost({ id: 'preview-production', name: '生产环境（演示）', hostname: 'preview-production', isLocal: false, state: 'online',
+    os: 'Rocky Linux 9', osId: 'rocky', uptimeSeconds: 864000, receivedBytes: 24 * 1024 ** 3, sentBytes: 11 * 1024 ** 3,
+    city: 'Singapore', country: 'Singapore', countryCode: 'SG' }),
+)
 const mockNotificationScenarios = [
   { host: 1, rule: 'cpu', kind: 'recovery', body: '已恢复：CPU 使用率 当前 6.2%', delivery: 'local_only' },
   { host: 1, rule: 'cpu', kind: 'alert', body: 'CPU 使用率达到 100.0%\n阈值：90.0%', delivery: 'local_only' },

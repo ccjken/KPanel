@@ -3,12 +3,14 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { FileText, RefreshCw, Search } from '@lucide/vue'
 import ModalDialog from '@/components/common/ModalDialog.vue'
+import OperatingSystemIcon from '@/components/overview/OperatingSystemIcon.vue'
 import EmptyState from '@/components/feedback/EmptyState.vue'
 import ErrorState from '@/components/feedback/ErrorState.vue'
 import LoadingState from '@/components/feedback/LoadingState.vue'
 import { ApiError, api } from '@/lib/api'
 import { formatDateTime } from '@/lib/format'
 import { summarizeNotification } from '@/lib/notificationSummary'
+import { detectOperatingSystemIdentity, type OperatingSystemIdentity } from '@/lib/operatingSystem'
 import type { NotificationEvent, NotificationHistoryPage } from '@/types/api'
 import { phraseCatalogVersion, translatePhrase, usePhraseCatalog } from '@/i18n/phrase'
 
@@ -20,7 +22,12 @@ function phrase(value: string): string { phraseCatalogVersion.value; return tran
 const route = useRoute()
 const filters = reactive({ days: '7', host: typeof route.query.host === 'string' ? route.query.host : '', rule: '', kind: '', delivery: '', search: '' })
 const items = ref<NotificationEvent[]>([])
-const rows = computed(() => items.value.map(event => ({ event, ...summarizeNotification(event) })))
+const hostSystems = ref(new Map<string, OperatingSystemIdentity>())
+const hostController = new AbortController()
+const rows = computed(() => items.value.map(event => ({
+  event, ...summarizeNotification(event),
+  system: hostSystems.value.get(event.isLocal ? 'local' : event.hostId) || detectOperatingSystemIdentity(),
+})))
 const selectedEvent = ref<NotificationEvent>()
 const hosts = ref<NotificationHistoryPage['hosts']>([])
 const nextCursor = ref('')
@@ -76,8 +83,17 @@ async function load(append = false): Promise<void> {
 
 watch(() => [filters.days, filters.host, filters.rule, filters.kind, filters.delivery], () => void load())
 watch(() => route.query.host, (host) => { filters.host = typeof host === 'string' ? host : '' })
-onMounted(() => void load())
-onBeforeUnmount(() => { requestID++; controller?.abort() })
+onMounted(() => {
+  void load()
+  // Optional decoration: a slow or unavailable host inventory must not delay history.
+  void api.cluster.hosts(hostController.signal).then(result => {
+    if (hostController.signal.aborted) return
+    hostSystems.value = new Map(result.items.map(host => [
+      host.isLocal ? 'local' : host.id, detectOperatingSystemIdentity(host.lastSnapshot?.telemetry),
+    ]))
+  }).catch(() => { /* Keep the generic Linux mark when host metadata is unavailable. */ })
+})
+onBeforeUnmount(() => { requestID++; controller?.abort(); hostController.abort() })
 </script>
 
 <template>
@@ -116,9 +132,9 @@ onBeforeUnmount(() => { requestID++; controller?.abort() })
       <table class="notification-history__table" :aria-label="phrase('通知记录')">
         <thead><tr><th scope="col">{{ phrase('时间') }}</th><th scope="col">{{ phrase('主机') }}</th><th scope="col">{{ phrase('事件类型') }}</th><th scope="col">{{ phrase('事件信息') }}</th><th scope="col">{{ phrase('外部投递') }}</th><th scope="col"><span class="sr-only">{{ phrase('查看原文') }}</span></th></tr></thead>
         <tbody>
-          <tr v-for="{ event, fields, text, occurredAt } in rows" :key="event.id" class="notification-history__event">
+          <tr v-for="{ event, fields, text, occurredAt, system } in rows" :key="event.id" class="notification-history__event">
             <td class="notification-history__time"><time :datetime="occurredAt || event.createdAt" :title="occurredAt || event.createdAt">{{ formatDateTime(occurredAt || event.createdAt) }}</time></td>
-            <td class="notification-history__host"><strong>{{ event.hostName }}</strong></td>
+            <td class="notification-history__host"><div class="notification-history__host-label"><OperatingSystemIcon :distro="system.key" :label="system.label" :show-tooltip="true" /><strong><span class="sr-only">{{ system.label }} · </span>{{ event.hostName }}</strong></div></td>
             <td class="notification-history__type"><span>{{ phrase(rules[event.rule] || event.rule) }}</span><span class="notification-history__kind" :data-kind="event.kind">{{ phrase(kinds[event.kind]) }}</span></td>
             <td class="notification-history__content">
               <dl v-if="fields.length" class="notification-history__fields"><div v-for="field in fields" :key="field.label"><dt>{{ phrase(field.label) }}</dt><dd>{{ field.value }}</dd></div></dl>
@@ -163,11 +179,15 @@ onBeforeUnmount(() => { requestID++; controller?.abort() })
 .notification-history__table th, .notification-history__table td { padding: 10px 12px; overflow-wrap: anywhere; vertical-align: middle; }
 .notification-history__table td { border-top: 1px solid var(--border); }
 .notification-history__table th:nth-child(1) { width: 108px; }
-.notification-history__table th:nth-child(2) { width: 16%; }
+.notification-history__table th:nth-child(2) { width: 180px; }
 .notification-history__table th:nth-child(3) { width: 160px; }
 .notification-history__table th:nth-child(5) { width: 100px; }
 .notification-history__table th:nth-child(6) { width: 48px; }
 .notification-history__time { color: var(--text-soft); font-size: 13px; }
+.notification-history__host-label { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.notification-history__host-label strong { min-width: 0; }
+.notification-history__host-label :deep(.os-identity__mark) { width: 24px; height: 24px; }
+.notification-history__host-label :deep(.os-identity__mark svg), .notification-history__host-label :deep(.os-identity__mark img) { width: 16px; height: 16px; }
 .notification-history__type > span + span { margin-inline-start: 8px; }
 .notification-history__kind { font-weight: 600; }
 .notification-history__kind[data-kind="alert"] { color: var(--danger); }

@@ -5,8 +5,8 @@ import { reactive } from 'vue'
 import View from './NotificationHistoryView.vue'
 import { ApiError } from '@/lib/api'
 
-const mocks = vi.hoisted(() => ({ list: vi.fn() }))
-vi.mock('@/lib/api', () => ({ ApiError: class extends Error { constructor(message: string, public status = 0) { super(message) } }, api: { cluster: { notificationHistory: mocks.list } } }))
+const mocks = vi.hoisted(() => ({ list: vi.fn(), hosts: vi.fn() }))
+vi.mock('@/lib/api', () => ({ ApiError: class extends Error { constructor(message: string, public status = 0) { super(message) } }, api: { cluster: { notificationHistory: mocks.list, hosts: mocks.hosts } } }))
 vi.mock('@/i18n/phrase', () => ({ usePhraseCatalog: vi.fn(), phraseCatalogVersion: { value: 1 }, translatePhrase: (s: string) => s }))
 vi.mock('vue-router', () => ({ useRoute: () => reactive({ query: {} }) }))
 const wrappers: ReturnType<typeof mount>[] = []
@@ -20,10 +20,34 @@ async function open() {
   } } })
   wrappers.push(wrapper); await flushPromises(); return wrapper
 }
-beforeEach(() => { vi.clearAllMocks(); mocks.list.mockResolvedValue(page) })
+beforeEach(() => { vi.clearAllMocks(); mocks.list.mockResolvedValue(page); mocks.hosts.mockResolvedValue({ items: [] }) })
 afterEach(() => wrappers.splice(0).forEach(wrapper => wrapper.unmount()))
 
 describe('notification history', () => {
+  it('matches OS icons by host ID, normalizes the local host and keeps a fallback for removed hosts', async () => {
+    mocks.hosts.mockResolvedValue({ items: [
+      { id: 'panel-node-id', isLocal: true, lastSnapshot: { telemetry: { osId: 'debian' } } },
+      { id: 'remote-a', isLocal: false, lastSnapshot: { telemetry: { osId: 'ubuntu' } } },
+    ] })
+    mocks.list.mockResolvedValue({ ...page, items: [event,
+      { ...event, id: '8', hostId: 'remote-a', isLocal: false },
+      { ...event, id: '7', hostId: 'removed-host', isLocal: false },
+    ] })
+    const wrapper = await open()
+    const icons = wrapper.findAll('.notification-history__host .os-identity__mark')
+    expect(icons.map(icon => icon.attributes('title'))).toEqual(['Debian', 'Ubuntu', 'Linux'])
+    expect(mocks.hosts).toHaveBeenCalledTimes(1)
+    const signal = mocks.hosts.mock.calls[0]![0] as AbortSignal
+    wrappers.pop()!.unmount()
+    expect(signal.aborted).toBe(true)
+  })
+  it('keeps history usable when system metadata cannot be loaded', async () => {
+    mocks.hosts.mockRejectedValue(new Error('host inventory unavailable'))
+    const wrapper = await open()
+    expect(wrapper.get('.notification-history__event').text()).toContain('CPU 95% > 90%')
+    expect(wrapper.get('.os-identity__mark').attributes('title')).toBe('Linux')
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+  })
   it('shows typed fields inline and preserves original messages and delivery details', async () => {
     const messages = [
       '⚠️ [KPanel 集群告警]\n\n主机：本机\nCPU 使用率达到 95.0%\n阈值：90.0%\n\n时间：2026-09-28 09:00:00 (UTC+08:00)',
