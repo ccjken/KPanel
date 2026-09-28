@@ -3,9 +3,10 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { reactive } from 'vue'
 import View from './NotificationHistoryView.vue'
+import { ApiError } from '@/lib/api'
 
 const mocks = vi.hoisted(() => ({ list: vi.fn() }))
-vi.mock('@/lib/api', () => ({ ApiError: class extends Error {}, api: { cluster: { notificationHistory: mocks.list } } }))
+vi.mock('@/lib/api', () => ({ ApiError: class extends Error { constructor(message: string, public status = 0) { super(message) } }, api: { cluster: { notificationHistory: mocks.list } } }))
 vi.mock('@/i18n/phrase', () => ({ usePhraseCatalog: vi.fn(), phraseCatalogVersion: { value: 1 }, translatePhrase: (s: string) => s }))
 vi.mock('vue-router', () => ({ useRoute: () => reactive({ query: {} }) }))
 const wrappers: ReturnType<typeof mount>[] = []
@@ -13,7 +14,6 @@ const event = { id: '9', hostId: 'local', hostName: '本机', isLocal: true, rul
 const page = { items: [event], hosts: [{ id: 'local', name: '本机', isLocal: true }], nextCursor: '9', retentionDays: 30, maxEvents: 2000, maxBytes: 4194304 }
 async function open() {
   const wrapper = mount(View, { global: { stubs: {
-    PageHeader: { props: ['title', 'description'], template: '<header>{{ title }} {{ description }}</header>' },
     LoadingState: { template: '<div>Loading</div>' },
     ErrorState: { props: ['message'], template: '<div role="alert">{{ message }}<button @click="$emit(\'retry\')">retry</button></div>' },
   } } })
@@ -23,6 +23,12 @@ beforeEach(() => { vi.clearAllMocks(); mocks.list.mockResolvedValue(page) })
 afterEach(() => wrappers.splice(0).forEach(wrapper => wrapper.unmount()))
 
 describe('notification history', () => {
+  it('identifies invalid filters without reporting a storage failure', async () => {
+    mocks.list.mockRejectedValueOnce(new ApiError('invalid filters', 400))
+    const wrapper = await open()
+    expect(wrapper.text()).toContain('筛选条件无效')
+    expect(wrapper.text()).not.toContain('数据目录')
+  })
   it('filters on the server and paginates the applied query', async () => {
     const wrapper = await open()
     expect(wrapper.text()).toContain('仅本地')

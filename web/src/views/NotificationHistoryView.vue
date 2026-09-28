@@ -2,7 +2,6 @@
 import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { Bell, RefreshCw, Search } from '@lucide/vue'
-import PageHeader from '@/components/common/PageHeader.vue'
 import EmptyState from '@/components/feedback/EmptyState.vue'
 import ErrorState from '@/components/feedback/ErrorState.vue'
 import LoadingState from '@/components/feedback/LoadingState.vue'
@@ -62,7 +61,10 @@ async function load(append = false): Promise<void> {
   } catch (reason) {
     if (id !== requestID || (reason instanceof DOMException && reason.name === 'AbortError')) return
     error.value = reason instanceof ApiError && reason.status === 401
-      ? '登录已过期，请重新登录。' : '通知记录暂时不可用，请重试或检查 KPanel 数据目录。'
+      ? '登录已过期，请重新登录。'
+      : reason instanceof ApiError && reason.status === 400
+        ? '筛选条件无效，请缩短搜索内容或调整筛选后重试。'
+        : '通知记录暂时不可用，请重试或检查 KPanel 数据目录。'
   } finally {
     if (id === requestID) { loading.value = false; loadingMore.value = false }
   }
@@ -76,29 +78,29 @@ onBeforeUnmount(() => { requestID++; controller?.abort() })
 
 <template>
   <div class="page notification-history">
-    <PageHeader :title="phrase('通知记录')" :description="phrase('本机与集群事件默认保存在当前 KPanel，外部推送可选。')" />
+    <p class="notification-history__intro">{{ phrase('本机与集群事件默认保存在当前 KPanel，外部推送可选。') }}</p>
     <form class="notification-history__filters toolbar-card" @submit.prevent="load()">
-      <label class="notification-history__search">
+      <label class="field notification-history__search">
         <span>{{ phrase('搜索记录') }}</span>
         <div><Search :size="17" aria-hidden="true" /><input v-model="filters.search" type="search" maxlength="200" :placeholder="phrase('主机名称或通知内容')" /></div>
       </label>
-      <label><span>{{ phrase('时间范围') }}</span><select v-model="filters.days">
+      <label class="field"><span>{{ phrase('时间范围') }}</span><select v-model="filters.days">
         <option value="1">{{ phrase('最近 24 小时') }}</option><option value="7">{{ phrase('最近 7 天') }}</option><option value="30">{{ phrase('最近 30 天') }}</option>
       </select></label>
-      <label><span>{{ phrase('主机') }}</span><select v-model="filters.host">
+      <label class="field"><span>{{ phrase('主机') }}</span><select v-model="filters.host">
         <option value="">{{ phrase('全部主机') }}</option><option value="local">{{ phrase('仅本机') }}</option>
         <option v-if="filters.host && filters.host !== 'local' && !hosts.some(host => host.id === filters.host)" :value="filters.host">{{ filters.host }}</option>
         <option v-for="host in hosts.filter(host => !host.isLocal)" :key="host.id" :value="host.id">{{ host.name }}</option>
       </select></label>
-      <label><span>{{ phrase('事件类型') }}</span><select v-model="filters.rule">
+      <label class="field"><span>{{ phrase('事件类型') }}</span><select v-model="filters.rule">
         <option value="">{{ phrase('全部类型') }}</option><option v-for="(label, key) in rules" :key="key" :value="key">{{ phrase(label) }}</option>
       </select></label>
       <button type="submit" class="button button--secondary" :disabled="loading"><RefreshCw :size="16" />{{ phrase('查询') }}</button>
       <details class="notification-history__more">
         <summary>{{ phrase('更多筛选') }}</summary>
         <div>
-          <label><span>{{ phrase('事件性质') }}</span><select v-model="filters.kind"><option value="">{{ phrase('全部') }}</option><option v-for="(label, key) in kinds" :key="key" :value="key">{{ phrase(label) }}</option></select></label>
-          <label><span>{{ phrase('外部投递') }}</span><select v-model="filters.delivery"><option value="">{{ phrase('全部') }}</option><option v-for="(label, key) in deliveries" :key="key" :value="key">{{ phrase(label) }}</option></select></label>
+          <label class="field"><span>{{ phrase('事件性质') }}</span><select v-model="filters.kind"><option value="">{{ phrase('全部') }}</option><option v-for="(label, key) in kinds" :key="key" :value="key">{{ phrase(label) }}</option></select></label>
+          <label class="field"><span>{{ phrase('外部投递') }}</span><select v-model="filters.delivery"><option value="">{{ phrase('全部') }}</option><option v-for="(label, key) in deliveries" :key="key" :value="key">{{ phrase(label) }}</option></select></label>
         </div>
       </details>
     </form>
@@ -108,7 +110,7 @@ onBeforeUnmount(() => { requestID++; controller?.abort() })
     <EmptyState v-else-if="!items.length" :title="phrase('暂无符合条件的通知')" :description="phrase('可以调整筛选条件；首次启用后只记录新发生的事件。')" />
     <div v-if="!loading && items.length" class="notification-history__list">
       <details v-for="event in items" :key="event.id" class="notification-history__event">
-        <summary>
+        <summary :aria-label="[event.hostName, phrase(rules[event.rule] || event.rule), phrase(kinds[event.kind]), phrase(deliveries[event.delivery]), formatDateTime(event.createdAt)].join(' · ')">
           <Bell :size="18" aria-hidden="true" />
           <div class="notification-history__subject"><strong>{{ event.hostName }}</strong><span>{{ phrase(rules[event.rule] || event.rule) }}</span></div>
           <span class="notification-history__kind" :data-kind="event.kind">{{ phrase(kinds[event.kind]) }}</span>
@@ -131,6 +133,7 @@ onBeforeUnmount(() => { requestID++; controller?.abort() })
 
 <style scoped>
 .notification-history { min-width: 0; }
+.notification-history__intro { margin: 0; color: var(--text-soft); font-size: 14px; line-height: 1.6; }
 .notification-history__filters { display: flex; flex-wrap: wrap; gap: 16px; align-items: end; }
 .notification-history__filters label { display: grid; gap: 6px; flex: 1 1 145px; min-width: 0; font-size: 14px; }
 .notification-history__filters input, .notification-history__filters select { width: 100%; min-width: 0; min-height: 40px; font-size: 14px; }

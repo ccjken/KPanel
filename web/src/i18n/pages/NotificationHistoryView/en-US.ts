@@ -2,10 +2,6 @@ import type { PhraseCatalog } from '@/i18n/phrase'
 
 export default [
   [
-    "通知记录",
-    "Notification history"
-  ],
-  [
     "本机与集群事件默认保存在当前 KPanel，外部推送可选。",
     "Local and cluster events are saved on this KPanel by default. External delivery is optional."
   ],
@@ -192,6 +188,10 @@ export default [
   [
     "登录已过期，请重新登录。",
     "Your session expired. Please sign in again."
+  ],
+  [
+    "筛选条件无效，请缩短搜索内容或调整筛选后重试。",
+    "Invalid filters. Shorten the search or adjust the filters and retry."
   ],
   [
     "通知记录暂时不可用，请重试或检查 KPanel 数据目录。",

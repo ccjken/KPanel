@@ -2,6 +2,8 @@ package panel
 
 import (
 	"net/http"
+	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -23,5 +25,22 @@ func TestNotificationHistoryRequiresSessionAndValidatesFilters(t *testing.T) {
 		if response.Code != http.StatusBadRequest {
 			t.Fatalf("query %s = %d %s", query, response.Code, response.Body.String())
 		}
+	}
+}
+
+func TestNotificationHistoryUnicodeSearchLimits(t *testing.T) {
+	for _, search := range []string{strings.Repeat("中", 200), strings.Repeat("😀", 100)} {
+		raw := url.Values{"search": {search}, "host": {strings.Repeat("机", 85)}, "rule": {"cpu"}, "kind": {"alert"}, "delivery": {"local_only"}, "since": {"2026-09-01T00:00:00Z"}}.Encode()
+		if _, err := parseNotificationHistoryQuery(raw); err != nil {
+			t.Fatalf("valid Unicode search rejected: %v", err)
+		}
+	}
+	for _, search := range []string{strings.Repeat("中", 201), strings.Repeat("😀", 101), string([]byte{0xff})} {
+		if _, err := parseNotificationHistoryQuery(url.Values{"search": {search}}.Encode()); err == nil {
+			t.Fatal("invalid or oversized search accepted")
+		}
+	}
+	if _, err := parseNotificationHistoryQuery("search=" + strings.Repeat("a", 4096)); err == nil {
+		t.Fatal("oversized raw query accepted")
 	}
 }

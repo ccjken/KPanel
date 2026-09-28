@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf16"
+	"unicode/utf8"
 )
 
 const (
@@ -234,7 +236,9 @@ type HistoryPage struct {
 func (q HistoryQuery) Validate() error {
 	if (q.HostID != "" && !validDisplayText(q.HostID, 256)) ||
 		(q.Rule != "" && !validEventRule(q.Rule)) || (q.Kind != "" && !validEventKind(q.Kind)) ||
-		(q.Delivery != "" && !validDelivery(q.Delivery)) || len(q.Search) > 200 ||
+		(q.Delivery != "" && !validDelivery(q.Delivery)) || !utf8.ValidString(q.Search) || len(q.Search) > 800 ||
+		// Match the browser input's maxlength, which counts UTF-16 code units.
+		len(utf16.Encode([]rune(q.Search))) > 200 ||
 		(!q.Until.IsZero() && !q.Since.IsZero() && q.Since.After(q.Until)) || q.Limit < 0 || q.Limit > 100 {
 		return &ValidationError{Field: "filters", Message: "通知记录筛选条件无效"}
 	}

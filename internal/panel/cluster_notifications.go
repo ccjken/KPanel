@@ -66,7 +66,7 @@ func (s *Server) handleNotificationHistory(w http.ResponseWriter, r *http.Reques
 
 func parseNotificationHistoryQuery(raw string) (notification.HistoryQuery, error) {
 	query := notification.HistoryQuery{}
-	if len(raw) > 2048 {
+	if len(raw) > 4096 {
 		return query, errors.New("query too long")
 	}
 	values, err := url.ParseQuery(raw)
