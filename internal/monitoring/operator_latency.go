@@ -2,6 +2,7 @@ package monitoring
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -196,6 +197,8 @@ type operatorLatencyResult struct {
 	target       Check
 	milliseconds float64
 	reachable    bool
+	unknown      bool
+	errorCode    string
 }
 
 func collectOperatorLatency(
@@ -220,6 +223,11 @@ func collectOperatorLatency(
 				if err == nil {
 					result.reachable = true
 					result.milliseconds = float64(latency) / float64(time.Millisecond)
+				} else if ctx.Err() != nil {
+					result.unknown = true
+					result.errorCode = "cancelled"
+				} else {
+					result.errorCode = checkErrorCode(err)
 				}
 				results[index] = result
 			}
@@ -280,10 +288,38 @@ func probeCheck(ctx context.Context, ping OperatorLatencyProber, target Check) (
 		}
 		_ = response.Body.Close()
 		if response.StatusCode < 200 || response.StatusCode >= 400 {
-			return 0, fmt.Errorf("HTTP status %d", response.StatusCode)
+			return 0, checkHTTPStatusError(response.StatusCode)
 		}
 		return latency, nil
 	default:
 		return 0, errors.New("monitoring check kind is invalid")
+	}
+}
+
+type checkHTTPStatusError int
+
+func (e checkHTTPStatusError) Error() string { return fmt.Sprintf("HTTP status %d", int(e)) }
+
+func checkErrorCode(err error) string {
+	var status checkHTTPStatusError
+	var dns *net.DNSError
+	var certificate *tls.CertificateVerificationError
+	var network net.Error
+	switch {
+	case errors.As(err, &status):
+		return "http_status"
+	case errors.As(err, &certificate):
+		return "tls"
+	case errors.As(err, &dns):
+		return "dns"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	case errors.As(err, &network):
+		if network.Timeout() {
+			return "timeout"
+		}
+		return "connection"
+	default:
+		return "probe_failed"
 	}
 }

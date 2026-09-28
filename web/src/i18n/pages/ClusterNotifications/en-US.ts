@@ -8,6 +8,9 @@ export default [
   ["外部推送", "External delivery"],
   ["关闭后继续保存本地记录，只暂停外部发送。", "When off, local recording continues and external delivery pauses."],
 
+  ['启用服务异常通知', 'Enable service alerts'],
+  ['监控所有主机的 Ping、TCP、HTTP 检测项，连续 3 次失败时告警，恢复后通知。', 'Monitor Ping, TCP and HTTP checks on all hosts. Alert after 3 consecutive failures and notify on recovery.'],
+  ["服务异常通知", "Service alerts"],
   [
     "本机资源提醒",
     "Local resource alerts"

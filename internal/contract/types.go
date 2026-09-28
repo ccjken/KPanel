@@ -286,6 +286,7 @@ type HostTelemetry struct {
 	Network              NetworkSummary       `json:"network"`
 	PublicNetwork        PublicNetworkSummary `json:"publicNetwork"`
 	SSHLogin             *SSHLoginEvent       `json:"sshLogin,omitempty"`
+	ServiceChecks        *ServiceCheckSummary `json:"serviceChecks,omitempty"`
 	CollectedAt          time.Time            `json:"collectedAt"`
 }
 

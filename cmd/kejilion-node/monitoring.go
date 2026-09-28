@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/kejilion/kejilion-panel/internal/agent"
+	"github.com/kejilion/kejilion-panel/internal/contract"
 	"github.com/kejilion/kejilion-panel/internal/dockerx"
 	"github.com/kejilion/kejilion-panel/internal/monitoring"
 	"github.com/kejilion/kejilion-panel/internal/systeminfo"
@@ -21,6 +22,11 @@ func startNodeMonitoring(parent context.Context, stateDir string) (http.Handler,
 		System:          systeminfo.NewCollector(),
 		Docker:          dockerx.New("/var/run/docker.sock", "/home/web", stateDir),
 		OperatorLatency: monitoring.NewOperatorLatencyProber(),
+		OnCheckStatus: func(summary contract.ServiceCheckSummary) {
+			if err := publishNodeCheckStatus(summary); err != nil {
+				slog.Warn("check status relay unavailable")
+			}
+		},
 	})
 	if err != nil {
 		slog.Warn("history monitoring is unavailable", "error", err)

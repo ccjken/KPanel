@@ -693,7 +693,7 @@ let mockNotificationSnapshot = {
     trafficEnabled: false, trafficThresholdMiBPerSecond: 100,
     trafficTotalReceivedEnabled: true, trafficTotalReceivedThresholdGiB: 100,
     trafficTotalSentEnabled: true, trafficTotalSentThresholdGiB: 100,
-    sshLoginEnabled: true, hostOfflineEnabled: true,
+    sshLoginEnabled: true, hostOfflineEnabled: true, serviceChecksEnabled: false,
   },
   resources: {
     certificateStatus: 'ready', containerStatus: 'ready', observedAt: new Date().toISOString(), stateCapacityReached: false,

@@ -72,6 +72,7 @@ type Config struct {
 	MaxStorageBytes         int64
 	RollupRetentionDays     int
 	MaxRollupStorageBytes   int64
+	OnCheckStatus           func(contract.ServiceCheckSummary)
 }
 
 type Service struct {
@@ -100,6 +101,11 @@ type Service struct {
 	nextContainerAt       time.Time
 	nextOperatorLatencyAt time.Time
 	containerCPU          map[string]containerCPUCounter
+	checkEpoch            string
+	checkSequence         uint64
+	checkGeneration       uint64
+	checkStatuses         map[string]contract.ServiceCheckStatus
+	onCheckStatus         func(contract.ServiceCheckSummary)
 }
 
 type containerCPUCounter struct {
@@ -254,7 +260,8 @@ func New(config Config) (*Service, error) {
 		stateDir: config.StateDir, system: config.System, docker: config.Docker,
 		operatorLatency: config.OperatorLatency,
 		checks:          checks,
-		now:             config.Now, hostInterval: config.HostInterval,
+		checkEpoch:      checkEpoch(), checkStatuses: make(map[string]contract.ServiceCheckStatus), onCheckStatus: config.OnCheckStatus,
+		now: config.Now, hostInterval: config.HostInterval,
 		containerInterval: config.ContainerInterval, sampleTimeout: config.SampleTimeout,
 		operatorLatencyInterval: config.OperatorLatencyInterval,
 		retentionDays:           config.RetentionDays, maxContainers: config.MaxContainers,
@@ -324,6 +331,7 @@ func (s *Service) Sample(ctx context.Context) error {
 	includeOperatorLatency := s.operatorLatency != nil &&
 		(s.nextOperatorLatencyAt.IsZero() || !now.Before(s.nextOperatorLatencyAt))
 	checkItems := cloneChecks(s.checks.state.Items)
+	checkGeneration := s.checkGeneration
 	if includeOperatorLatency {
 		s.nextOperatorLatencyAt = now.Add(s.operatorLatencyInterval)
 	}
@@ -334,7 +342,9 @@ func (s *Service) Sample(ctx context.Context) error {
 		result := make(chan []operatorLatencyResult, 1)
 		operatorLatency = result
 		go func() {
-			result <- collectOperatorLatency(ctx, s.operatorLatency, checkItems)
+			items := collectOperatorLatency(ctx, s.operatorLatency, checkItems)
+			s.recordCheckStatus(items, now, checkGeneration)
+			result <- items
 		}()
 	}
 
@@ -468,8 +478,27 @@ func (s *Service) Checks() CheckSnapshot {
 
 func (s *Service) ReplaceChecks(input ReplaceChecksInput) (CheckSnapshot, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.checks.replace(input)
+	result, err := s.checks.replace(input)
+	if err == nil {
+		s.checkGeneration++
+		for id, status := range s.checkStatuses {
+			keep := false
+			for _, item := range result.Items {
+				if item.ID == id && checkRevision(item) == status.Revision {
+					keep = true
+					break
+				}
+			}
+			if !keep {
+				delete(s.checkStatuses, id)
+			}
+		}
+	}
+	s.mu.Unlock()
+	if err == nil && s.onCheckStatus != nil {
+		s.onCheckStatus(s.CheckStatus())
+	}
+	return result, err
 }
 
 func containerCPUPercent(previous containerCPUCounter, current containerCPUCounter) float64 {

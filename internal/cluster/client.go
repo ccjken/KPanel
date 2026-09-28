@@ -282,7 +282,7 @@ func (c *RemoteClient) SummaryWithCapabilities(
 	}
 	request.Header.Set(
 		FederationCapabilitiesHeader,
-		SecurityEntrancePathCapability+", "+SSHLoginCapability+", "+FileRelayV1Capability,
+		SecurityEntrancePathCapability+", "+SSHLoginCapability+", "+ServiceChecksCapability+", "+FileRelayV1Capability,
 	)
 	var response FederationSummary
 	headers, err := c.doJSONWithHeaders(c.client, request, MaxSummaryBytes, &response)

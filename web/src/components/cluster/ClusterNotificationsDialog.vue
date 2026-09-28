@@ -51,6 +51,7 @@ const form = reactive({
   trafficTotalSentThresholdGiB: 100,
   sshLoginEnabled: true,
   hostOfflineEnabled: true,
+  serviceChecksEnabled: false,
   channelCredential: '',
 })
 
@@ -137,6 +138,7 @@ function applySnapshot(value: ClusterNotificationSnapshot): void {
   form.trafficTotalSentThresholdGiB = value.rules.trafficTotalSentThresholdGiB || 100
   form.sshLoginEnabled = value.rules.sshLoginEnabled
   form.hostOfflineEnabled = value.rules.hostOfflineEnabled
+  form.serviceChecksEnabled = value.rules.serviceChecksEnabled ?? false
   form.channelCredential = ''
   if (modalControl) {
     void nextTick(() => {
@@ -172,6 +174,7 @@ function rulesFromForm(): ClusterNotificationRules {
     trafficTotalSentThresholdGiB: form.trafficTotalSentThresholdGiB,
     sshLoginEnabled: form.sshLoginEnabled,
     hostOfflineEnabled: form.hostOfflineEnabled,
+    serviceChecksEnabled: form.serviceChecksEnabled,
   }
 }
 
@@ -502,6 +505,10 @@ onBeforeUnmount(() => {
             </div>
           </div>
           <div class="cluster-notifications__event-rules">
+            <label class="cluster-notifications__event-rule cluster-notifications__service-rule">
+              <span><strong>{{ phrase('服务异常通知') }}</strong><small>{{ phrase('监控所有主机的 Ping、TCP、HTTP 检测项，连续 3 次失败时告警，恢复后通知。') }}</small></span>
+              <input v-model="form.serviceChecksEnabled" type="checkbox" :aria-label="phrase('启用服务异常通知')" />
+            </label>
             <label class="cluster-notifications__event-rule">
               <span><strong>{{ phrase('主机掉线 / 失联') }}</strong><small>{{ phrase('连续 3 次处于过期、离线、授权失败或协议异常状态时提醒。') }}</small></span>
               <input v-model="form.hostOfflineEnabled" type="checkbox" :aria-label="phrase('启用主机掉线通知')" />
@@ -881,6 +888,9 @@ onBeforeUnmount(() => {
   font-weight: 400;
   line-height: 1.4;
 }
+
+.cluster-notifications__service-rule strong { font-size: 14px; }
+.cluster-notifications__service-rule small { font-size: 13px; }
 
 .cluster-notifications__threshold {
   display: inline-flex;

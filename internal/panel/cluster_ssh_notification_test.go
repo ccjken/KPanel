@@ -66,7 +66,7 @@ func TestLightReportAdvertisesSSHLoginCapability(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("light report status = %d; body=%s", response.Code, response.Body.String())
 	}
-	if got := response.Header().Get(cluster.LightResponseCapabilitiesHeader); got != cluster.SSHLoginCapability+","+cluster.LightHealthCapability {
+	if got := response.Header().Get(cluster.LightResponseCapabilitiesHeader); got != cluster.SSHLoginCapability+","+cluster.LightHealthCapability+","+cluster.ServiceChecksCapability {
 		t.Fatalf("light report capability header = %q, want %q", got, cluster.SSHLoginCapability)
 	}
 	host, err := server.cluster.Host(context.Background(), lightNode.NodeID)

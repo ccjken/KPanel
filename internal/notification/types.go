@@ -96,6 +96,7 @@ type Rules struct {
 	TrafficTotalSentThresholdGiB     int            `json:"trafficTotalSentThresholdGiB"`
 	SSHLoginEnabled                  bool           `json:"sshLoginEnabled"`
 	HostOfflineEnabled               bool           `json:"hostOfflineEnabled"`
+	ServiceChecksEnabled             bool           `json:"serviceChecksEnabled,omitempty"`
 
 	// Deprecated aggregate fields are accepted while reading v1 state and old
 	// clients. normalizeRules migrates them to both directional rules and

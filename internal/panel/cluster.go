@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/kejilion/kejilion-panel/internal/auth"
 	"github.com/kejilion/kejilion-panel/internal/cluster"
@@ -47,6 +48,18 @@ func (s clusterTelemetrySource) Telemetry(ctx context.Context) (contract.HostTel
 	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
 		return contract.HostTelemetry{}, errors.New("Agent telemetry response has multiple JSON values")
 	}
+	// Optional, memory-only endpoint. Older Agents return 404; core telemetry
+	// and the legacy SSH capability query remain unchanged.
+	checkCtx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	if status, err := s.agent.Get(checkCtx, "/v1/monitoring/check-status", "", newRequestID()); err == nil && status.StatusCode == http.StatusOK && len(status.Body) <= contract.MaxServiceCheckSummaryBytes {
+		var checks contract.ServiceCheckSummary
+		decode := json.NewDecoder(bytes.NewReader(status.Body))
+		decode.DisallowUnknownFields()
+		if decode.Decode(&checks) == nil && errors.Is(decode.Decode(&extra), io.EOF) && contract.ValidServiceCheckSummary(&checks, telemetry.CollectedAt) {
+			telemetry.ServiceChecks = &checks
+		}
+	}
 	return telemetry, nil
 }
 
@@ -54,6 +67,9 @@ func (s *Server) StartBackground(ctx context.Context) {
 	s.cluster.Start(ctx)
 	if s.clusterTraffic != nil {
 		s.clusterTraffic.Start(ctx)
+	}
+	if s.serviceCheckAlerts != nil {
+		s.serviceCheckAlerts.Start(ctx)
 	}
 	if s.notifications != nil {
 		s.notifications.Start(ctx)
@@ -92,6 +108,9 @@ func (s *Server) Close() error {
 		aiErr = s.ai.Close()
 	}
 	var notificationErr error
+	if s.serviceCheckAlerts != nil {
+		s.serviceCheckAlerts.Close()
+	}
 	if s.notifications != nil {
 		notificationErr = s.notifications.Close()
 	}
@@ -820,7 +839,7 @@ func (s *Server) handleLightNodeFederation(w http.ResponseWriter, r *http.Reques
 		}
 		// Rolling-upgrade hint: old lightweight nodes ignore this response
 		// header, while new nodes opt into the optional SSH event field.
-		w.Header().Set(cluster.LightResponseCapabilitiesHeader, cluster.SSHLoginCapability+","+cluster.LightHealthCapability)
+		w.Header().Set(cluster.LightResponseCapabilitiesHeader, cluster.SSHLoginCapability+","+cluster.LightHealthCapability+","+cluster.ServiceChecksCapability)
 		_ = s.audit(r, "", "cluster.light-node.enroll", "cluster-host", response.NodeID, "success", map[string]any{
 			"protocol": cluster.LightNodeProtocol,
 		})
@@ -842,7 +861,7 @@ func (s *Server) handleLightNodeFederation(w http.ResponseWriter, r *http.Reques
 			s.writeClusterError(w, r, err)
 			return
 		}
-		w.Header().Set(cluster.LightResponseCapabilitiesHeader, cluster.SSHLoginCapability+","+cluster.LightHealthCapability)
+		w.Header().Set(cluster.LightResponseCapabilitiesHeader, cluster.SSHLoginCapability+","+cluster.LightHealthCapability+","+cluster.ServiceChecksCapability)
 		_ = s.audit(r, "", "cluster.light-node.batch-enroll", "cluster-host", response.NodeID, "success", map[string]any{
 			"batchEnrollmentId": policyID,
 			"protocol":          cluster.LightNodeProtocol,
@@ -878,7 +897,7 @@ func (s *Server) handleLightNodeFederation(w http.ResponseWriter, r *http.Reques
 			s.writeClusterError(w, r, err)
 			return
 		}
-		w.Header().Set(cluster.LightResponseCapabilitiesHeader, cluster.SSHLoginCapability+","+cluster.LightHealthCapability)
+		w.Header().Set(cluster.LightResponseCapabilitiesHeader, cluster.SSHLoginCapability+","+cluster.LightHealthCapability+","+cluster.ServiceChecksCapability)
 		s.writeJSON(w, http.StatusOK, response)
 	case lightFileCapabilityEndpoint:
 		rawBody, err := readLimitedJSONBody(w, r, cluster.MaxPairBytes)

@@ -391,7 +391,7 @@ func (c *RemoteClient) exchangeV2Headers(
 	if path == v2SummaryPath {
 		request.Header.Set(
 			FederationCapabilitiesHeader,
-			SecurityEntrancePathCapability+", "+SSHLoginCapability,
+			SecurityEntrancePathCapability+", "+SSHLoginCapability+", "+ServiceChecksCapability,
 		)
 	}
 	var response v2Envelope

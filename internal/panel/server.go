@@ -73,6 +73,7 @@ type Server struct {
 	cluster                 *cluster.Service
 	clusterTraffic          *clusterTrafficSource
 	notifications           *notification.Service
+	serviceCheckAlerts      *notification.CheckAlerts
 	clusterShareMu          sync.Mutex
 	clusterShareCache       clusterShareCacheEntry
 	clusterShareRateMu      sync.Mutex
@@ -212,6 +213,10 @@ func NewServer(config Config, authService *auth.Service, storage *store.Store, a
 	if err != nil {
 		return nil, fmt.Errorf("initialize notifications: %w", err)
 	}
+	serviceCheckAlerts, err := notification.NewCheckAlerts(notifications)
+	if err != nil {
+		return nil, fmt.Errorf("initialize service check notifications: %w", err)
+	}
 	server := &Server{
 		passkeys:            passkeys,
 		passkeyOriginLocked: passkeyOriginLocked,
@@ -219,6 +224,7 @@ func NewServer(config Config, authService *auth.Service, storage *store.Store, a
 		cluster:                 clusterService,
 		clusterTraffic:          trafficSource,
 		notifications:           notifications,
+		serviceCheckAlerts:      serviceCheckAlerts,
 		terminalSessions:        make(map[string]panelTerminalSession),
 		terminalOpeningUser:     make(map[string]int),
 		terminalStreams:         newTerminalStreamHub(),

@@ -500,6 +500,7 @@ func cloneSnapshot(source *HostSnapshot) *HostSnapshot {
 		return nil
 	}
 	value := *source
+	value.Telemetry = cloneTelemetry(source.Telemetry)
 	if source.LightHealth != nil {
 		health := *source.LightHealth
 		value.LightHealth = &health

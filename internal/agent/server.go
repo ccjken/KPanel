@@ -383,6 +383,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.requireMethod(w, r, requestID, http.MethodGet, s.monitoringHistory)
 	case r.URL.Path == "/v1/monitoring/checks":
 		s.monitoringChecks(w, r, requestID)
+	case r.URL.Path == "/v1/monitoring/check-status":
+		s.monitoringCheckStatus(w, r, requestID)
 	case r.URL.Path == "/v1/system/actions":
 		s.requireMethod(w, r, requestID, http.MethodPost, s.systemAction)
 	case r.URL.Path == "/v1/system/resource-actions":
