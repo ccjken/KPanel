@@ -58,6 +58,10 @@ function selectTab(tab: ActivityTab): void {
   gap: 18px;
 }
 
+.activity-page > .page {
+  row-gap: 12px;
+}
+
 .activity-page__tabs {
   display: flex;
   align-self: flex-start;
