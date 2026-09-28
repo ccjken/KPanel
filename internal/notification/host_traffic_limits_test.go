@@ -120,14 +120,27 @@ func TestHostTrafficLimitsLegacyThresholdMigration(t *testing.T) {
 	rules := DefaultRules()
 	rules.TrafficTotalReceivedEnabled = true
 	rules.TrafficTotalReceivedThresholdGiB = 7
-	h := historyState{Rules: rules, Alerts: map[string]alertState{"host:traffic-total-received": {Active: true}}, Events: []storedEvent{{Event: Event{Rule: cumulativeTrafficReceivedRuleKey}}}}
+	h := historyState{Rules: rules, Alerts: map[string]alertState{"host:traffic-total-received": {Active: true}}, Events: []storedEvent{
+		{Event: Event{Rule: cumulativeTrafficReceivedRuleKey, Delivery: "pending", Message: "original threshold 1"}},
+		{Event: Event{Rule: cumulativeTrafficSentRuleKey, Delivery: "failed", Message: "original threshold 2"}},
+		{Event: Event{Rule: cumulativeTrafficReceivedRuleKey, Delivery: "sent"}},
+		{Event: Event{Rule: cumulativeTrafficSentRuleKey, Delivery: "local_only"}},
+	}}
 	reconcileTrafficThresholds(&h, rules, nil)
-	if !h.Alerts["host:traffic-total-received"].Active || h.Alerts["host:traffic-total-received"].TrafficThresholdGiB != 7 || h.Events[0].TrafficThresholdGiB != 7 {
+	if !h.Alerts["host:traffic-total-received"].Active || h.Alerts["host:traffic-total-received"].TrafficThresholdGiB != 7 {
 		t.Fatal("legacy state lost known threshold/dedup")
+	}
+	for _, event := range h.Events[:2] {
+		if event.Delivery != "cancelled" || event.LastErrorCode != "traffic_threshold_unknown" || event.TrafficThresholdGiB != 0 || event.Message == "" {
+			t.Fatal("legacy retry must retain history without guessing its threshold")
+		}
+	}
+	if h.Events[2].Delivery != "sent" || h.Events[3].Delivery != "local_only" {
+		t.Fatal("changed historical delivery status")
 	}
 	rules.TrafficTotalReceivedThresholdGiB = 10
 	reconcileTrafficThresholds(&h, rules, nil)
-	if len(h.Alerts) != 0 || h.Events[0].TrafficThresholdGiB != 7 {
+	if len(h.Alerts) != 0 || h.Events[0].TrafficThresholdGiB != 0 {
 		t.Fatal("legacy retry changed its original threshold")
 	}
 }

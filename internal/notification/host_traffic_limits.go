@@ -43,7 +43,7 @@ func trafficThreshold(rules Rules, rule string) int {
 }
 
 // Preserve deduplication when only an unrelated global/host rule changes. Old
-// records predate per-host overrides and are bound to their saved global rules.
+// alert states belong to the last evaluated global rules, unlike older events.
 func reconcileTrafficThresholds(history *historyState, global Rules, limits map[string]HostTrafficLimits) {
 	for key, alert := range history.Alerts {
 		for _, rule := range []string{cumulativeTrafficReceivedRuleKey, cumulativeTrafficSentRuleKey} {
@@ -63,8 +63,12 @@ func reconcileTrafficThresholds(history *historyState, global Rules, limits map[
 	}
 	for i := range history.Events {
 		event := &history.Events[i]
-		if isCumulativeTrafficRule(event.Rule) && event.TrafficThresholdGiB == 0 {
-			event.TrafficThresholdGiB = trafficThreshold(history.Rules, event.Rule)
+		if isCumulativeTrafficRule(event.Rule) && event.TrafficThresholdGiB == 0 &&
+			(event.Delivery == "pending" || event.Delivery == "failed") {
+			// A legacy event may predate history.Rules. Its original threshold is
+			// unknown; do not relabel and retry it under the latest global value.
+			event.Delivery = "cancelled"
+			event.LastErrorCode = "traffic_threshold_unknown"
 		}
 	}
 }
