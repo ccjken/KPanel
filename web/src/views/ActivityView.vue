@@ -47,7 +47,8 @@ function selectTab(tab: ActivityTab): void {
         通知记录
       </button>
     </div>
-    <component :is="activeTab === 'notifications' ? NotificationHistoryView : activeTab === 'audit' ? AuditView : JobsView" />
+    <component :is="activeTab === 'notifications' ? NotificationHistoryView : activeTab === 'audit' ? AuditView : JobsView"
+      :key="activeTab === 'notifications' ? String(route.query.event || '') : activeTab" />
   </div>
 </template>
 

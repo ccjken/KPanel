@@ -109,7 +109,7 @@ onBeforeUnmount(() => { requestID++; controller?.abort() })
     <ErrorState v-else-if="error" :message="phrase(error)" @retry="load(items.length > 0)" />
     <EmptyState v-else-if="!items.length" :title="phrase('暂无符合条件的通知')" :description="phrase('可以调整筛选条件；首次启用后只记录新发生的事件。')" />
     <div v-if="!loading && items.length" class="notification-history__list">
-      <details v-for="event in items" :key="event.id" class="notification-history__event">
+      <details v-for="event in items" :key="event.id" :open="route.query.event === event.id" class="notification-history__event">
         <summary :aria-label="[event.hostName, phrase(rules[event.rule] || event.rule), phrase(kinds[event.kind]), phrase(deliveries[event.delivery]), formatDateTime(event.createdAt)].join(' · ')">
           <Bell :size="18" aria-hidden="true" />
           <div class="notification-history__subject"><strong>{{ event.hostName }}</strong><span>{{ phrase(rules[event.rule] || event.rule) }}</span></div>

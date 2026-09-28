@@ -2,6 +2,11 @@ import { passkeyZhCN } from '../passkeys'
 
 export const zhCNMessages = {
   ...passkeyZhCN,
+  'notifications.alert': '新告警',
+  'notifications.recovery': '恢复通知',
+  'notifications.event': '新通知',
+  'notifications.newEvents': '{count} 条新通知',
+  'notifications.viewHistory': '查看通知记录',
   'desktop.groupRename': '重命名分组',
   'desktop.groupHoldCreate': '停留片刻以创建分组',
   'desktop.groupDropCreate': '松开创建分组',

@@ -3,6 +3,11 @@ import { passkeyZhTW } from '../passkeys'
 
 export const zhTWMessages = {
   ...passkeyZhTW,
+  'notifications.alert': '新警報',
+  'notifications.recovery': '恢復通知',
+  'notifications.event': '新通知',
+  'notifications.newEvents': '{count} 筆新通知',
+  'notifications.viewHistory': '查看通知記錄',
   'desktop.groupRename': '重新命名分組',
   'desktop.groupHoldCreate': '停留片刻以建立群組',
   'desktop.groupDropCreate': '放開建立群組',

@@ -3,6 +3,11 @@ import { passkeyEnUS } from '../passkeys'
 
 export const enUSMessages = {
   ...passkeyEnUS,
+  'notifications.alert': 'New alert',
+  'notifications.recovery': 'Recovery notification',
+  'notifications.event': 'New notification',
+  'notifications.newEvents': '{count} new notifications',
+  'notifications.viewHistory': 'View notification history',
   'desktop.groupRename': 'Rename group',
   'desktop.groupHoldCreate': 'Hold briefly to create a group',
   'desktop.groupDropCreate': 'Release to create a group',

@@ -1561,14 +1561,21 @@ createServer(async (request, response) => {
         relatedEventId: recovery ? String(63 - index) : undefined,
         delivery: ['local_only', 'sent', 'failed', 'pending'][index % 4], attempts: index % 4 === 0 ? 0 : 1, provider: index % 4 === 0 ? undefined : 'telegram' }
     })
+    if (process.env.KPANEL_MOCK_NOTIFICATION_EVENTS) {
+      const injected = JSON.parse(await readFile(process.env.KPANEL_MOCK_NOTIFICATION_EVENTS, 'utf8'))
+      if (!Array.isArray(injected) || injected.length > 100) throw new Error('Mock notification fixture must contain at most 100 events')
+      events.unshift(...injected)
+      events.sort((a, b) => Number(b.id) - Number(a.id))
+    }
     const q = url.searchParams
     const filtered = events.filter(event => (!q.get('host') || event.hostId === q.get('host')) && (!q.get('rule') || event.rule === q.get('rule')) &&
       (!q.get('kind') || event.kind === q.get('kind')) && (!q.get('delivery') || event.delivery === q.get('delivery')) &&
       (!q.get('since') || event.createdAt >= q.get('since')) && (!q.get('until') || event.createdAt <= q.get('until')) &&
       (!q.get('cursor') || Number(event.id) < Number(q.get('cursor'))) &&
       (!q.get('search') || (event.hostName + event.message).toLowerCase().includes(q.get('search').toLowerCase())))
-    const items = filtered.slice(0, 50)
-    send(response, 200, { items, hosts, nextCursor: filtered.length > 50 ? items.at(-1).id : undefined, retentionDays: 30, maxEvents: 2000, maxBytes: 4194304 })
+    const limit = Math.min(100, Math.max(1, Number(q.get('limit')) || 50))
+    const items = filtered.slice(0, limit)
+    send(response, 200, { items, hosts, nextCursor: filtered.length > limit ? items.at(-1).id : undefined, retentionDays: 30, maxEvents: 2000, maxBytes: 4194304 })
     return
   }
   if (request.method === 'GET' && url.pathname === '/api/v1/cluster/notifications') {
