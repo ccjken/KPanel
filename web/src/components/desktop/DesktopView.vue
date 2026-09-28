@@ -2475,7 +2475,66 @@ function onGlobalPointerDown(event: PointerEvent): void {
   closeContextMenu(false)
 }
 
+let desktopWindowSnapshot: number[] = []
+
+function toggleDesktopWindows(): boolean {
+  const available = desktop.windows.value.filter((item) =>
+    desktopElement.value?.querySelector(`#desktop-window-${item.id}:not(.desktop-window--closing)`))
+  const visible = available.filter((item) => !item.minimized).sort((a, b) => a.z - b.z)
+  if (!visible.length && desktopWindowSnapshot.length) {
+    // Restore bottom to top; closed windows stay closed and windows minimized
+    // before showing the desktop are never part of this snapshot.
+    for (const id of desktopWindowSnapshot) {
+      if (available.some((item) => item.id === id)) desktop.restoreWindow(id)
+    }
+    desktopWindowSnapshot = []
+    void nextTick(() => {
+      desktopElement.value?.querySelector<HTMLElement>(`#desktop-window-${desktop.focusedId.value}`)?.focus({ preventScroll: true })
+    })
+    return true
+  }
+  // Opening/restoring a window manually starts a new show-desktop cycle.
+  desktopWindowSnapshot = visible.map((item) => item.id)
+  if (!desktopWindowSnapshot.length) return false
+  for (const id of desktopWindowSnapshot) desktop.minimizeWindow(id)
+  desktopElement.value?.focus({ preventScroll: true })
+  return true
+}
+
 function onGlobalKeyDown(event: KeyboardEvent): void {
+  const showDesktop = event.key.toLowerCase() === 'd'
+  if (event.key === 'Tab' || showDesktop) {
+    if (event.defaultPrevented || event.isComposing || event.altKey || event.ctrlKey || event.metaKey
+      || contextMenu.value.open || document.body.classList.contains('has-modal')) return
+    const target = event.target
+    // Only the desktop/window shell owns this shortcut. Every descendant keeps
+    // native keyboard input, including forms, editors, terminals and widgets.
+    if (!(target instanceof HTMLElement) || target !== document.activeElement
+      || !(target === desktopElement.value || target === document.body
+        || (target.matches('.desktop-window') && desktopElement.value?.contains(target)))) return
+    if (showDesktop) {
+      if (!event.repeat && !event.shiftKey && toggleDesktopWindows()) event.preventDefault()
+      return
+    }
+    // Store order is stable; z-order changes on each activation and would make
+    // three or more windows alternate between only the last two.
+    const windows = desktop.windows.value.filter((item) =>
+      desktopElement.value?.querySelector(`#desktop-window-${item.id}:not(.desktop-window--closing)`))
+    if (!windows.length || (windows.length === 1 && !windows[0]!.minimized)) return
+    const current = windows.findIndex((item) => item.id === desktop.focusedId.value)
+    const index = current < 0 ? (event.shiftKey ? windows.length - 1 : 0)
+      : (current + (event.shiftKey ? -1 : 1) + windows.length) % windows.length
+    const next = windows[index]!
+    event.preventDefault()
+    if (next.minimized) desktop.restoreWindow(next.id)
+    else desktop.focusWindow(next.id)
+    // Restored windows must lose inert before they can receive keyboard focus.
+    void nextTick(() => {
+      if (desktop.focusedId.value !== next.id || next.minimized) return
+      desktopElement.value?.querySelector<HTMLElement>(`#desktop-window-${next.id}`)?.focus({ preventScroll: true })
+    })
+    return
+  }
   const target = event.target
   const editing = target instanceof HTMLElement
     && (target.matches('input, textarea, select') || target.isContentEditable)
