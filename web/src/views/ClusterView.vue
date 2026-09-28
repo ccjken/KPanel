@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, useId, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from '@/i18n'
 import { phraseCatalogVersion, translatePhrase, usePhraseCatalog } from '@/i18n/phrase'
@@ -77,6 +77,7 @@ import { useToast } from '@/stores/toast'
 import type {
   ClusterController,
   ClusterHost,
+  ClusterHostDetails as ClusterHostDetailsValue,
   ClusterHostList,
   ClusterLightBatchEnrollment,
   ClusterLightEnrollment,
@@ -102,7 +103,10 @@ const notificationsOpen = ref(false)
 const adding = ref(false)
 const saving = ref(false)
 const editDetails = reactive({ expiresOn: '', price: '', trafficResetDay: '' as number | string, resourceVersion: '' })
-const detailsError = ref('')
+const manageError = ref('')
+const savedDetails = ref<ClusterHostDetailsValue>({})
+const savedName = ref('')
+const manageFormID = `cluster-manage-${useId()}`
 const deleting = ref(false)
 const enablingMutualFiles = ref(false)
 const generatingCode = ref(false)
@@ -1038,12 +1042,14 @@ function openManage(host: ClusterHost): void {
   selected.value = host
   editResourceVersion.value = host.resourceVersion
   editName.value = host.name
+  savedName.value = host.name
   const details = inventory.value?.hostDetails?.[host.id]
+  savedDetails.value = { expiresOn: details?.expiresOn || '', price: details?.price || '', trafficResetDay: details?.trafficResetDay || 0 }
   editDetails.expiresOn = details?.expiresOn || ''
   editDetails.price = details?.price || ''
   editDetails.trafficResetDay = details?.trafficResetDay || ''
   editDetails.resourceVersion = details?.resourceVersion || ''
-  detailsError.value = ''
+  manageError.value = ''
   manageOpen.value = true
 }
 
@@ -1094,51 +1100,55 @@ async function enableMutualFiles(): Promise<void> {
   }
 }
 
-async function saveName(): Promise<void> {
+async function saveHost(): Promise<void> {
   const host = selected.value
-  if (!host || saving.value || enablingMutualFiles.value || !editName.value.trim()) return
-  saving.value = true
-  try {
-    const updated = await api.cluster.rename(host.id, {
-      name: editName.value.trim(),
-      expectedResourceVersion: editResourceVersion.value,
-    })
-    upsertHost(updated)
-    selected.value = updated
-    editResourceVersion.value = updated.resourceVersion
-    toast.success('主机名称已更新')
-  } catch (reason) {
-    toast.danger('保存失败', friendlyError(reason, '请刷新后重试。'))
-  } finally {
-    saving.value = false
+  if (!host || saving.value || deleting.value || enablingMutualFiles.value || !editName.value.trim()) return
+  const name = editName.value.trim()
+  const details = { expiresOn: editDetails.expiresOn, price: editDetails.price.trim(), trafficResetDay: Number(editDetails.trafficResetDay) || 0 }
+  const detailsChanged = details.expiresOn !== (savedDetails.value.expiresOn || '')
+    || details.price !== (savedDetails.value.price || '')
+    || details.trafficResetDay !== (savedDetails.value.trafficResetDay || 0)
+  manageError.value = ''
+  if (detailsChanged && !editDetails.resourceVersion) {
+    manageError.value = t('cluster.details.unavailable')
+    return
   }
-}
-
-async function saveDetails(): Promise<void> {
-  const host = selected.value
-  if (!host || saving.value || deleting.value || enablingMutualFiles.value || !editDetails.resourceVersion) return
   saving.value = true
-  detailsError.value = ''
+  let phase: 'details' | 'name' = 'details'
+  let detailsWritten = false
   try {
-    const updated = await api.cluster.saveHostDetails(host.id, {
-      expiresOn: editDetails.expiresOn,
-      price: editDetails.price.trim(),
-      trafficResetDay: Number(editDetails.trafficResetDay) || 0,
-      expectedResourceVersion: editDetails.resourceVersion,
-    })
-    // An inventory request started before this write can contain stale details.
-    loadController?.abort()
-    if (inventory.value) {
-      inventory.value.hostDetails = { ...inventory.value.hostDetails, [host.id]: updated }
+    if (detailsChanged) {
+      const updated = await api.cluster.saveHostDetails(host.id, {
+        ...details, expectedResourceVersion: editDetails.resourceVersion,
+      })
+      // A request started before this write may contain stale inventory.
+      loadController?.abort()
+      if (inventory.value) inventory.value.hostDetails = { ...inventory.value.hostDetails, [host.id]: updated }
+      editDetails.resourceVersion = updated.resourceVersion
+      savedDetails.value = { ...updated }
+      detailsWritten = true
     }
-    editDetails.resourceVersion = updated.resourceVersion
+    phase = 'name'
+    if (name !== savedName.value) {
+      const updated = await api.cluster.rename(host.id, { name, expectedResourceVersion: editResourceVersion.value })
+      loadController?.abort()
+      upsertHost(updated)
+      selected.value = updated
+      editResourceVersion.value = updated.resourceVersion
+      savedName.value = updated.name
+    }
     toast.success(t('cluster.details.saved'))
   } catch (reason) {
-    detailsError.value = reason instanceof ApiError && reason.code === 'cluster_host_details_changed'
-      ? t('cluster.details.conflict')
-      : reason instanceof ApiError && reason.code === 'cluster_host_details_invalid'
-        ? t('cluster.details.invalid')
-        : t('cluster.details.failed')
+    if (phase === 'details') {
+      manageError.value = reason instanceof ApiError && reason.code === 'cluster_host_details_changed'
+        ? t('cluster.details.conflict')
+        : reason instanceof ApiError && reason.code === 'cluster_host_details_invalid'
+          ? t('cluster.details.invalid')
+          : t('cluster.details.failed')
+    } else {
+      manageError.value = (detailsWritten ? `${t('cluster.details.nameFailedAfterDetails')} ` : '')
+        + friendlyError(reason, t('cluster.details.failed'))
+    }
   } finally {
     saving.value = false
   }
@@ -2107,31 +2117,28 @@ onBeforeUnmount(() => {
       size="small"
       @close="closeManage"
     >
-      <div v-if="selected" class="form-stack">
+      <form v-if="selected" :id="manageFormID" class="form-stack" @submit.prevent="saveHost">
         <label class="field">
           {{ phrase('显示名称') }}
-          <input v-model="editName" maxlength="80" autocomplete="off" />
+          <input v-model="editName" required maxlength="80" autocomplete="off" :disabled="saving || deleting || enablingMutualFiles" />
         </label>
-        <form class="cluster-manage__details form-stack" @submit.prevent="saveDetails">
+        <div class="cluster-manage__details form-stack">
           <strong>{{ t('cluster.details.title') }}</strong>
           <label class="field">
             {{ t('cluster.details.expiresOn') }}
-            <input v-model="editDetails.expiresOn" type="date" min="0001-01-01" max="9999-12-31" />
+            <input v-model="editDetails.expiresOn" type="date" min="0001-01-01" max="9999-12-31" :disabled="saving || deleting || enablingMutualFiles" />
           </label>
           <label class="field">
             {{ t('cluster.details.price') }}
-            <input v-model="editDetails.price" maxlength="40" :placeholder="t('cluster.details.pricePlaceholder')" />
+            <input v-model="editDetails.price" maxlength="40" :placeholder="t('cluster.details.pricePlaceholder')" :disabled="saving || deleting || enablingMutualFiles" />
           </label>
           <label class="field">
             {{ t('cluster.details.resetDay') }}
-            <input v-model="editDetails.trafficResetDay" type="number" min="1" max="31" step="1" :placeholder="t('cluster.details.resetPlaceholder')" />
+            <input v-model="editDetails.trafficResetDay" type="number" min="1" max="31" step="1" :placeholder="t('cluster.details.resetPlaceholder')" :disabled="saving || deleting || enablingMutualFiles" />
           </label>
           <small>{{ t('cluster.details.hint') }}</small>
-          <p v-if="detailsError" class="cluster-manage__details-error" role="alert">{{ detailsError }}</p>
-          <button class="button button--secondary" type="submit" :disabled="saving || deleting || enablingMutualFiles || !editDetails.resourceVersion">
-            {{ t('cluster.details.save') }}
-          </button>
-        </form>
+        </div>
+        <p v-if="manageError" class="cluster-manage__details-error" role="alert">{{ manageError }}</p>
         <div class="cluster-manage__identity">
           <template v-if="selected.kind !== 'light_node'">
             <span>{{ phrase('目标地址') }}</span><code>{{ displayHostAddress(selected) }}</code>
@@ -2187,7 +2194,7 @@ onBeforeUnmount(() => {
           </template>
         </div>
         <LightNodeHealth v-if="selected.kind === 'light_node'" :health="selected.lightHealth" />
-      </div>
+      </form>
       <template #footer>
         <button
           v-if="selected && !selected.isLocal"
@@ -2202,12 +2209,12 @@ onBeforeUnmount(() => {
         <button class="button button--secondary" type="button" :disabled="saving || deleting || enablingMutualFiles" @click="closeManage">{{ phrase('关闭') }}</button>
         <button
           class="button button--primary"
-          type="button"
+          type="submit"
+          :form="manageFormID"
           :disabled="saving || deleting || enablingMutualFiles || !editName.trim()"
-          @click="saveName"
         >
           <LoaderCircle v-if="saving" class="spin" :size="16" />
-          <Check v-else :size="16" /> {{ phrase('保存名称') }}
+          <Check v-else :size="16" /> {{ t('cluster.details.save') }}
         </button>
       </template>
     </ModalDialog>

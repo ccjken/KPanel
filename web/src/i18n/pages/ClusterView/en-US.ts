@@ -187,7 +187,6 @@ export default [
   ["摘要监控 · 远程终端 · 文件管理", "Summary monitoring · Remote terminal · File management"],
   ["主机 URL 格式无效。", "Host URL format is invalid."],
   ["主机 URL 只能填写根地址，不能包含路径、参数或账号信息。", "Host URL can only fill out root addresses and cannot contain path, parameter or account information."],
-  ["主机名称已更新", "Host name updated"],
   ["主机排列方式", "Host Arrange"],
   ["主机信息已变化，请刷新后重试。", "Host information has changed. Refresh and try again."],
   ["主机已加入集群", "Host has joined the cluster"],

@@ -118,13 +118,12 @@ interface ClusterBindings {
   lightEnrollmentState: Ref<'waiting' | 'registered' | 'connected' | 'expired'>
   editName: Ref<string>
   editDetails: { expiresOn: string; price: string; trafficResetDay: number | string; resourceVersion: string }
-  detailsError: Ref<string>
-  saveDetails: () => Promise<void>
+  manageError: Ref<string>
   addForm: { name: string; accessCredential: string }
   load: (silent?: boolean) => Promise<void>
   addHost: () => Promise<void>
   openManage: (host: ClusterHost) => void
-  saveName: () => Promise<void>
+  saveHost: () => Promise<void>
   removeHost: () => Promise<void>
   mutualFilesHostEligible: (host: ClusterHost) => boolean
   enableMutualFiles: () => Promise<void>
@@ -291,7 +290,7 @@ describe('ClusterView live host details', () => {
     await view.load(true)
     expect(view.selected.value).toEqual(updated)
     mocks.rename.mockResolvedValueOnce(updated)
-    await view.saveName()
+    await view.saveHost()
     expect(mocks.rename).toHaveBeenCalledWith(initial.id, {
       name: '正在编辑的名称', expectedResourceVersion: initial.resourceVersion,
     })
@@ -1218,7 +1217,7 @@ describe('ClusterView inventory and navigation', () => {
     mocks.rename.mockResolvedValueOnce(renamed)
     view.openManage(local)
     view.editName.value = renamed.name
-    await view.saveName()
+    await view.saveHost()
     await view.removeHost()
 
     expect(view.manageOpen.value).toBe(true)
@@ -1234,6 +1233,89 @@ describe('ClusterView inventory and navigation', () => {
 
 
 describe('ClusterView optional server details', () => {
+  it('saves changed details and name with one action and skips unchanged values afterward', async () => {
+    const view = setupView()
+    const items = inventory()
+    const target = items.items[0]!
+    items.hostDetails = { [target.id]: { resourceVersion: 'details-v1' } }
+    view.inventory.value = items
+    view.openManage(target)
+    view.editName.value = 'New name'
+    Object.assign(view.editDetails, { expiresOn: '2028-02-29', price: ' $5/month ', trafficResetDay: 15 })
+    mocks.saveHostDetails.mockResolvedValueOnce({ expiresOn: '2028-02-29', price: '$5/month', trafficResetDay: 15, resourceVersion: 'details-v2' })
+    mocks.rename.mockResolvedValueOnce({ ...target, name: 'New name', resourceVersion: 'name-v2' })
+
+    await view.saveHost()
+
+    expect(mocks.saveHostDetails).toHaveBeenCalledWith(target.id, { expiresOn: '2028-02-29', price: '$5/month', trafficResetDay: 15, expectedResourceVersion: 'details-v1' })
+    expect(mocks.rename).toHaveBeenCalledWith(target.id, { name: 'New name', expectedResourceVersion: target.resourceVersion })
+    expect(view.inventory.value?.items[0]?.name).toBe('New name')
+    expect(view.manageError.value).toBe('')
+    expect(mocks.toastSuccess).toHaveBeenCalledTimes(1)
+    await view.saveHost()
+    expect(mocks.saveHostDetails).toHaveBeenCalledTimes(1)
+    expect(mocks.rename).toHaveBeenCalledTimes(1)
+  })
+
+  it('preserves both edits and does not rename when the details write fails', async () => {
+    const view = setupView()
+    const items = inventory()
+    const target = items.items[0]!
+    items.hostDetails = { [target.id]: { resourceVersion: 'details-v1' } }
+    view.inventory.value = items
+    view.openManage(target)
+    view.editName.value = 'New name'
+    view.editDetails.price = '$5/month'
+    mocks.saveHostDetails.mockRejectedValueOnce(new Error('unavailable'))
+
+    await view.saveHost()
+
+    expect(mocks.rename).not.toHaveBeenCalled()
+    expect(mocks.toastSuccess).not.toHaveBeenCalled()
+    expect(view.editName.value).toBe('New name')
+    expect(view.editDetails.price).toBe('$5/month')
+    expect(view.manageOpen.value).toBe(true)
+    expect(view.manageError.value).toContain('输入已保留')
+  })
+
+  it('reports a partial save and retries only the failed name without resubmitting details', async () => {
+    const view = setupView()
+    const items = inventory()
+    const target = items.items[0]!
+    items.hostDetails = { [target.id]: { resourceVersion: 'details-v1' } }
+    view.inventory.value = items
+    view.openManage(target)
+    view.editName.value = 'New name'
+    view.editDetails.price = '$5/month'
+    mocks.saveHostDetails.mockResolvedValueOnce({ price: '$5/month', resourceVersion: 'details-v2' })
+    mocks.rename.mockRejectedValueOnce(new Error('unavailable'))
+
+    await view.saveHost()
+
+    expect(view.manageError.value).toContain('服务器信息已保存，但名称保存失败')
+    expect(mocks.toastSuccess).not.toHaveBeenCalled()
+    expect(view.editName.value).toBe('New name')
+    expect(view.editDetails.resourceVersion).toBe('details-v2')
+    mocks.rename.mockResolvedValueOnce({ ...target, name: 'New name', resourceVersion: 'name-v2' })
+    await view.saveHost()
+    expect(mocks.saveHostDetails).toHaveBeenCalledTimes(1)
+    expect(mocks.rename).toHaveBeenCalledTimes(2)
+    expect(mocks.toastSuccess).toHaveBeenCalledTimes(1)
+    expect(view.manageError.value).toBe('')
+  })
+
+  it('does not write either edit when details have not loaded', async () => {
+    const view = setupView()
+    view.inventory.value = inventory()
+    view.openManage(view.inventory.value.items[0]!)
+    view.editName.value = 'New name'
+    view.editDetails.price = '$5/month'
+    await view.saveHost()
+    expect(mocks.saveHostDetails).not.toHaveBeenCalled()
+    expect(mocks.rename).not.toHaveBeenCalled()
+    expect(view.manageError.value).toContain('尚未加载')
+  })
+
   it('does not let a delayed refresh replace a successful details save', async () => {
     const view = setupView()
     const items = inventory()
@@ -1246,7 +1328,7 @@ describe('ClusterView optional server details', () => {
     const pending = view.load(true)
     mocks.saveHostDetails.mockResolvedValueOnce({ price: '$5/month', resourceVersion: 'v2' })
     view.editDetails.price = '$5/month'
-    await view.saveDetails()
+    await view.saveHost()
     resolveInventory({ ...items, hostDetails: { [target.id]: { resourceVersion: 'v1' } } })
     await pending
     expect(view.inventory.value?.hostDetails?.[target.id]).toEqual({ price: '$5/month', resourceVersion: 'v2' })
@@ -1260,24 +1342,24 @@ describe('ClusterView optional server details', () => {
     view.inventory.value = items
     view.openManage(target)
     view.editDetails.expiresOn = '2028-02-29'
-    view.inventory.value = { ...items, hostDetails: { [target.id]: { resourceVersion: 'details-v2' } } }
+    view.inventory.value = { ...items, hostDetails: { [target.id]: { price: '$8/month', resourceVersion: 'details-v2' } } }
     mocks.saveHostDetails.mockRejectedValueOnce(new ApiError('Changed', 409, 'cluster_host_details_changed'))
-    await view.saveDetails()
+    await view.saveHost()
     expect(mocks.saveHostDetails).toHaveBeenLastCalledWith(target.id, {
       expiresOn: '2028-02-29', price: '$5/month', trafficResetDay: 31, expectedResourceVersion: 'details-v1',
     })
-    expect(view.detailsError.value).toContain('重新编辑')
+    expect(view.manageError.value).toContain('重新编辑')
     expect(view.editDetails.expiresOn).toBe('2028-02-29')
     view.openManage(target)
     view.editDetails.expiresOn = ''
     view.editDetails.price = ''
     view.editDetails.trafficResetDay = ''
     mocks.saveHostDetails.mockResolvedValueOnce({ resourceVersion: 'details-v3' })
-    await view.saveDetails()
+    await view.saveHost()
     expect(mocks.saveHostDetails).toHaveBeenLastCalledWith(target.id, {
       expiresOn: '', price: '', trafficResetDay: 0, expectedResourceVersion: 'details-v2',
     })
     expect(view.inventory.value?.hostDetails?.[target.id]).toEqual({ resourceVersion: 'details-v3' })
-    expect(view.detailsError.value).toBe('')
+    expect(view.manageError.value).toBe('')
   })
 })
