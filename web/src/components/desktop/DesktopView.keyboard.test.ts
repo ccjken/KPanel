@@ -105,7 +105,9 @@ describe('desktop window keyboard selection', () => {
       expect(document.activeElement).toBe(control)
       expect((await key()).defaultPrevented).toBe(false)
       expect((await key({ shiftKey: true })).defaultPrevented).toBe(false)
+      expect((await key({ key: 'd' })).defaultPrevented).toBe(false)
       expect(desktop.focusedId.value).toBe(active)
+      expect(desktop.windows.value.every(item => !item.minimized)).toBe(true)
     }
   })
 
@@ -130,6 +132,7 @@ describe('desktop window keyboard selection', () => {
     shell(ids[1]!).focus()
     for (const init of [{ ctrlKey: true }, { altKey: true }, { metaKey: true }, { isComposing: true }]) {
       expect((await key(init)).defaultPrevented).toBe(false)
+      expect((await key({ key: 'd', ...init })).defaultPrevented).toBe(false)
       expect(desktop.focusedId.value).toBe(ids[1])
     }
     const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
@@ -145,6 +148,7 @@ describe('desktop window keyboard selection', () => {
       await flushPromises()
       await key()
       expect(desktop.focusedId.value).toBe(ids[1])
+      expect((await key({ key: 'd' })).defaultPrevented).toBe(false)
       // Also protect the brief interval before a modal takes DOM focus.
       shell(ids[1]!).focus()
       await key()
@@ -155,6 +159,75 @@ describe('desktop window keyboard selection', () => {
     await wrapper.trigger('contextmenu', { button: 2, clientX: 200, clientY: 150 })
     ;(wrapper.element as HTMLElement).focus()
     expect((await key()).defaultPrevented).toBe(false)
+    expect((await key({ key: 'd' })).defaultPrevented).toBe(false)
     expect(desktop.focusedId.value).toBe(ids[1])
+  })
+
+  it('shows the desktop with D and restores the visible windows in their previous order', async () => {
+    const ids = await openWindows(4)
+    desktop.minimizeWindow(ids[1]!)
+    desktop.toggleMaximize(ids[2]!)
+    desktop.focusWindow(ids[0]!)
+    await nextTick()
+    const before = desktop.windows.value.map(item => ({
+      id: item.id, minimized: item.minimized, maximized: item.maximized, geometry: { ...item.geometry },
+    }))
+    const order = desktop.windows.value.filter(item => !item.minimized).sort((a, b) => a.z - b.z).map(item => item.id)
+    shell(ids[0]!).focus()
+    expect((await key({ key: 'd' })).defaultPrevented).toBe(true)
+    expect(desktop.windows.value.every(item => item.minimized)).toBe(true)
+    expect(desktop.focusedId.value).toBe(0)
+    expect(document.activeElement).toBe(wrapper.element)
+    expect((await key({ key: 'd', repeat: true })).defaultPrevented).toBe(false)
+    expect(desktop.focusedId.value).toBe(0)
+    // Caps Lock is still a plain D; holding Shift or another modifier is not.
+    expect((await key({ key: 'D' })).defaultPrevented).toBe(true)
+    expect(desktop.windows.value.map(item => ({
+      id: item.id, minimized: item.minimized, maximized: item.maximized, geometry: { ...item.geometry },
+    }))).toEqual(before)
+    expect(desktop.windows.value.filter(item => !item.minimized).sort((a, b) => a.z - b.z).map(item => item.id)).toEqual(order)
+    expect(desktop.focusedId.value).toBe(ids[0])
+    expect(document.activeElement).toBe(shell(ids[0]!))
+    expect((await key({ key: 'D', shiftKey: true })).defaultPrevented).toBe(false)
+    expect(desktop.focusedId.value).toBe(ids[0])
+    await key({ key: 'd' })
+    await key({ key: 'd' })
+    expect(desktop.focusedId.value).toBe(ids[0])
+  })
+
+  it('does not reopen windows closed while showing the desktop', async () => {
+    const ids = await openWindows(2)
+    shell(ids[1]!).focus()
+    await key({ key: 'd' })
+    desktop.closeWindow(ids[1]!)
+    await nextTick()
+    await key({ key: 'd' })
+    expect(desktop.windows.value).toHaveLength(1)
+    expect(desktop.windows.value[0]?.minimized).toBe(false)
+    expect(document.activeElement).toBe(shell(ids[0]!))
+  })
+
+  it.each(['open', 'restore'])('starts a new cycle after a manual window %s', async (action) => {
+    const ids = await openWindows(2)
+    shell(ids[1]!).focus()
+    await key({ key: 'd' })
+    const id = action === 'open' ? desktop.openWindow('/settings', 'route.settings', true) : ids[0]!
+    if (action === 'restore') desktop.restoreWindow(id)
+    await flushPromises()
+    shell(id).focus()
+    await key({ key: 'd' })
+    expect(desktop.windows.value.every(item => item.minimized)).toBe(true)
+    await key({ key: 'd' })
+    expect(desktop.windows.value.filter(item => !item.minimized).map(item => item.id)).toEqual([id])
+    expect(document.activeElement).toBe(shell(id))
+  })
+
+  it.each([0, 1])('leaves D alone with %i already minimized windows and no snapshot', async (count) => {
+    const ids = await openWindows(count)
+    for (const id of ids) desktop.minimizeWindow(id)
+    await nextTick()
+    ;(wrapper.element as HTMLElement).focus()
+    expect((await key({ key: 'd' })).defaultPrevented).toBe(false)
+    expect(desktop.windows.value.every(item => item.minimized)).toBe(true)
   })
 })

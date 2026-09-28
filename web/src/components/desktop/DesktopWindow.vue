@@ -349,6 +349,7 @@ const stopActiveWatch = watch(
   (active) => {
     if (!active) return
     void nextTick(() => {
+      if (!isActive.value) return
       const element = windowElement.value
       if (element && !element.contains(document.activeElement)) element.focus({ preventScroll: true })
     })
