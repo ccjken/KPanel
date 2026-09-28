@@ -1,9 +1,6 @@
 import type { PhraseCatalog } from '@/i18n/phrase'
 
 export default [
-["无法读取服务通知设置。","Could not load service alert settings."],
-["设置已被修改，请重新读取后再保存。","Settings have changed. Reload before saving."],
-["保存失败，当前选择尚未生效。","Save failed. Your changes have not been applied."],
   ["请求失败，请重试。", "Request failed. Please try again."],
   ["放弃 {0} 的未保存修改并关闭？", "Discard unsaved changes to {0} and close?"],
   ["最多打开 12 个文件，请先关闭一个标签。", "You can open up to 12 files. Close a tab first."],
