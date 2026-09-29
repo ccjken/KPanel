@@ -55,6 +55,7 @@ function unavailableReason(id: BackupModule) {
   return ({ protected_panel_data: '所选目录与面板自身数据重叠，请将业务数据与面板目录分开。', user_namespace_requires_adapter: '用户命名空间运行模式暂不支持此类备份。', auto_remove_requires_stop: '容器启用了停止后自动删除，请先调整容器配置。', container_not_stable: '有容器正在暂停或重启，请等待其恢复稳定。', volume_driver_requires_external_backup: '数据卷需要存储驱动提供的专用备份工具。', data_path_cannot_be_archived: '数据目录包含不可归档内容（如链接或独立挂载点），请先处理。' } as Record<string, string>)[issue || ''] || 'Agent 暂不可用，请检查连接。'
 }
 function status(record: BackupRecord) {
+  if (record.status === 'expired') return '备份文件已过期，请重新导出或上传'
   if (record.errorCode === 'remote_upload_failed') return '远程上传失败，本地备份可下载或重试上传'
   if (record.errorCode === 'remote_download_failed') return '远程取回失败，请检查存储后重试'
   if (record.errorCode === 'retention_failed') return '备份已保存，旧备份清理未完成'
@@ -63,7 +64,6 @@ function status(record: BackupRecord) {
 	if (record.errorCode === 'host_busy') return '请关闭宿主机终端，并等待已有主机任务完成后重试。'
   if (record.status === 'running') return ({ backing_up_services: '正在备份服务数据', encrypting: '正在加密备份文件', checking_services: '正在检查服务数据', restoring_services: '正在恢复服务数据' } as Record<string, string>)[record.stage] || '正在处理'
   if (record.errorCode === 'partially_restored') return '部分数据已恢复，请查看已完成类别'
-  if (record.status === 'expired') return '备份文件已过期，请重新导出或上传'
   if (record.errorCode === 'cleanup_pending') return '数据已恢复，旧数据清理尚未完成'
   if (record.errorCode === 'recovery_required') return '恢复中断，需要继续回滚或清理'
   if (record.errorCode === 'rolled_back') return '恢复失败，已回滚所选数据'

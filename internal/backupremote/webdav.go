@@ -112,6 +112,20 @@ func (c *Client) davList(ctx context.Context) ([]Object, error) {
 	}
 	limit := &io.LimitedReader{R: res.Body, N: (4 << 20) + 1}
 	decoder := xml.NewDecoder(limit)
+	// A successful listing must be a DAV multistatus document, not an HTML
+	// login/error page served with a misleading 207 status.
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			return nil, ErrUnavailable
+		}
+		if root, ok := token.(xml.StartElement); ok {
+			if root.Name.Local != "multistatus" || root.Name.Space != "DAV:" {
+				return nil, ErrUnavailable
+			}
+			break
+		}
+	}
 	base, _ := url.Parse(c.davURL(""))
 	out := []Object{}
 	count := 0

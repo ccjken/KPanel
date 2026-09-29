@@ -72,6 +72,7 @@ func (m *Manager) ReserveUpload(id string) (Record, error) {
 		return r, err
 	}
 	f.Close()
+	r.LocalReady = true
 	r.Status = "queued"
 	r.Stage = "queued"
 	r.ErrorCode = ""

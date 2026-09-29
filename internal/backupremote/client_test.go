@@ -3,6 +3,7 @@ package backupremote
 import (
 	"bytes"
 	"context"
+	"encoding/xml"
 	"fmt"
 	"github.com/kejilion/kejilion-panel/internal/backup"
 	"io"
@@ -23,6 +24,7 @@ import (
 func remoteFixture(t *testing.T, kind string, denyMove bool) (*Client, *sync.Map) {
 	t.Helper()
 	objects := &sync.Map{}
+	parts := &sync.Map{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if kind == "webdav" {
 			user, pass, ok := r.BasicAuth()
@@ -38,6 +40,33 @@ func remoteFixture(t *testing.T, kind string, denyMove bool) (*Client, *sync.Map
 		}
 		key := r.URL.Path
 		switch r.Method {
+		case "POST":
+			if r.URL.Query().Has("uploads") {
+				fmt.Fprint(w, `<InitiateMultipartUploadResult><Bucket>bucket</Bucket><Key>kpanel/large.kpb</Key><UploadId>fixture-upload</UploadId></InitiateMultipartUploadResult>`)
+			} else if r.URL.Query().Get("uploadId") == "fixture-upload" {
+				var completed struct {
+					Parts []struct {
+						Number string `xml:"PartNumber"`
+					} `xml:"Part"`
+				}
+				if xml.NewDecoder(r.Body).Decode(&completed) != nil {
+					t.Error("multipart completion XML")
+				}
+				var data []byte
+				for _, part := range completed.Parts {
+					v, ok := parts.LoadAndDelete(part.Number)
+					if !ok {
+						t.Error("missing uploaded part", part.Number)
+						return
+					}
+					data = append(data, v.([]byte)...)
+				}
+				objects.Store(key, data)
+				fmt.Fprint(w, `<CompleteMultipartUploadResult><Bucket>bucket</Bucket><Key>kpanel/large.kpb</Key><ETag>"fixture-2"</ETag></CompleteMultipartUploadResult>`)
+			} else {
+				t.Error("unexpected multipart operation")
+				w.WriteHeader(400)
+			}
 		case "MKCOL":
 			w.WriteHeader(201)
 		case "PUT":
@@ -49,7 +78,11 @@ func remoteFixture(t *testing.T, kind string, denyMove bool) (*Client, *sync.Map
 			if err != nil {
 				t.Error(err)
 			}
-			objects.Store(key, b)
+			if part := r.URL.Query().Get("partNumber"); part != "" {
+				parts.Store(part, b)
+			} else {
+				objects.Store(key, b)
+			}
 			w.Header().Set("ETag", `"fixture"`)
 			w.WriteHeader(200)
 		case "MOVE":
@@ -67,6 +100,9 @@ func remoteFixture(t *testing.T, kind string, denyMove bool) (*Client, *sync.Map
 			objects.Delete(key)
 			w.WriteHeader(201)
 		case "DELETE":
+			if r.URL.Query().Get("uploadId") != "" {
+				parts.Clear()
+			}
 			objects.Delete(key)
 			w.WriteHeader(204)
 		case "HEAD":
@@ -187,7 +223,7 @@ func TestWebDAVFailedMoveCleansPartial(t *testing.T) {
 	objects.Range(func(k, v any) bool { t.Error("partial leaked", k); return true })
 }
 func TestRemoteNetworkBoundaries(t *testing.T) {
-	for _, address := range []string{"127.0.0.1", "::1", "169.254.169.254", "100.100.100.200", "168.63.129.16", "::ffff:127.0.0.1", "64:ff9b::7f00:1", "2002:7f00:1::", "224.0.0.1", "0.0.0.0"} {
+	for _, address := range []string{"127.0.0.1", "::1", "169.254.169.254", "100.100.100.200", "168.63.129.16", "fd00:ec2::254", "::ffff:127.0.0.1", "64:ff9b::7f00:1", "2002:7f00:1::", "224.0.0.1", "0.0.0.0"} {
 		if allowedIP(netip.MustParseAddr(address)) {
 			t.Error("unsafe address", address)
 		}
@@ -207,5 +243,82 @@ func TestRemoteNetworkBoundaries(t *testing.T) {
 	defer prod.Close()
 	if prod.Test(context.Background()) == nil {
 		t.Fatal("production loopback allowed")
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestS3ConfiguredEndpointNormalization(t *testing.T) {
+	for _, endpoint := range []string{"https://s3.amazonaws.com", "https://s3.us-east-1.amazonaws.com", "https://s3.dualstack.us-east-1.amazonaws.com", "https://storage.example:443", "http://storage.example:80"} {
+		t.Run(endpoint, func(t *testing.T) {
+			calls := 0
+			storage := testStorage()
+			storage.Kind = "s3"
+			storage.Endpoint = endpoint
+			storage.Bucket = "bucket"
+			storage.AccessKey = "fixture"
+			client, err := newClient(storage, roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				calls++
+				return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`<ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>`))}, nil
+			}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer client.Close()
+			if _, err = client.List(context.Background()); err != nil || calls != 1 {
+				t.Fatal("configured SDK endpoint blocked", calls, err)
+			}
+			if _, err = client.http.Get("https://attacker.amazonaws.com/"); err == nil {
+				t.Fatal("unconfigured host allowed")
+			}
+		})
+	}
+}
+func TestS3MultipartStreaming(t *testing.T) {
+	client, objects := remoteFixture(t, "s3", false)
+	data := bytes.Repeat([]byte("encrypted-backup-fixture"), 800000)
+	f, err := os.Create(filepath.Join(t.TempDir(), "large.kpb"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	f.Write(data)
+	f.Seek(0, 0)
+	if err = client.Upload(context.Background(), "large.kpb", f, int64(len(data))); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := objects.Load("/bucket/kpanel/large.kpb")
+	if !ok || !bytes.Equal(got.([]byte), data) {
+		t.Fatal("multipart changed the package")
+	}
+}
+func TestWebDAVRejectsInvalidListingAndTruncatedDownload(t *testing.T) {
+	storage := testStorage()
+	client, err := newClient(storage, roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		res := &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("abc")), ContentLength: 3}
+		if r.Method == "HEAD" {
+			res.ContentLength = 4
+		}
+		if r.Method == "PROPFIND" {
+			res.StatusCode = 207
+			res.Body = io.NopCloser(strings.NewReader("<html>login</html>"))
+		}
+		return res, nil
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	if _, err = client.List(context.Background()); err == nil {
+		t.Fatal("invalid DAV document accepted")
+	}
+	target := filepath.Join(t.TempDir(), "upload.kpb")
+	if _, err = client.Download(context.Background(), "archive.kpb", target); err == nil {
+		t.Fatal("short download accepted")
+	}
+	if _, err = os.Stat(target); !os.IsNotExist(err) {
+		t.Fatal("partial download retained")
 	}
 }

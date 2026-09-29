@@ -20,6 +20,13 @@ beforeEach(() => {
 afterEach(() => wrapper?.unmount())
 
 describe('backup center user flow', () => {
+  it('shows expiry instead of offering a missing local fallback', async () => {
+    vi.mocked(backups.list).mockResolvedValue({ items: [{ ...record, action: 'export', status: 'expired', localReady: false, errorCode: 'remote_upload_failed' }], maxBytes: 1000 })
+    render(); await flushPromises()
+    expect(wrapper.text()).toContain('备份文件已过期')
+    expect(wrapper.text()).not.toContain('本地备份可下载')
+    expect(wrapper.find('a[download]').exists()).toBe(false)
+  })
   it('fetches a remote package for inspection without restoring it', async () => {
     vi.mocked(backups.files).mockResolvedValue({ items: [{ key: 'archive.kpb', size: 128, modified: '2026-09-29T00:00:00Z' }] })
     render(); await flushPromises()

@@ -43,7 +43,7 @@ func allowedIP(ip netip.Addr) bool {
 			return false
 		}
 	}
-	return ip.IsValid() && ip.IsGlobalUnicast() && !ip.IsLoopback() && !ip.IsLinkLocalUnicast() && !netip.MustParsePrefix("100.64.0.0/10").Contains(ip) && ip != netip.MustParseAddr("168.63.129.16")
+	return ip.IsValid() && ip.IsGlobalUnicast() && !ip.IsLoopback() && !ip.IsLinkLocalUnicast() && !netip.MustParsePrefix("100.64.0.0/10").Contains(ip) && ip != netip.MustParseAddr("168.63.129.16") && ip != netip.MustParseAddr("fd00:ec2::254")
 }
 func secureDial(ctx context.Context, network, address string) (net.Conn, error) {
 	host, port, err := net.SplitHostPort(address)
@@ -88,13 +88,15 @@ type boundedTransport struct {
 	base     http.RoundTripper
 	endpoint *url.URL
 	bucket   string
+	awsHost  string
 }
 
 func (t boundedTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	// SDK region retries and server redirects must not forward credentials to a
 	// host other than the configured endpoint (or its configured bucket).
 	host := r.URL.Hostname()
-	if r.URL.Scheme != t.endpoint.Scheme || r.URL.Port() != t.endpoint.Port() || (host != t.endpoint.Hostname() && host != t.bucket+"."+t.endpoint.Hostname()) {
+	allowedHost := host == t.endpoint.Hostname() || host == t.bucket+"."+t.endpoint.Hostname() || t.awsHost != "" && (host == t.awsHost || host == t.bucket+"."+t.awsHost)
+	if r.URL.Scheme != t.endpoint.Scheme || effectivePort(r.URL) != effectivePort(t.endpoint) || !allowedHost {
 		return nil, ErrUnavailable
 	}
 	res, err := t.base.RoundTrip(r)
@@ -134,6 +136,20 @@ func newClient(storage Storage, injected http.RoundTripper) (*Client, error) {
 		base = injected
 	}
 	guard := boundedTransport{base: base, endpoint: u, bucket: storage.Bucket}
+	// The SDK canonicalizes standard AWS endpoints even with an explicit
+	// region. Allow only that deterministic alias, never a response-supplied
+	// redirect host or a wildcard AWS domain.
+	if storage.Kind == "s3" {
+		suffix := ".amazonaws.com"
+		if strings.HasPrefix(storage.Region, "cn-") {
+			suffix += ".cn"
+		}
+		regional := "s3." + storage.Region + suffix
+		host := u.Hostname()
+		if host == "s3.amazonaws.com" || host == regional || host == "s3-"+storage.Region+suffix || host == "s3.dualstack."+storage.Region+suffix {
+			guard.awsHost = regional
+		}
+	}
 	c := &Client{storage: storage, transport: transport, http: &http.Client{Transport: guard, CheckRedirect: func(*http.Request, []*http.Request) error { return ErrUnavailable }}}
 	if storage.Kind == "s3" {
 		lookup := minio.BucketLookupDNS
@@ -145,6 +161,7 @@ func newClient(storage Storage, injected http.RoundTripper) (*Client, error) {
 			return nil, ErrInvalid
 		}
 		c.s3 = client
+		client.SetS3EnableDualstack(false)
 	}
 	return c, nil
 }
@@ -315,4 +332,14 @@ func validPort(u *url.URL) bool {
 	}
 	n, e := strconv.Atoi(p)
 	return e == nil && n > 0 && n <= 65535
+}
+
+func effectivePort(u *url.URL) string {
+	if u.Port() != "" {
+		return u.Port()
+	}
+	if u.Scheme == "https" {
+		return "443"
+	}
+	return "80"
 }
