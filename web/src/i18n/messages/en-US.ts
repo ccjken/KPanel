@@ -432,6 +432,7 @@ export const enUSMessages = {
   'ai.tool.completed': 'Completed',
   'ai.tool.failed': 'Failed',
   'ai.tool.rejected': 'Rejected',
+  'ai.error.copy': 'Copy failed. Select the text and copy it manually.',
   'ai.error.workspaceLoad': 'The AI workspace could not load.',
   'ai.error.conversationLoad': 'The conversation could not load.',
   'ai.error.olderMessages': 'Earlier messages could not load.',

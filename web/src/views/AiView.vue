@@ -10,6 +10,7 @@ import type { AiChoiceOption } from '@/components/ai/AiChoiceMenu.vue'
 import AiMarkdown from '@/components/ai/AiMarkdown.vue'
 import AiSettings from '@/components/ai/AiSettings.vue'
 import { aiApi,runEventURL } from '@/lib/aiApi'
+import { copyText } from '@/lib/clipboard'
 import { desktopWindowActiveKey } from '@/lib/desktopRouteKeys'
 import type { AIApprovalMode,AIMessage,AIModel,AIProvider,AIRun,AIRunSnapshot,AISession,AIToolCall,AIThinkingLevel,AIUploadAttachment } from '@/types/ai'
 
@@ -23,6 +24,7 @@ const desktopWindowActive=inject(desktopWindowActiveKey,computed(()=>true))
 const providers=ref<AIProvider[]>([]);const models=ref<AIModel[]>([]);const sessions=ref<AISession[]>([]);const messages=ref<AIMessage[]>([]);const toolCalls=ref<AIToolCall[]>([])
 const currentRun=ref<AIRun>();const streamText=ref('');const search=ref('');const input=ref('');const error=ref('');const loading=ref(true);const sending=ref(false);const cancelling=ref(false);const connected=ref(false);const settingsOpen=ref(false);const sessionDrawer=ref(false)
 const attachments=ref<AIUploadAttachment[]>([]);const followOutput=ref(true);const copiedMessage=ref('')
+const copyFailed=ref(false);let copyTimer:number|undefined
 const creatingSession=ref(false);const showArchived=ref(false)
 const messageCursor=ref('');const loadingOlder=ref(false)
 const messagesPane=ref<HTMLElement>();const composer=ref<HTMLTextAreaElement>();const fileInput=ref<HTMLInputElement>();let source:EventSource|undefined;let searchTimer:number|undefined;let streamFrame=0;let streamQueue='';let completedStreamMessage:AIMessage|undefined
@@ -101,7 +103,13 @@ async function send(){const content=input.value.trim();const selected=attachment
 function fileData(file:File){return new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||'').split(',',2)[1]||'');reader.onerror=()=>reject(reader.error||new Error(i18n.t('ai.error.fileRead')));reader.readAsDataURL(file)})}
 async function chooseAttachments(event:Event){const files=Array.from((event.target as HTMLInputElement).files||[]);(event.target as HTMLInputElement).value='';if(!files.length)return;error.value='';if(attachments.value.length+files.length>4){error.value=i18n.t('ai.error.attachmentsLimit');return}let total=attachments.value.reduce((sum,item)=>sum+item.size,0);for(const file of files){const kind=file.type.startsWith('image/')?'image':'text';if(kind==='image'&&!activeModel.value?.vision){error.value=i18n.t('ai.error.visionUnavailable');return}if(kind==='image'&&file.size>4*1024*1024){error.value=i18n.t('ai.error.imageTooLarge');return}if(kind==='text'&&file.size>512*1024){error.value=i18n.t('ai.error.textTooLarge');return}total+=file.size;if(total>8*1024*1024){error.value=i18n.t('ai.error.attachmentsTooLarge');return}try{const data=await fileData(file);attachments.value.push({name:file.name,mimeType:file.type||'text/plain',data,file,size:file.size,kind,previewUrl:kind==='image'?`data:${file.type};base64,${data}`:undefined})}catch(reason){error.value=localizeError(reason,'ai.error.fileRead');return}}}
 function removeAttachment(index:number){attachments.value.splice(index,1)}
-async function copyMessage(message:AIMessage){await navigator.clipboard.writeText(message.content);copiedMessage.value=message.id;window.setTimeout(()=>{if(copiedMessage.value===message.id)copiedMessage.value=''},1200)}
+async function copyMessage(message:AIMessage){
+  if(copyTimer)window.clearTimeout(copyTimer)
+  copiedMessage.value='';copyFailed.value=false
+  if(!await copyText(message.content)){copyFailed.value=true;return}
+  copiedMessage.value=message.id
+  copyTimer=window.setTimeout(()=>{copiedMessage.value=''},1200)
+}
 function outputTime(value:string){if(!value)return '';return new Intl.DateTimeFormat(i18n.locale.value,{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(value))}
 function sessionTime(value:string){if(!value)return '';return new Intl.DateTimeFormat(i18n.locale.value,{hour:'2-digit',minute:'2-digit'}).format(new Date(value))}
 function onKeydown(event:KeyboardEvent){if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();void send()}}
@@ -125,7 +133,7 @@ async function archive(item:AISession){try{await aiApi.sessions.update(item.id,{
 async function restore(item:AISession){try{await aiApi.sessions.update(item.id,{archived:false});await refreshAfterSessionLeaves(item)}catch(reason){error.value=localizeError(reason,'ai.error.restoreSession')}}
 async function remove(item:AISession){if(!confirm(i18n.t('ai.sessionDeleteConfirm',{title:item.title})))return;try{await aiApi.sessions.remove(item.id);await refreshAfterSessionLeaves(item)}catch(reason){error.value=localizeError(reason,'ai.error.deleteSession')}}
 watch(activeId,loadMessages);watch(search,()=>{if(searchTimer)window.clearTimeout(searchTimer);searchTimer=window.setTimeout(refreshSessions,250)});watch(desktopWindowActive,active=>{if(!active){if(streamFrame)cancelAnimationFrame(streamFrame);streamFrame=0;return}if(streamQueue){streamText.value+=streamQueue;streamQueue='';if(completedStreamMessage)finalizeStreamMessage();else scrollBottom()}})
-onMounted(loadAll);onBeforeUnmount(()=>{closeStream();resetStream();if(searchTimer)window.clearTimeout(searchTimer)})
+onMounted(loadAll);onBeforeUnmount(()=>{closeStream();resetStream();if(searchTimer)window.clearTimeout(searchTimer);if(copyTimer)window.clearTimeout(copyTimer)})
 </script>
 
 <template>
@@ -175,6 +183,7 @@ onMounted(loadAll);onBeforeUnmount(()=>{closeStream();resetStream();if(searchTim
         </div>
         <footer class="ai-composer-wrap">
           <p v-if="error" class="ai-inline-error">{{error}}</p>
+          <p v-if="copyFailed" role="alert" class="ai-inline-error">{{i18n.t('ai.error.copy')}}</p>
           <div class="ai-composer">
             <input ref="fileInput" hidden type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif,.txt,.log,.md,.json,.yaml,.yml,.toml,.ini,.conf,.csv,.xml,.html,.css,.js,.ts,.vue,.go,.py,.sh" @change="chooseAttachments"/>
             <div v-if="attachments.length" class="ai-attachment-tray"><span v-for="(file,index) in attachments" :key="`${file.name}-${index}`"><img v-if="file.previewUrl" :src="file.previewUrl" :alt="file.name"/><FileText v-else :size="15"/><b>{{file.name}}</b><button type="button" :aria-label="`移除 ${file.name}`" @click="removeAttachment(index)"><X :size="13"/></button></span></div>

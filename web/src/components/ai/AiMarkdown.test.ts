@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
-import { describe,expect,it,vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { afterEach,describe,expect,it,vi } from 'vitest'
+import { flushPromises,mount } from '@vue/test-utils'
+import { resetLocaleForTest, setLocale } from '@/i18n'
 import AiMarkdown from './AiMarkdown.vue'
+
+afterEach(()=>{vi.unstubAllGlobals();resetLocaleForTest()})
 
 describe('AiMarkdown',()=>{
   it('renders markdown and removes executable HTML',()=>{
@@ -20,5 +23,29 @@ describe('AiMarkdown',()=>{
     await button.trigger('click')
     expect(writeText).toHaveBeenCalledWith('echo safe\n')
     expect(button.text()).toBe('已复制')
+  })
+
+  it.each(['zh-CN','zh-TW','en-US'] as const)('shows a localized copy failure and recovers on retry (%s)',async locale=>{
+    await setLocale(locale)
+    vi.stubGlobal('navigator',{})
+    const fallback=vi.fn().mockReturnValue(false)
+    Object.defineProperty(document,'execCommand',{value:fallback,configurable:true})
+    const wrapper=mount(AiMarkdown,{props:{content:'```sh\necho safe\n```'}})
+    const button=wrapper.get('[data-code-copy]')
+    await button.trigger('click');await flushPromises()
+    expect(button.text()).toBe('复制')
+    expect(wrapper.get('[role="alert"]').text()).toBe({
+      'zh-CN':'复制失败，请选中文字后手动复制。',
+      'zh-TW':'複製失敗，請選取文字後手動複製。',
+      'en-US':'Copy failed. Select the text and copy it manually.',
+    }[locale])
+    fallback.mockImplementation(()=>{
+      expect((document.activeElement as HTMLTextAreaElement).value).toBe('echo safe\n')
+      return true
+    })
+    await button.trigger('click');await flushPromises()
+    expect(button.text()).toBe('已复制')
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    wrapper.unmount()
   })
 })

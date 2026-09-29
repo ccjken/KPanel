@@ -87,6 +87,41 @@ function makeRouter(path='/ai/s/s1') {
 }
 
 describe('AI workspace reconnect', () => {
+  it.each(['available','missing','denied'])('copies the complete answer when the Clipboard API is %s', async mode => {
+    const content='**完整回答**\n\n```sh\necho 中文\n```'
+    const writeText=vi.fn().mockImplementation(()=>mode==='denied'?Promise.reject(new Error('denied')):Promise.resolve())
+    vi.stubGlobal('navigator',mode==='missing'?{}:{clipboard:{writeText}})
+    const fallback=vi.fn(()=>{
+      expect((document.activeElement as HTMLTextAreaElement).value).toBe(content)
+      return true
+    })
+    Object.defineProperty(document,'execCommand',{value:fallback,configurable:true})
+    mocks.messages.mockResolvedValue({items:[{id:'answer',sessionId:'s1',role:'assistant',content,createdAt:''}]})
+    const router=await makeRouter();const wrapper=mount(AiView,{global:{plugins:[router]}});await flushPromises()
+    await wrapper.get('button[aria-label="复制回答"]').trigger('click');await flushPromises()
+    expect(wrapper.find('button[aria-label="已复制回答"]').exists()).toBe(true)
+    if(mode==='available'){expect(writeText).toHaveBeenCalledWith(content);expect(fallback).not.toHaveBeenCalled()}
+    else expect(fallback).toHaveBeenCalledWith('copy')
+    wrapper.unmount()
+  })
+
+  it('shows failed answer copying without a false success and allows retry', async () => {
+    vi.stubGlobal('navigator',{})
+    const fallback=vi.fn().mockReturnValue(false)
+    Object.defineProperty(document,'execCommand',{value:fallback,configurable:true})
+    mocks.messages.mockResolvedValue({items:[{id:'answer',sessionId:'s1',role:'assistant',content:'原始回答',createdAt:''}]})
+    const router=await makeRouter();const wrapper=mount(AiView,{global:{plugins:[router]}});await flushPromises()
+    const button=wrapper.get('button[aria-label="复制回答"]')
+    await button.trigger('click');await flushPromises()
+    expect(button.text()).toBe('复制')
+    expect(wrapper.get('[role="alert"]').text()).toBe('复制失败，请选中文字后手动复制。')
+    fallback.mockReturnValue(true)
+    await button.trigger('click');await flushPromises()
+    expect(button.text()).toBe('已复制')
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('reopens SSE for the active run after a route reload', async () => {
     const router = await makeRouter()
     const wrapper = mount(AiView, { global: { plugins: [router] } })

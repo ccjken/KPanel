@@ -431,6 +431,7 @@ export const zhCNMessages = {
   'ai.tool.completed': '已完成',
   'ai.tool.failed': '执行失败',
   'ai.tool.rejected': '已拒绝',
+  'ai.error.copy': '复制失败，请选中文字后手动复制。',
   'ai.error.workspaceLoad': 'AI 工作台加载失败',
   'ai.error.conversationLoad': '对话读取失败',
   'ai.error.olderMessages': '更早消息加载失败',
