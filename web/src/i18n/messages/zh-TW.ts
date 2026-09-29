@@ -2,6 +2,20 @@ import type { LocaleMessages } from './zh-CN'
 import { passkeyZhTW } from '../passkeys'
 
 export const zhTWMessages = {
+  'cluster.traffic.monthly': '月流量',
+  'cluster.traffic.cumulative': '累計流量',
+  'cluster.traffic.quota': '月流量額度（GiB）',
+  'cluster.traffic.quotaPlaceholder': '留空不顯示百分比',
+  'cluster.traffic.quotaInvalid': '月流量額度須為 1–1,048,576 GiB 的整數，留空不顯示百分比。',
+  'cluster.traffic.calculation': '流量統計方式',
+  'cluster.traffic.calculation.total': '收發合計',
+  'cluster.traffic.calculation.sent': '僅傳送（出站）',
+  'cluster.traffic.calculation.received': '僅接收（入站）',
+  'cluster.traffic.calculation.max': '收發取較大值',
+  'cluster.traffic.quotaHint': '設定重置日和月額度後顯示已用百分比。額度僅用於顯示，不改變流量通知或限制網路；不公開到分享頁。',
+  'cluster.traffic.quotaSummary': '{method}：已用 {used} / 月額度 {quota}',
+  'cluster.traffic.nearQuota': '接近月流量額度',
+  'cluster.traffic.exceeded': '已達到或超過月流量額度',
   'cluster.details.title': "伺服器資訊（選填）",
   'cluster.details.expiresOn': "伺服器到期時間",
   'cluster.details.expiryReminder': "到期提醒",

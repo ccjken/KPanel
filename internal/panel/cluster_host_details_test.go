@@ -23,7 +23,7 @@ func TestClusterHostDetailsAuthorizationLifecycleAndPublicWhitelist(t *testing.T
 	session, csrf := bootstrapCookies(t, s, tokenPath)
 	view := s.clusterHostsView(context.Background())
 	initial := view.HostDetails["local"].ResourceVersion
-	input := clusterHostDetailsInput{ClusterHostDetails: store.ClusterHostDetails{ExpiresOn: "2027-09-28", ExpiryReminderEnabled: true, Price: "$5/month", TrafficResetDay: 31, TrafficTotalReceivedThresholdGiB: 512, TrafficTotalSentThresholdGiB: 1024}, ExpectedResourceVersion: initial}
+	input := clusterHostDetailsInput{ClusterHostDetails: store.ClusterHostDetails{ExpiresOn: "2027-09-28", ExpiryReminderEnabled: true, Price: "$5/month", TrafficResetDay: 31, TrafficMonthlyQuotaGiB: 1500, TrafficCalculation: "sent", TrafficTotalReceivedThresholdGiB: 512, TrafficTotalSentThresholdGiB: 1024}, ExpectedResourceVersion: initial}
 	body, _ := json.Marshal(input)
 	headers := map[string]string{"Content-Type": "application/json", "Origin": "http://panel.test", "X-CSRF-Token": csrf.Value}
 	for _, missing := range []string{"Origin", "X-CSRF-Token"} {
@@ -66,7 +66,7 @@ func TestClusterHostDetailsAuthorizationLifecycleAndPublicWhitelist(t *testing.T
 	if public.Items[0].Price != "$5/month" || public.Items[0].ExpiresOn != "2027-09-28" || public.Items[0].TrafficResetDay != 31 {
 		t.Fatalf("public metadata missing: %s", encoded)
 	}
-	for _, forbidden := range []string{"trafficTotalReceivedThresholdGiB", "trafficTotalSentThresholdGiB", "expiryReminderEnabled", "resourceVersion", "expectedResourceVersion", "origin", "peerFingerprint", "remoteNodeId"} {
+	for _, forbidden := range []string{"trafficMonthlyQuotaGiB", "trafficCalculation", "trafficTotalReceivedThresholdGiB", "trafficTotalSentThresholdGiB", "expiryReminderEnabled", "resourceVersion", "expectedResourceVersion", "origin", "peerFingerprint", "remoteNodeId"} {
 		if strings.Contains(string(encoded), `"`+forbidden+`"`) {
 			t.Fatalf("leaked %s", forbidden)
 		}
@@ -75,6 +75,18 @@ func TestClusterHostDetailsAuthorizationLifecycleAndPublicWhitelist(t *testing.T
 		t.Fatalf("stale save: %d", result.Code)
 	}
 	input.ExpectedResourceVersion = updated.ResourceVersion
+	for _, invalid := range []store.ClusterHostDetails{
+		{TrafficMonthlyQuotaGiB: -1}, {TrafficMonthlyQuotaGiB: 1_048_577}, {TrafficCalculation: "unknown"},
+	} {
+		bad := clusterHostDetailsInput{ClusterHostDetails: invalid, ExpectedResourceVersion: updated.ResourceVersion}
+		payload, _ := json.Marshal(bad)
+		if result = authenticatedRequest(s, http.MethodPut, path, payload, session, csrf, headers); result.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("invalid quota configuration: %d", result.Code)
+		}
+		if s.clusterHostsView(context.Background()).HostDetails["local"] != updated {
+			t.Fatal("invalid request changed saved details")
+		}
+	}
 	input.TrafficResetDay = 32
 	body, _ = json.Marshal(input)
 	if result = authenticatedRequest(s, http.MethodPut, path, body, session, csrf, headers); result.Code != http.StatusUnprocessableEntity {

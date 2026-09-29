@@ -1,6 +1,20 @@
 import { passkeyZhCN } from '../passkeys'
 
 export const zhCNMessages = {
+  'cluster.traffic.monthly': '月流量',
+  'cluster.traffic.cumulative': '累计流量',
+  'cluster.traffic.quota': '月流量额度（GiB）',
+  'cluster.traffic.quotaPlaceholder': '留空不显示百分比',
+  'cluster.traffic.quotaInvalid': '月流量额度须为 1–1,048,576 GiB 的整数，留空不显示百分比。',
+  'cluster.traffic.calculation': '流量统计方式',
+  'cluster.traffic.calculation.total': '收发合计',
+  'cluster.traffic.calculation.sent': '仅发送（出站）',
+  'cluster.traffic.calculation.received': '仅接收（入站）',
+  'cluster.traffic.calculation.max': '收发取较大值',
+  'cluster.traffic.quotaHint': '设置重置日和月额度后显示已用百分比。额度仅用于展示，不改变流量通知或限制网络；不公开到分享页。',
+  'cluster.traffic.quotaSummary': '{method}：已用 {used} / 月额度 {quota}',
+  'cluster.traffic.nearQuota': '接近月流量额度',
+  'cluster.traffic.exceeded': '已达到或超过月流量额度',
   'cluster.details.title': "服务器信息（可选）",
   'cluster.details.expiresOn': "服务器到期时间",
   'cluster.details.expiryReminder': "到期提醒",

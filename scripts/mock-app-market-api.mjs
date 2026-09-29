@@ -648,9 +648,11 @@ const mockNotificationEvents = Array.from({ length: 64 }, (_, index) => {
 let mockHostDetailsRevision = 1
 let mockHostNameRevision = 1
 const mockHostDetails = Object.fromEntries(visualClusterHosts.map((host, index) => [host.id, {
-  ...(index === 0 ? { expiresOn: '2027-09-28', price: '¥99/年', trafficResetDay: 15 } : {}),
-  ...(index === 1 ? { expiresOn: '2026-12-31', price: '¥12/月', trafficResetDay: 1 } : {}),
+  ...(index === 0 ? { expiresOn: '2027-09-28', price: '¥99/年', trafficResetDay: 15, trafficMonthlyQuotaGiB: 100, trafficCalculation: 'received' } : {}),
+  ...(index === 1 ? { expiresOn: '2026-12-31', price: '¥12/月', trafficResetDay: 1, trafficMonthlyQuotaGiB: 100, trafficCalculation: 'total' } : {}),
   ...(index === 2 ? { expiresOn: '2027-03-15', price: '$5/月' } : {}),
+  ...(index === 3 ? { trafficResetDay: 1, trafficMonthlyQuotaGiB: 100, trafficCalculation: 'total' } : {}),
+  ...(index === 4 ? { trafficResetDay: 1 } : {}),
   resourceVersion: mockRevision(900),
 }]))
 
@@ -669,8 +671,8 @@ function mockTrafficPeriod(host) {
   }
   const offset = now < boundary(0) ? -1 : 0
   const period = {
-    receivedBytes: host.id === visualClusterHosts[0].id ? 2 * 1024 ** 3 : 512 * 1024 ** 2,
-    sentBytes: 256 * 1024 ** 2,
+    receivedBytes: [29, 60, 0, 80, 10][visualClusterHosts.indexOf(host)] * 1024 ** 3 || 0,
+    sentBytes: [68, 20, 0, 40, 10][visualClusterHosts.indexOf(host)] * 1024 ** 3 || 0,
     available: Boolean(host.lastSnapshot),
     startedAt: boundary(offset).toISOString(), endsAt: boundary(offset + 1).toISOString(),
     partial: true, estimated: false,
@@ -2448,8 +2450,10 @@ createServer(async (request, response) => {
       return
     }
     const { expiresOn = '', expiryReminderEnabled = false, price = '', trafficResetDay = 0,
+      trafficMonthlyQuotaGiB = 0, trafficCalculation = '',
       trafficTotalReceivedThresholdGiB = 0, trafficTotalSentThresholdGiB = 0 } = input
-    if ([trafficTotalReceivedThresholdGiB, trafficTotalSentThresholdGiB].some(value => !Number.isInteger(value) || value < 0 || value > 1_048_576) ||
+    if ([trafficMonthlyQuotaGiB, trafficTotalReceivedThresholdGiB, trafficTotalSentThresholdGiB].some(value => !Number.isInteger(value) || value < 0 || value > 1_048_576) ||
+        !['', 'total', 'received', 'sent', 'max'].includes(trafficCalculation) ||
         typeof expiryReminderEnabled !== 'boolean' || (expiryReminderEnabled && !expiresOn) ||
         !Number.isInteger(trafficResetDay) || trafficResetDay < 0 || trafficResetDay > 31 ||
         typeof price !== 'string' || [...price].length > 40 || /[\u0000-\u001f\u007f]/.test(price) ||
@@ -2458,7 +2462,7 @@ createServer(async (request, response) => {
       return
     }
     const resetChanged = trafficResetDay !== (mockHostDetails[id].trafficResetDay || 0)
-    mockHostDetails[id] = { expiresOn, expiryReminderEnabled, price: price.trim(), trafficResetDay, trafficTotalReceivedThresholdGiB, trafficTotalSentThresholdGiB, resourceVersion: mockRevision(900 + ++mockHostDetailsRevision) }
+    mockHostDetails[id] = { expiresOn, expiryReminderEnabled, price: price.trim(), trafficResetDay, trafficMonthlyQuotaGiB, trafficCalculation, trafficTotalReceivedThresholdGiB, trafficTotalSentThresholdGiB, resourceVersion: mockRevision(900 + ++mockHostDetailsRevision) }
     if (resetChanged) {
       mockTrafficPeriods.delete(id)
       const period = mockTrafficPeriod(visualClusterHosts.find(host => host.id === id))

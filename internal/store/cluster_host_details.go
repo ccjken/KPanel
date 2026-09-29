@@ -20,11 +20,21 @@ type ClusterHostDetails struct {
 	ExpiryReminderEnabled            bool   `json:"expiryReminderEnabled,omitempty"`
 	Price                            string `json:"price,omitempty"`
 	TrafficResetDay                  int    `json:"trafficResetDay,omitempty"`
+	TrafficMonthlyQuotaGiB           int    `json:"trafficMonthlyQuotaGiB,omitempty"`
+	TrafficCalculation               string `json:"trafficCalculation,omitempty"`
 	TrafficTotalReceivedThresholdGiB int    `json:"trafficTotalReceivedThresholdGiB,omitempty"`
 	TrafficTotalSentThresholdGiB     int    `json:"trafficTotalSentThresholdGiB,omitempty"`
 }
 
 func ValidateClusterHostDetails(value ClusterHostDetails) error {
+	if value.TrafficMonthlyQuotaGiB < 0 || value.TrafficMonthlyQuotaGiB > contract.MaxTrafficThresholdGiB {
+		return ErrInvalidRecord
+	}
+	switch value.TrafficCalculation {
+	case "", "total", "received", "sent", "max":
+	default:
+		return ErrInvalidRecord
+	}
 	if value.TrafficTotalReceivedThresholdGiB < 0 || value.TrafficTotalReceivedThresholdGiB > contract.MaxTrafficThresholdGiB ||
 		value.TrafficTotalSentThresholdGiB < 0 || value.TrafficTotalSentThresholdGiB > contract.MaxTrafficThresholdGiB {
 		return ErrInvalidRecord

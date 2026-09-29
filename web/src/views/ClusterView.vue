@@ -64,7 +64,9 @@ import {
 import { clusterHostMonitoringRoute, clusterHostPanelURL } from '@/lib/clusterHostNavigation'
 import { desktopWindowActiveKey } from '@/lib/desktopRouteKeys'
 import { detectOperatingSystemIdentity } from '@/lib/operatingSystem'
-import { clusterTrafficCounters, formatNetworkTrafficCounter, trafficPeriodHint } from '@/lib/networkTraffic'
+import { clusterTrafficCounters, formatNetworkTrafficCounter } from '@/lib/networkTraffic'
+import ClusterTrafficHeading from '@/components/cluster/ClusterTrafficHeading.vue'
+import type { ClusterTrafficCalculation } from '@/types/api'
 import {
   clampPercent,
   formatBytes,
@@ -103,6 +105,7 @@ const notificationsOpen = ref(false)
 const adding = ref(false)
 const saving = ref(false)
 const editDetails = reactive({ expiresOn: '', expiryReminderEnabled: false, price: '', trafficResetDay: '' as number | string,
+  trafficMonthlyQuotaGiB: '' as number | string, trafficCalculation: 'total' as ClusterTrafficCalculation,
   trafficTotalReceivedThresholdGiB: '' as number | string, trafficTotalSentThresholdGiB: '' as number | string, resourceVersion: '' })
 watch(() => editDetails.expiresOn, date => { if (!date) editDetails.expiryReminderEnabled = false })
 const manageError = ref('')
@@ -1055,6 +1058,8 @@ function openManage(host: ClusterHost): void {
   editDetails.expiryReminderEnabled = Boolean(details?.expiryReminderEnabled)
   editDetails.price = details?.price || ''
   editDetails.trafficResetDay = details?.trafficResetDay || ''
+  editDetails.trafficMonthlyQuotaGiB = details?.trafficMonthlyQuotaGiB || ''
+  editDetails.trafficCalculation = details?.trafficCalculation || 'total'
   editDetails.trafficTotalReceivedThresholdGiB = details?.trafficTotalReceivedThresholdGiB || ''
   editDetails.trafficTotalSentThresholdGiB = details?.trafficTotalSentThresholdGiB || ''
   editDetails.resourceVersion = details?.resourceVersion || ''
@@ -1113,6 +1118,11 @@ async function saveHost(): Promise<void> {
   const host = selected.value
   if (!host || saving.value || deleting.value || enablingMutualFiles.value || !editName.value.trim()) return
   const name = editName.value.trim()
+  const quota = Number(editDetails.trafficMonthlyQuotaGiB)
+  if (!Number.isInteger(quota) || quota < 0 || quota > 1_048_576) {
+    manageError.value = t('cluster.traffic.quotaInvalid')
+    return
+  }
   const trafficLimits = {
     trafficTotalReceivedThresholdGiB: Number(editDetails.trafficTotalReceivedThresholdGiB),
     trafficTotalSentThresholdGiB: Number(editDetails.trafficTotalSentThresholdGiB),
@@ -1123,6 +1133,7 @@ async function saveHost(): Promise<void> {
   }
   const details = {
     expiresOn: editDetails.expiresOn, price: editDetails.price.trim(), trafficResetDay: Number(editDetails.trafficResetDay) || 0,
+    trafficMonthlyQuotaGiB: quota, trafficCalculation: quota ? editDetails.trafficCalculation : '' as const,
     ...trafficLimits,
     ...(editDetails.expiresOn && editDetails.expiryReminderEnabled ? { expiryReminderEnabled: true } : {}),
   }
@@ -1130,6 +1141,8 @@ async function saveHost(): Promise<void> {
     || Boolean(details.expiryReminderEnabled) !== Boolean(savedDetails.value.expiryReminderEnabled)
     || details.price !== (savedDetails.value.price || '')
     || details.trafficResetDay !== (savedDetails.value.trafficResetDay || 0)
+    || details.trafficMonthlyQuotaGiB !== (savedDetails.value.trafficMonthlyQuotaGiB || 0)
+    || details.trafficCalculation !== (savedDetails.value.trafficCalculation || '')
     || details.trafficTotalReceivedThresholdGiB !== (savedDetails.value.trafficTotalReceivedThresholdGiB || 0)
     || details.trafficTotalSentThresholdGiB !== (savedDetails.value.trafficTotalSentThresholdGiB || 0)
   const trafficResetChanged = details.trafficResetDay !== (savedDetails.value.trafficResetDay || 0)
@@ -1632,8 +1645,8 @@ onBeforeUnmount(() => {
             </strong>
             <small>{{ host.lastSnapshot.telemetry.publicNetwork.isp || '运营商未知' }}</small>
           </div>
-          <RouterLink class="cluster-metric-link" :to="clusterHostMonitoringRoute(host, 'network')" :title="phrase('查看历史趋势')" :aria-label="`${phrase('查看历史趋势')} · ${host.name} · ${phrase('累计流量')}`">
-            <span :title="trafficPeriodHint(host.trafficPeriod, t)" :aria-label="trafficPeriodHint(host.trafficPeriod, t)">{{ phrase('累计流量') }}</span>
+          <RouterLink class="cluster-metric-link" :to="clusterHostMonitoringRoute(host, 'network')" :title="phrase('查看历史趋势')">
+            <ClusterTrafficHeading :period="host.trafficPeriod" :details="inventory?.hostDetails?.[host.id]" />
             <strong :title="phrase('累计接收')">
               <span aria-hidden="true">↓</span>
               <span class="sr-only">{{ phrase('累计接收') }}</span>
@@ -2178,6 +2191,20 @@ onBeforeUnmount(() => {
           <small>{{ t('cluster.details.hint') }}</small>
         </div>
         <div class="cluster-manage__details cluster-manage__traffic-limits form-stack">
+          <strong>{{ t('cluster.traffic.monthly') }}</strong>
+          <label class="field">
+            {{ t('cluster.traffic.quota') }}
+            <input v-model="editDetails.trafficMonthlyQuotaGiB" type="number" min="1" max="1048576" step="1" :placeholder="t('cluster.traffic.quotaPlaceholder')" :disabled="saving || deleting || enablingMutualFiles" />
+          </label>
+          <label class="field">
+            {{ t('cluster.traffic.calculation') }}
+            <select v-model="editDetails.trafficCalculation" :disabled="!Number(editDetails.trafficMonthlyQuotaGiB) || saving || deleting || enablingMutualFiles">
+              <option v-for="method in (['total', 'sent', 'received', 'max'] as const)" :key="method" :value="method">{{ t(`cluster.traffic.calculation.${method}`) }}</option>
+            </select>
+          </label>
+          <small>{{ t('cluster.traffic.quotaHint') }}</small>
+        </div>
+        <div class="cluster-manage__details cluster-manage__traffic-limits form-stack">
           <strong>{{ t('cluster.details.trafficLimits') }}</strong>
           <label class="field">
             {{ t('cluster.details.receivedLimit') }}
@@ -2284,7 +2311,8 @@ onBeforeUnmount(() => {
 }
 .cluster-manage__details small { font-size: 0.8125rem; line-height: 1.5; color: var(--text-soft); }
 .cluster-manage__traffic-limits .field,
-.cluster-manage__traffic-limits input { font-size: .875rem; }
+.cluster-manage__traffic-limits input,
+.cluster-manage__traffic-limits select { font-size: .875rem; }
 .cluster-manage__expiry-label { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .cluster-manage__expiry-reminder { display: inline-flex; align-items: center; gap: 7px; font-size: .875rem; cursor: pointer; }
 .cluster-manage__expiry-reminder input { flex: 0 0 auto; width: 16px; height: 16px; min-height: 16px; padding: 0; margin: 0; accent-color: var(--brand); }

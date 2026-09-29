@@ -260,11 +260,15 @@ export interface ClusterHostList {
   hostOrder?: ClusterHostOrderPreference
 }
 
+export type ClusterTrafficCalculation = 'total' | 'received' | 'sent' | 'max'
+
 export interface ClusterHostDetails {
   expiresOn?: string
   expiryReminderEnabled?: boolean
   price?: string
   trafficResetDay?: number
+  trafficMonthlyQuotaGiB?: number
+  trafficCalculation?: ClusterTrafficCalculation | ''
   trafficTotalReceivedThresholdGiB?: number
   trafficTotalSentThresholdGiB?: number
 }

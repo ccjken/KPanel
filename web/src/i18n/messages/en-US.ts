@@ -2,6 +2,20 @@ import type { LocaleMessages } from './zh-CN'
 import { passkeyEnUS } from '../passkeys'
 
 export const enUSMessages = {
+  'cluster.traffic.monthly': 'Monthly traffic',
+  'cluster.traffic.cumulative': 'Cumulative traffic',
+  'cluster.traffic.quota': 'Monthly traffic quota (GiB)',
+  'cluster.traffic.quotaPlaceholder': 'Leave blank to hide percentage',
+  'cluster.traffic.quotaInvalid': 'Monthly quota must be an integer from 1 to 1,048,576 GiB. Leave blank to hide percentage.',
+  'cluster.traffic.calculation': 'Traffic calculation',
+  'cluster.traffic.calculation.total': 'Received + sent',
+  'cluster.traffic.calculation.sent': 'Sent only (outbound)',
+  'cluster.traffic.calculation.received': 'Received only (inbound)',
+  'cluster.traffic.calculation.max': 'Larger of received or sent',
+  'cluster.traffic.quotaHint': 'Set a reset day and monthly quota to show usage percentage. Display only: does not change traffic alerts or restrict networking. Not shared publicly.',
+  'cluster.traffic.quotaSummary': '{method}: {used} used / {quota} monthly quota',
+  'cluster.traffic.nearQuota': 'Approaching monthly traffic quota',
+  'cluster.traffic.exceeded': 'Monthly traffic quota reached or exceeded',
   'cluster.details.title': "Server details (optional)",
   'cluster.details.expiresOn': "Server expiry date",
   'cluster.details.expiryReminder': "Expiry reminder",

@@ -1,6 +1,27 @@
 import { formatBytes } from '@/lib/format'
-import type { ClusterTrafficPeriod } from '@/types/api'
+import type { ClusterHostDetails, ClusterTrafficPeriod } from '@/types/api'
 import type { useI18n } from '@/i18n'
+
+export function monthlyTrafficUsage(period?: ClusterTrafficPeriod, details?: ClusterHostDetails) {
+  const quota = details?.trafficMonthlyQuotaGiB
+  if (!period?.available || !quota || !Number.isInteger(quota) || quota < 1 || quota > 1_048_576) return undefined
+  const received = finiteCounter(period.receivedBytes)
+  const sent = finiteCounter(period.sentBytes)
+  if (received === undefined || sent === undefined) return undefined
+  const calculation = details?.trafficCalculation || 'total'
+  let used: number
+  switch (calculation) {
+    case 'received': used = received; break
+    case 'sent': used = sent; break
+    case 'max': used = Math.max(received, sent); break
+    case 'total': used = received + sent; break
+    default: return undefined
+  }
+  const percent = used * 100 / (quota * 1024 ** 3)
+  // Floor avoids displaying 80/95/100% before the corresponding boundary is reached.
+  return { percent, text: `${Math.floor(percent)}%`, used, quotaBytes: quota * 1024 ** 3, calculation,
+    tone: percent >= 95 ? 'danger' : percent >= 80 ? 'warning' : 'normal' }
+}
 
 export function clusterTrafficCounters(host: {
   trafficPeriod?: ClusterTrafficPeriod
