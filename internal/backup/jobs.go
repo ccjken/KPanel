@@ -22,22 +22,87 @@ var ErrNotFound = errors.New("backup record not found")
 const maxRecordBytes = 4 << 20
 
 type Record struct {
-	CompletedModules []string  `json:"completedModules,omitempty"`
-	ID               string    `json:"id"`
-	Action           string    `json:"action"`
-	Status           string    `json:"status"`
-	Stage            string    `json:"stage"`
-	Modules          []string  `json:"modules"`
-	Roots            []RootRef `json:"roots,omitempty"`
-	CreatedAt        time.Time `json:"createdAt"`
-	UpdatedAt        time.Time `json:"updatedAt"`
-	Size             int64     `json:"size"`
-	Manifest         *Manifest `json:"manifest,omitempty"`
-	ErrorCode        string    `json:"errorCode,omitempty"`
-	TargetRevision   string    `json:"targetRevision,omitempty"`
-	SourceID         string    `json:"sourceId,omitempty"`
-	AgentID          string    `json:"agentId,omitempty"`
-	AgentRevision    string    `json:"agentRevision,omitempty"`
+	Automatic        bool        `json:"automatic,omitempty"`
+	LocalReady       bool        `json:"localReady,omitempty"`
+	Remote           *RemoteCopy `json:"remote,omitempty"`
+	CompletedModules []string    `json:"completedModules,omitempty"`
+	ID               string      `json:"id"`
+	Action           string      `json:"action"`
+	Status           string      `json:"status"`
+	Stage            string      `json:"stage"`
+	Modules          []string    `json:"modules"`
+	Roots            []RootRef   `json:"roots,omitempty"`
+	CreatedAt        time.Time   `json:"createdAt"`
+	UpdatedAt        time.Time   `json:"updatedAt"`
+	Size             int64       `json:"size"`
+	Manifest         *Manifest   `json:"manifest,omitempty"`
+	ErrorCode        string      `json:"errorCode,omitempty"`
+	TargetRevision   string      `json:"targetRevision,omitempty"`
+	SourceID         string      `json:"sourceId,omitempty"`
+	AgentID          string      `json:"agentId,omitempty"`
+	AgentRevision    string      `json:"agentRevision,omitempty"`
+}
+
+// RemoteCopy is a receipt for an encrypted package, never a credential.
+type RemoteCopy struct {
+	StorageID   string `json:"storageId"`
+	StorageName string `json:"storageName"`
+	Destination string `json:"destination"`
+	Key         string `json:"key"`
+	Status      string `json:"status"`
+}
+
+// ReserveUpload pins the existing local package so Sweep/Delete cannot remove
+// it during a retry. The original export remains the single history record.
+func (m *Manager) ReserveUpload(id string) (Record, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closing || m.active != "" || m.storageFailed {
+		return Record{}, ErrBusy
+	}
+	r, ok := m.records[id]
+	if !ok {
+		return r, ErrNotFound
+	}
+	if r.Action != "export" || r.Size <= 0 || (!r.LocalReady && !(r.Status == "completed" && r.Remote == nil)) || (r.Status != "completed" && r.Status != "failed") {
+		return r, ErrInvalid
+	}
+	f, err := OpenRegular(filepath.Join(m.Root, id, "backup.kpb"), MaxEncryptedBytes)
+	if err != nil {
+		return r, err
+	}
+	f.Close()
+	r.Status = "queued"
+	r.Stage = "queued"
+	r.ErrorCode = ""
+	if err := m.saveLocked(r); err != nil {
+		return r, err
+	}
+	m.active = id
+	return r, nil
+}
+
+// PruneExport is called only by the active export after its new package has
+// succeeded. Remote deletion is performed first by the owning Panel adapter.
+func (m *Manager) PruneExport(owner, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.storageFailed || m.active != owner || owner == id {
+		return ErrBusy
+	}
+	r, ok := m.records[id]
+	if !ok || !r.Automatic || r.Action != "export" || r.Status != "completed" {
+		return ErrInvalid
+	}
+	dir := filepath.Join(m.Root, id)
+	if err := NoLinkParents(dir); err != nil {
+		return err
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		return err
+	}
+	delete(m.records, id)
+	return SyncDir(m.Root)
 }
 
 // RootRef names one data root inside a host backup payload so restore
@@ -379,6 +444,11 @@ func (m *Manager) Sweep(now time.Time) error {
 		if age < ttl || r.Status == "restarting" {
 			continue
 		}
+		// Scheduled local packages are retained by successful-copy count rather
+		// than the manual export TTL. Remote receipts survive local expiry.
+		if r.Automatic && r.Action == "export" && r.Status == "completed" && r.Remote == nil {
+			continue
+		}
 		dir := filepath.Join(m.Root, id)
 		hasJournal := false
 		for _, name := range []string{"restore-journal.json", "export-journal.json", "panel-restore.payload"} {
@@ -414,7 +484,7 @@ func (m *Manager) Sweep(now time.Time) error {
 				return err
 			}
 		}
-		if age > 30*24*time.Hour {
+		if age > 30*24*time.Hour && !(r.Automatic && r.Remote != nil && r.Remote.Status == "completed") {
 			if err := NoLinkParents(dir); err != nil {
 				return err
 			}
@@ -424,7 +494,15 @@ func (m *Manager) Sweep(now time.Time) error {
 			delete(m.records, id)
 			continue
 		}
-		if r.Status == "ready" || r.Action == "export" && r.Status == "completed" {
+		if r.Remote != nil && r.Remote.Status == "completed" {
+			r.LocalReady = false
+			if err := m.saveLocked(r); err != nil {
+				return err
+			}
+			continue
+		}
+		if r.Status == "ready" || r.Action == "export" && r.Status == "completed" || r.LocalReady {
+			r.LocalReady = false
 			r.Status = "expired"
 			r.Stage = "expired"
 			if err := m.saveLocked(r); err != nil {

@@ -64,6 +64,7 @@ func (s clusterTelemetrySource) Telemetry(ctx context.Context) (contract.HostTel
 }
 
 func (s *Server) StartBackground(ctx context.Context) {
+	s.startBackupSchedule(ctx)
 	s.cluster.Start(ctx)
 	if s.clusterTraffic != nil {
 		s.clusterTraffic.Start(ctx)
@@ -87,6 +88,7 @@ func (s *Server) Close() error {
 		s.mcp.close()
 	}
 	if s.backups != nil {
+		s.stopBackupSchedule()
 		s.backups.Close()
 	}
 	s.closeRemoteDownloadJobs()

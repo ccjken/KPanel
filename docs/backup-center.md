@@ -26,6 +26,22 @@ Panel 存储于 `<DataDir>/backups/<id>`，Agent 为 `<StateDir>/backup-center/<
 
 库存显示源数据估算，不承诺压缩率。纯面板配置通常远小于业务数据，但实际大小以现场库存为准。导入同时需要上传包、解密内容和解包空间；主机恢复还需要新数据副本与旧数据回滚副本。执行前检查空间，实际写入继续受大小限制。
 
+## 远程存储与自动备份
+
+备份区块提供“导出备份、导入恢复、自动备份、远程存储”四个入口，复用现有类别和 `.kpb` 格式。最多连接 8 个 S3 兼容存储或 WebDAV；连接配置仅用于此区块。S3 填写服务 Endpoint、Bucket、Access Key、Secret，按提供商要求设置 Region 与 Path style；R2 通常使用 `auto` Region，OSS 使用虚拟主机寻址。WebDAV 地址应指向已存在的服务根目录，面板创建其下的备份目录，需要 PUT、GET、HEAD、PROPFIND、MKCOL、MOVE、DELETE 权限。测试连接使用临时小文件验证读写、列出及删除，最后清理。
+
+导出可选本机或一个远程目标，后台先生成完整加密包再传输。上传失败保留本地包，可下载或对同一份文件重试，不再停止服务重新备份。S3 使用官方 Go SDK 的分片上传；WebDAV 使用临时文件后 MOVE，失败尽力清理临时文件。关闭浏览器不终止后台任务；面板重启将未完成任务标记中断，支持本地完整包重新上传，不承诺断点续传。远程列表只读取配置目录下的 `.kpb`，最多检查 1000 项；取回后必须通过原有解密、检查和恢复确认，传输成功不等于恢复验证成功。
+
+自动备份只维护一套配置：每天、每周或每月、时间和 IANA 时区、类别、保存目标、密码、保留 1–20 份。面板必须保持运行，每 30 秒检查计划；到期槽位在执行前持久化，重启不重复执行，错过超过 5 分钟不补跑。忙碌时在该窗口内等待；不存在的月日和夏令时跳过时间不执行。立即执行使用已保存配置；宿主机备份继续使用 Agent 预检、锁和依赖闭包。
+
+新自动备份成功后才清理同一目标的旧成功副本，依据本机任务回执，绝不以远程列表推导删除对象。手动导出、手动上传和未知远程文件不参与保留清理；删除历史记录仅删除本机文件与记录，远程副本保留且退出自动清理。自动本机备份按份数保留；自动远程备份的本地暂存仍为 7 天，远程回执保留到按份数清理。改变目标后旧目标不继续自动清理。清理失败保留记录并提示，下次成功备份再尝试。
+
+远程凭据与自动备份密码以 XChaCha20-Poly1305 加密保存到 `<DataDir>/backup-settings/settings.enc`，本地密钥单独保存为 `key`，权限分别为目录 `0700`、文件 `0600`。API 只返回是否已配置密钥；留空表示不变。此配置不进入 `.kpb`，迁移到新面板后重新连接，恢复面板身份前暂停自动备份。应另行保存备份密码，丢失本地密钥时不能解密这些设置。
+
+连接支持私网 NAS/MinIO，阻止回环、链路本地、云元数据及 IPv6 转换地址，每次拨号复核 DNS，禁止重定向转发凭据，TLS 最低 1.2 且校验证书；推荐 HTTPS。列表/测试受并发数与 30 秒上限限制，传输沿用 2 小时任务上限，流式读写空闲超时 1 分钟。无需安装 rclone，不扩展系统计划任务或其他模块。
+
+协议参考：[MinIO Go SDK](https://github.com/minio/minio-go)、[AWS multipart upload](https://docs.aws.amazon.com/AmazonS3/latest/userguide/mpuoverview.html)、[R2 S3 compatibility](https://developers.cloudflare.com/r2/api/s3/api/)、[WebDAV RFC 4918](https://www.rfc-editor.org/rfc/rfc4918)。设计借鉴 1Panel 的存储连接后选择备份目标，KPanel 的配置入口仍集中在本区块。
+
 ## 事务与失败边界
 
 导出根据共享挂载、namespace 和 legacy links 建立依赖闭包；依赖缺失时要求同时选择相关类别。按依赖逆序停止容器、正序恢复原运行状态；数据库使用停机文件备份。请勿同时通过 SSH、外部 Compose 或其他进程修改数据。Agent 在备份期间拒绝新的写操作，并检查已有应用、网站、Docker、文件和磁盘任务；开始前须关闭宿主机终端。面板自身的容器、定制数据路径及命名卷均被排除，与业务目录重叠时预检拒绝。
@@ -47,13 +63,19 @@ Panel 写接口统一校验 Session、Origin、CSRF；公开列表及预览不�
 | 路径（`/api/v1/backups`） | 方法 | 行为 |
 | --- | --- | --- |
 | 根路径 / `inventory` | GET | 有界任务列表 / 模块容量和主机依赖 |
-| `export` | POST | `{modules,password,agentRevision}`，返回持久化任务 |
+| `export` | POST | `{modules,password,agentRevision,storageId?}`，返回持久化任务 |
 | `import` | POST | multipart，先 `password` 后 `file`，流式上传并检查 |
 | `<id>` / `<id>/download` | GET | 单条状态 / 完成的加密包 |
 | `<id>/preview` | POST | 刷新目标配置 revision |
 | `<id>/restore` | POST | `{modules,revision}`；只允许源包中的模块 |
 | `<id>/recover` | POST | 处理对应 Agent 的中断恢复 |
 | `<id>` | DELETE | 清理对应 Agent 临时产物及 Panel 记录，活动/待恢复任务不可删除 |
+| `settings` | GET | 无密钥的存储与计划配置，包含并发写入 revision |
+| `storage` / `storage/<storageId>` | PUT / DELETE | `{revision,storage}` 保存 / `{revision}` 移除连接 |
+| `storage/<storageId>/test` / `storage/<storageId>/files` | POST / GET | 测试连接 / 列出远程加密包 |
+| `schedule` / `schedule/run` | PUT / POST | `{revision,schedule}` 保存 / 立即执行已保存计划 |
+| `<id>/upload` | POST | `{storageId}`，上传已有本地完整包 |
+| `remote-import` | POST | `{storageId,key,password}`，后台取回并检查，不直接恢复 |
 
 Agent Unix Socket 协议为 `/v1/backups`，格式/协议均为 1。固定动作 `export/import/restore`；固定子操作 `inspect/preview/recover/abort`；`PUT/GET <id>/<apps|web|docker>` 仅传输对应模块。CLI 机器入口 `backup-center file-export` 与 `file-import` 从有界 JSON stdin 读取 `{path,password,modules}`；`file-import` 只检查，恢复须另用 `preview` 和 `restore ID` 明确提交。
 
