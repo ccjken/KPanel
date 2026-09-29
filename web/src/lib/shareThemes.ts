@@ -39,7 +39,7 @@ export function shareThemeModel(snapshot: PublicClusterShareSnapshot, locale: st
         traffic: { monthly: Boolean(host.trafficPeriod || host.trafficResetDay), percent: usage?.text || '', tone: usage?.tone || 'normal',
           hint: t ? clusterTrafficHint(host.trafficPeriod, host, t) || '' : '',
           available: host.trafficPeriod?.available ?? Boolean(host.collectedAt), partial: host.trafficPeriod?.partial || false,
-          estimated: host.trafficPeriod?.estimated || false, startedAt: host.trafficPeriod?.startedAt || '', endsAt: host.trafficPeriod?.endsAt || '',
+          estimated: host.trafficPeriod?.estimated || false,
           received: host.collectedAt ? formatNetworkTrafficCounter(counters, 'received') : '—',
           sent: host.collectedAt ? formatNetworkTrafficCounter(counters, 'sent') : '—' },
         price: host.price || '', expiresOn: host.expiresOn || '',

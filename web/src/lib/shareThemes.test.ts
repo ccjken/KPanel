@@ -44,6 +44,10 @@ describe('share theme protocol', () => {
     expect(traffic.hint).toContain('统计不完整')
     expect(traffic.hint).toContain('按时间比例估算')
     expect(traffic.hint).toContain('收发取较大值')
+    expect(traffic).not.toHaveProperty('startedAt')
+    expect(traffic).not.toHaveProperty('endsAt')
+    expect(traffic.hint).not.toContain('2026-01-01')
+    expect(traffic.hint).not.toContain('2026-02-01')
     snapshot.items[0]!.trafficPeriod!.available = false
     expect(shareThemeModel(snapshot, 'zh-CN', new Date(), t).hosts[0]!.traffic.hint).toContain('等待有效采样')
     delete snapshot.items[0]!.trafficPeriod

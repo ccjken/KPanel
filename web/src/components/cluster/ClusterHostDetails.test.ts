@@ -13,17 +13,19 @@ describe('ClusterHostDetails', () => {
     expect(wrapper.get('[role="img"]').attributes('title')).toBe('价格 $5/月')
     await wrapper.setProps({ details: {} })
     expect(wrapper.find('.host-details').exists()).toBe(false)
+    await wrapper.setProps({ details: { trafficResetDay: 31 } })
+    expect(wrapper.find('.host-details').exists()).toBe(false)
   })
 
-  it('uses expiry, price, reset order and renders user text without HTML', () => {
+  it('shows expiry and price without the reset date and renders user text without HTML', () => {
     const wrapper = mount(ClusterHostDetails, { props: { details: {
       expiresOn: '2028-02-29', price: '<b>$5/月</b>', trafficResetDay: 31,
     } } })
     expect(wrapper.findAll('span').map(span => span.text())).toEqual([
-      '2028-02-29', '<b>$5/月</b>', '31 日',
+      '2028-02-29', '<b>$5/月</b>',
     ])
     expect(wrapper.findAll('[role="img"]').map(pill => pill.attributes('aria-label'))).toEqual([
-      '到期 2028-02-29', '价格 <b>$5/月</b>', '流量每月 31 日重置',
+      '到期 2028-02-29', '价格 <b>$5/月</b>',
     ])
     expect(wrapper.find('b').exists()).toBe(false)
   })

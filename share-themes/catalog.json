@@ -4,7 +4,7 @@
     {
       "schema": 1,
       "id": "midnight",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "runtime": "kpanel-share-theme@1",
       "name": {
         "zh-CN": "午夜终端",
@@ -39,7 +39,7 @@
         {
           "path": "manifest.json",
           "size": 591,
-          "sha256": "ee05a942514dad39e554b41e9b07f1b465a392e84ff2e145084ac67f7a0fa98a"
+          "sha256": "8af3134070b97348d9f54bcf0ec0a6bc887888ec19289a4dfb140f1fe69b50e7"
         },
         {
           "path": "theme.css",
@@ -48,16 +48,16 @@
         },
         {
           "path": "theme.js",
-          "size": 7535,
-          "sha256": "c1488c82becca909b5247221ea971c61d4749b2371f035bc018452ff324fc85b"
+          "size": 7453,
+          "sha256": "36949ef3487794c0987c17f24f6e9adf62ff2331d6519e094ecf5805260bb4b5"
         }
       ],
-      "sizeBytes": 12521
+      "sizeBytes": 12439
     },
     {
       "schema": 1,
       "id": "minimal",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "runtime": "kpanel-share-theme@1",
       "name": {
         "zh-CN": "简约看板",
@@ -92,7 +92,7 @@
         {
           "path": "manifest.json",
           "size": 587,
-          "sha256": "6a708e7b5b0a16c1da033907a00f6af1b57ceed2bb26a185426b1c22b58a23e8"
+          "sha256": "f8c8edecc150992e35b654531cf46ab79216ff0d354194fc31da16a8cd29d22b"
         },
         {
           "path": "theme.css",
@@ -101,11 +101,11 @@
         },
         {
           "path": "theme.js",
-          "size": 7535,
-          "sha256": "c1488c82becca909b5247221ea971c61d4749b2371f035bc018452ff324fc85b"
+          "size": 7453,
+          "sha256": "36949ef3487794c0987c17f24f6e9adf62ff2331d6519e094ecf5805260bb4b5"
         }
       ],
-      "sizeBytes": 11757
+      "sizeBytes": 11675
     }
   ]
 }

@@ -48,10 +48,10 @@ export function clusterTrafficCounters(host: {
 export function trafficPeriodHint(period: ClusterTrafficPeriod | undefined, t: ReturnType<typeof useI18n>['t']): string | undefined {
   if (!period) return undefined
   if (!period.available) return t('cluster.traffic.waiting')
-  const parts = [t('cluster.traffic.period', { start: period.startedAt, end: period.endsAt })]
+  const parts: string[] = []
   if (period.partial) parts.push(t('cluster.traffic.partial'))
   if (period.estimated) parts.push(t('cluster.traffic.estimated'))
-  return parts.join(' · ')
+  return parts.join(' · ') || undefined
 }
 
 /**

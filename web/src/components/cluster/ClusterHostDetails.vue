@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CalendarClock, Coins, RotateCcw } from '@lucide/vue'
+import { CalendarClock, Coins } from '@lucide/vue'
 import { useI18n } from '@/i18n'
 import type { ClusterHostDetails } from '@/types/api'
 
@@ -8,15 +8,12 @@ const { t } = useI18n()
 </script>
 
 <template>
-  <div v-if="details && (details.expiresOn || details.price || details.trafficResetDay)" class="host-details" :aria-label="t('cluster.details.title')">
+  <div v-if="details && (details.expiresOn || details.price)" class="host-details" :aria-label="t('cluster.details.title')">
     <span v-if="details.expiresOn" class="host-details__pill host-details__pill--expiry" role="img" :title="t('cluster.details.expirySummary', { date: details.expiresOn })" :aria-label="t('cluster.details.expirySummary', { date: details.expiresOn })">
       <CalendarClock :size="13" aria-hidden="true" />{{ details.expiresOn }}
     </span>
     <span v-if="details.price" class="host-details__pill host-details__pill--price" role="img" :title="t('cluster.details.priceSummary', { price: details.price })" :aria-label="t('cluster.details.priceSummary', { price: details.price })">
       <Coins :size="13" aria-hidden="true" />{{ details.price }}
-    </span>
-    <span v-if="details.trafficResetDay" class="host-details__pill host-details__pill--reset" role="img" :title="t('cluster.details.resetSummary', { day: details.trafficResetDay })" :aria-label="t('cluster.details.resetSummary', { day: details.trafficResetDay })">
-      <RotateCcw :size="13" aria-hidden="true" />{{ t('cluster.details.resetValue', { day: details.trafficResetDay }) }}
     </span>
   </div>
 </template>
@@ -46,5 +43,4 @@ const { t } = useI18n()
 .host-details__pill > svg { flex: none; }
 .host-details__pill--expiry { --detail-color: var(--violet); }
 .host-details__pill--price { --detail-color: var(--success); }
-.host-details__pill--reset { --detail-color: var(--blue); }
 </style>

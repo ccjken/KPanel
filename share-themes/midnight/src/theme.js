@@ -34,7 +34,7 @@ function renderHosts(container, words) {
     traffic.append(el('strong', `${host.traffic.monthly ? words.monthly : words.cumulative}${host.traffic.percent ? ` · ${host.traffic.percent}` : ''}`), el('span', `↓ ${host.traffic.received}   ↑ ${host.traffic.sent}`))
     const note = el('p', undefined, 'traffic-note')
     if (host.traffic.hint) note.textContent = host.traffic.hint
-    else if (host.traffic.monthly) note.textContent = !host.traffic.available ? words.waiting : [host.traffic.startedAt && `${host.traffic.startedAt} — ${host.traffic.endsAt}`, host.traffic.partial && words.partial, host.traffic.estimated && words.estimated].filter(Boolean).join(' · ')
+    else if (host.traffic.monthly) note.textContent = !host.traffic.available ? words.waiting : [host.traffic.partial && words.partial, host.traffic.estimated && words.estimated].filter(Boolean).join(' · ')
     const details = el('dl')
     for (const [label, value] of [[words.uptime, host.uptime], [words.expiry, host.expiresOn], [words.price, host.price], [words.remaining, host.remaining]]) {
       if (value) details.append(el('dt', label), el('dd', value))
