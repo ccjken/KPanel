@@ -30,7 +30,7 @@ export const enUSMessages = {
   'cluster.value.days': '{days} days left',
   'cluster.value.expired': 'Expired · zero remaining value',
   'cluster.value.missingPrice': 'Price not set',
-  'cluster.value.unknownPrice': 'Excluded: enter a recognized amount, currency and cycle',
+  'cluster.value.unknownPrice': 'Excluded: unrecognized amount, currency or cycle',
   'cluster.value.missingExpiry': 'Expiry date not set',
   'cluster.value.invalidExpiry': 'Excluded: invalid date',
   'cluster.value.manage': 'Manage',
