@@ -54,15 +54,16 @@ function render() {
   hero.append(el('span', words.fleet, 'eyebrow'), el('h1', state.data.title), el('p', state.data.description))
   const stats = el('section', undefined, 'stats')
   stats.append(metric(words.total, state.data.total), metric(words.online, state.data.online, 'online'), metric(words.attention, state.data.attention))
-  const value = el('details', undefined, 'value'); value.open = expanded
-  const summary = el('summary')
-  summary.append(el('small', words.remaining), el('strong', state.data.value.groups[0]?.text || '—'))
-  if (state.data.value.groups.length > 1) summary.append(el('small', `+${state.data.value.groups.length - 1}`))
-  value.append(summary, el('p', words.valueHint))
-  for (const group of state.data.value.groups) value.append(el('p', `${group.currency} · ${group.text}`))
-  value.append(el('p', `${state.data.value.included} / ${state.data.total} ${words.coverage} · ${state.data.value.excluded} ${words.excluded}`))
-  if (!state.data.value.groups.length) value.append(el('p', words.noValue))
-  stats.append(value)
+  if (state.data.value.groups.length) {
+    const value = el('details', undefined, 'value'); value.open = expanded
+    const summary = el('summary')
+    summary.append(el('small', words.remaining), el('strong', state.data.value.groups[0].text))
+    if (state.data.value.groups.length > 1) summary.append(el('small', `+${state.data.value.groups.length - 1}`))
+    value.append(summary, el('p', words.valueHint))
+    for (const group of state.data.value.groups) value.append(el('p', `${group.currency} · ${group.text}`))
+    value.append(el('p', `${state.data.value.included} / ${state.data.total} ${words.coverage} · ${state.data.value.excluded} ${words.excluded}`))
+    stats.append(value)
+  }
   const label = el('label', words.search, 'search')
   const input = el('input'); input.type = 'search'; input.id = 'search'; input.value = query; input.placeholder = words.search
   label.append(input)

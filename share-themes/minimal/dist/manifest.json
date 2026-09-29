@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "minimal",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "runtime": "kpanel-share-theme@1",
   "name": {
     "zh-CN": "简约看板",

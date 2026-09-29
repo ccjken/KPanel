@@ -546,7 +546,8 @@ onBeforeUnmount(() => {
 .share-hero p { max-width: 670px; margin: 0 0 7px; color: var(--text-soft); font-size: 14px; line-height: 1.5; }
 .share-hero small { color: var(--muted); }
 
-.share-stats { display: grid; grid-template-columns: repeat(3, minmax(70px, 1fr)) minmax(150px, 1.6fr); align-items: center; }
+.share-stats { display: grid; grid-template-columns: repeat(3, minmax(70px, 1fr)); align-items: center; }
+.share-stats:has(> .cluster-value) { grid-template-columns: repeat(3, minmax(70px, 1fr)) minmax(150px, 1.6fr); }
 .share-stats > div { display: grid; gap: 3px; padding: 2px 16px; border-left: 1px solid var(--border); }
 .share-stats strong { font-size: 25px; line-height: 1; }
 .share-stats span { color: var(--muted); font-size: 12px; }
@@ -673,7 +674,7 @@ onBeforeUnmount(() => {
   .share-refresh span { display: none; }
   .share-hero { gap: 14px; padding: 18px 16px; border-radius: 18px; }
   .share-hero h1 { font-size: 30px; }
-  .share-stats { width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .share-stats, .share-stats:has(> .cluster-value) { width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .share-stats > .cluster-value { grid-column: 1 / -1; margin-top: .75rem; padding-top: .75rem; border-left: 0; border-top: 1px solid var(--border); }
   .share-stats div { padding: 2px 13px; }
   .share-stats div:first-child { border-left: 0; }

@@ -14,6 +14,16 @@ export function themeSnapshot(): PublicClusterShareSnapshot {
       trafficMonthlyQuotaGiB: 100, trafficCalculation: 'max', price: '$30/月', expiresOn: '2026-01-16' }] }
 }
 describe('share theme protocol', () => {
+  it('omits unconfigured value text while preserving configured zero', () => {
+    const snapshot = themeSnapshot()
+    const now = new Date(2026, 0, 20, 12)
+    expect(shareThemeModel(snapshot, 'en-US', now).hosts[0]?.remaining).toBe('$0.00')
+    expect(shareThemeModel(snapshot, 'en-US', now).value.groups).toEqual([{ currency: 'USD', text: '$0.00' }])
+    delete snapshot.items[0]!.expiresOn
+    const model = shareThemeModel(snapshot, 'en-US', now)
+    expect(model.hosts[0]?.remaining).toBe('')
+    expect(model.value.groups).toEqual([])
+  })
   it('accepts only the exact local capability URL', () => {
     const theme = themeSnapshot().theme!
     expect(shareThemeURL(theme)).toBe(`${theme.fileBase}index.html`)

@@ -25,16 +25,22 @@ describe('remaining value summary and details', () => {
     expect(wrapper.find('.cluster-value__result button').exists()).toBe(false)
     expect(wrapper.emitted('manage')).toBeUndefined()
     await wrapper.setProps({ details: {} })
-    expect(wrapper.get('[role="status"]').text()).toContain('公开资料暂不足')
+    expect(wrapper.find('.cluster-value').exists()).toBe(false)
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('管理')
   })
 
-  it('opens an honest empty state with a path to edit and escapes host names', async () => {
+  it('hides absent or unusable configuration and keeps partial coverage details accessible', async () => {
     const wrapper = render()
-    expect(wrapper.get('.cluster-value__trigger').text()).toContain('—')
+    expect(wrapper.find('.cluster-value').exists()).toBe(false)
+    for (const details of [{ price: '$30/月' }, { expiresOn: '2026-01-16' }, { price: 'special offer', expiresOn: '2026-01-16' }]) {
+      await wrapper.setProps({ details: { one: details } })
+      expect(wrapper.find('.cluster-value').exists()).toBe(false)
+    }
+    await wrapper.setProps({ details: { one: { price: '$30/月', expiresOn: '2026-01-16' } } })
     await wrapper.get('.cluster-value__trigger').trigger('click')
-    expect(wrapper.get('[role="status"]').text()).toContain('尚无可估算')
-    expect(wrapper.text()).toContain('0 / 2 台')
+    expect(wrapper.text()).toContain('1 / 2 台')
+    expect(wrapper.text()).toContain('未填写到期日期')
     expect(wrapper.text()).toContain('<img src=x>主机')
     expect(wrapper.find('img').exists()).toBe(false)
     await wrapper.get('.cluster-value__result button').trigger('click')
@@ -54,8 +60,11 @@ describe('remaining value summary and details', () => {
     expect(wrapper.text()).toContain('US$10.00')
     expect(wrapper.text()).toContain('2 / 2 台')
     await wrapper.setProps({ details: { one: { price: '¥30/月' } } })
-    expect(wrapper.get('.cluster-value__trigger').text()).toContain('—')
-    expect(wrapper.text()).toContain('未填写到期日期')
+    expect(wrapper.find('.cluster-value').exists()).toBe(false)
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    await wrapper.setProps({ details: { one: { price: '¥30/月', expiresOn: '2026-01-16' } } })
+    expect(wrapper.get('.cluster-value__trigger').text()).toContain('¥15.00')
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
   })
 
   it('updates on a calendar day change and releases its timer on unmount', async () => {

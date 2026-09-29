@@ -43,7 +43,7 @@ export function shareThemeModel(snapshot: PublicClusterShareSnapshot, locale: st
           received: host.collectedAt ? formatNetworkTrafficCounter(counters, 'received') : '—',
           sent: host.collectedAt ? formatNetworkTrafficCounter(counters, 'sent') : '—' },
         price: host.price || '', expiresOn: host.expiresOn || '',
-        remaining: estimate.remaining === undefined ? '—' : formatClusterMoney(estimate.remaining, estimate.currency, locale),
+        remaining: estimate.remaining === undefined ? '' : formatClusterMoney(estimate.remaining, estimate.currency, locale),
       }
     }),
   }

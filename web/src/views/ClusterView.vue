@@ -1354,7 +1354,7 @@ onBeforeUnmount(() => {
     />
 
     <section class="cluster-hero" aria-label="集群概况与操作">
-      <div class="cluster-stats" :class="{ 'has-value': inventory?.items.length }">
+      <div class="cluster-stats">
         <div><strong>{{ inventory?.total || 0 }}</strong><span>全部节点</span></div>
         <div><strong>{{ onlineCount }}</strong><span>在线</span></div>
         <div><strong>{{ attentionCount }}</strong><span>需关注</span></div>
@@ -2399,7 +2399,7 @@ onBeforeUnmount(() => {
   border-left: 1px solid var(--border);
 }
 
-.cluster-stats.has-value { grid-template-columns: repeat(4, minmax(80px, 112px)) minmax(140px, 180px); }
+.cluster-stats:has(> .cluster-value) { grid-template-columns: repeat(4, minmax(80px, 112px)) minmax(140px, 180px); }
 
 .cluster-stats div:first-child {
   border-left: 0;
@@ -3397,7 +3397,7 @@ onBeforeUnmount(() => {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .cluster-stats.has-value { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cluster-stats:has(> .cluster-value) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .cluster-stats .cluster-value { grid-column: 1 / -1; border-top: 1px solid var(--border); border-left: 0; }
 
   .cluster-stats div:nth-child(3) {

@@ -1,5 +1,5 @@
 <script setup lang="ts" generic="THost extends { id: string; name: string }">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ChevronRight } from '@lucide/vue'
 import ModalDialog from '@/components/common/ModalDialog.vue'
 import { useI18n } from '@/i18n'
@@ -16,6 +16,7 @@ onMounted(() => { timer = setInterval(() => { now.value = new Date() }, 60_000) 
 onBeforeUnmount(() => { if (timer) clearInterval(timer) })
 const summary = computed(() => summarizeRemainingValue(props.hosts, props.details, now.value))
 const primary = computed(() => summary.value.groups[0])
+watch(primary, value => { if (!value) open.value = false })
 const money = (amount: number, currency: string) => formatClusterMoney(amount, currency, locale.value)
 const coverage = computed(() => t('cluster.value.coverage', {
   included: summary.value.included, total: props.hosts.length, excluded: summary.value.excluded,
@@ -30,7 +31,7 @@ async function manage(host: THost) {
 </script>
 
 <template>
-  <div class="cluster-value">
+  <div v-if="primary" class="cluster-value">
     <button class="cluster-value__trigger" type="button" aria-haspopup="dialog" :title="coverage" @click="show">
       <strong>{{ primary ? money(primary.remaining, primary.currency) : '—' }}</strong>
       <span>{{ t('cluster.value.title') }} <ChevronRight :size="13" aria-hidden="true" /></span>
