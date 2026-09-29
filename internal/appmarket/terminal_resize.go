@@ -7,6 +7,8 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
+	"runtime"
 	"time"
 )
 
@@ -14,12 +16,18 @@ import (
 // private socket forwards only a bounded window size and acknowledges ioctl
 // completion. It never injects a command into the application's stdin.
 func serveTerminalResize(path string, terminal terminalProcess) (func(), error) {
-	listener, err := net.Listen("unix", path)
+	address, closeDirectory, err := terminalResizeAddress(path)
 	if err != nil {
+		return nil, err
+	}
+	listener, err := net.Listen("unix", address)
+	if err != nil {
+		closeDirectory()
 		return nil, err
 	}
 	if err := os.Chmod(path, 0o600); err != nil {
 		_ = listener.Close()
+		closeDirectory()
 		return nil, err
 	}
 	done := make(chan struct{})
@@ -43,7 +51,22 @@ func serveTerminalResize(path string, terminal terminalProcess) (func(), error) 
 			_ = connection.Close()
 		}
 	}()
-	return func() { _ = listener.Close(); <-done }, nil
+	return func() { _ = listener.Close(); <-done; closeDirectory() }, nil
+}
+
+// Linux sun_path is much shorter than a valid custom state directory. Resolve
+// the socket relative to an open directory FD; it still lives in that private
+// directory, and the FD stays open until the listener has unlinked its socket.
+func terminalResizeAddress(path string) (string, func(), error) {
+	if runtime.GOOS != "linux" {
+		return path, func() {}, nil
+	}
+	directory, err := os.Open(filepath.Dir(path))
+	if err != nil {
+		return "", nil, err
+	}
+	address := fmt.Sprintf("/proc/self/fd/%d/%s", directory.Fd(), filepath.Base(path))
+	return address, func() { _ = directory.Close() }, nil
 }
 
 func validAppTerminalSize(rows, columns uint16) bool {
@@ -68,7 +91,12 @@ func (s *Service) ResizeAppJobTerminal(id string, rows, columns uint16) error {
 	if !record.Interactive || !record.InputOpen || record.Status != "running" || s.jobs.cancelRequested(id) {
 		return fmt.Errorf("%w: interactive terminal is not open", ErrConflict)
 	}
-	connection, err := net.DialTimeout("unix", s.jobs.resizePath(id), time.Second)
+	address, closeDirectory, err := terminalResizeAddress(s.jobs.resizePath(id))
+	if err != nil {
+		return fmt.Errorf("%w: terminal resize is unavailable", ErrConflict)
+	}
+	defer closeDirectory()
+	connection, err := net.DialTimeout("unix", address, time.Second)
 	if err != nil {
 		return fmt.Errorf("%w: terminal resize is unavailable", ErrConflict)
 	}

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
@@ -42,6 +43,11 @@ func TestAppTerminalResizeReachesWorkerAndRedrawsOnReattach(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(root)
+	// Custom state paths may legally exceed Unix sun_path's 108-byte limit.
+	root = filepath.Join(root, strings.Repeat("nested-state-", 10))
+	if err := os.Mkdir(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	registry := &appJobRegistry{stateDir: root, jobs: make(map[string]appJobRecord)}
 	id := strings.Repeat("a", 32)
 	if err := registry.put(appJobRecord{AppJob: AppJob{ID: id, Status: "running", Interactive: true, InputOpen: true, CreatedAt: time.Now().UTC()}}); err != nil {

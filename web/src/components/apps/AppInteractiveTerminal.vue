@@ -145,6 +145,7 @@ function scheduleResize(delay = 100): void {
 }
 
 async function syncResize(): Promise<void> {
+  if (props.kind && props.kind !== 'app') return
   if (disposed || resizeSending || !terminalInputOpen.value || connectionState.value === 'finished') return
   if (!host.value?.clientWidth || !host.value.clientHeight) return
   fitAddon?.fit()
@@ -270,6 +271,7 @@ function startOutput(): void {
   streamSubscription = terminalStream.subscribe(
     { kind: 'job', job: props.kind ?? 'app', id: props.jobId, offset, inputOpen: terminalInputOpen.value },
     {
+      connected: resetResize,
       job: applyJobChunk,
       error: () => {
         streamSubscription?.close()
@@ -279,6 +281,7 @@ function startOutput(): void {
       },
       unavailable: () => {
         streamSubscription = null
+        connectionState.value = 'error'
         if (!disposed) void poll()
       },
     },

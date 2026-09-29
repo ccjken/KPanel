@@ -40,6 +40,17 @@ function newClient(subscribe = vi.fn().mockResolvedValue({ accepted: true })) {
 const flush = () => new Promise((resolve) => setTimeout(resolve, 20))
 
 describe('TerminalStreamClient', () => {
+  it('notifies subscribers when the native EventSource reconnects', () => {
+    const { client } = newClient()
+    const connected = vi.fn()
+    const subscription = client.subscribe({ kind: 'job', job: 'app', id: 'job-a', offset: 0, inputOpen: true }, { connected })
+    const source = FakeEventSource.instances[0]!
+    source.emit('ready', { streamId: 'first' })
+    source.emit('error')
+    source.emit('ready', { streamId: 'second' })
+    expect(connected).toHaveBeenCalledTimes(2)
+    subscription!.close()
+  })
   it('subscribes after ready, routes output and tracks offsets for resubscription', async () => {
     const { client, subscribe } = newClient()
     const outputs: string[] = []

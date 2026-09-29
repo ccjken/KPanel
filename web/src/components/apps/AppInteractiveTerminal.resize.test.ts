@@ -2,13 +2,15 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import AppInteractiveTerminal from './AppInteractiveTerminal.vue'
+import type { TerminalStreamHandlers } from '@/lib/terminalStream'
 
 const mocks = vi.hoisted(() => ({
-  resize: vi.fn(), output: vi.fn(), observer: undefined as undefined | (() => void),
+  resize: vi.fn(), output: vi.fn(), subscribe: vi.fn(), handlers: undefined as TerminalStreamHandlers | undefined,
+  observer: undefined as undefined | (() => void),
   terminal: undefined as undefined | { rows: number; cols: number }, writes: [] as string[],
 }))
 vi.mock('@/lib/api', () => ({ api: { apps: { terminalResize: mocks.resize, terminal: mocks.output } },
-  terminalStream: { subscribe: () => null } }))
+  terminalStream: { subscribe: mocks.subscribe } }))
 vi.mock('@xterm/xterm', () => ({ Terminal: class {
   options = {}; parser = { registerOscHandler() {} }; rows = 24; cols = 80
   buffer = { active: { viewportY: 0, baseY: 0 } }
@@ -26,6 +28,7 @@ describe('application script terminal geometry', () => {
     vi.useFakeTimers()
     mocks.resize.mockReset().mockResolvedValue({ accepted: true })
     mocks.output.mockReset().mockReturnValue(new Promise(() => {}))
+    mocks.subscribe.mockReset().mockReturnValue(null)
     mocks.writes.length = 0
     vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800)
     vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(400)
@@ -87,6 +90,27 @@ describe('application script terminal geometry', () => {
     await vi.advanceTimersByTimeAsync(100)
     await vi.advanceTimersByTimeAsync(500 + 100)
     expect(mocks.resize).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it('resynchronizes after native SSE reconnect even after resize retries ran out', async () => {
+    mocks.subscribe.mockImplementation((_target: unknown, handlers: TerminalStreamHandlers) => {
+      mocks.handlers = handlers
+      return { close: vi.fn() }
+    })
+    const wrapper = mount(AppInteractiveTerminal, { props })
+    mocks.handlers?.job?.(idleChunk)
+    await vi.advanceTimersByTimeAsync(100)
+    mocks.resize.mockRejectedValue(new Error('offline'))
+    mocks.terminal!.cols = 100
+    mocks.observer?.()
+    await vi.advanceTimersByTimeAsync(100 + 500 + 1000 + 2000)
+    expect(mocks.resize).toHaveBeenCalledTimes(5)
+    mocks.resize.mockResolvedValue({ accepted: true })
+    mocks.handlers?.connected?.()
+    await vi.advanceTimersByTimeAsync(100)
+    expect(mocks.resize).toHaveBeenCalledTimes(6)
+    expect(mocks.resize).toHaveBeenLastCalledWith('job-a', 24, 100)
     wrapper.unmount()
   })
 

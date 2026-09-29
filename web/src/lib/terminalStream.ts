@@ -10,6 +10,7 @@ export type TerminalStreamTarget =
   | { kind: 'job'; job: 'app' | 'site' | 'diagnostic' | 'environment'; id: string; offset: number; inputOpen: boolean }
 
 export interface TerminalStreamHandlers {
+  connected?: () => void
   output?: (output: TerminalOutput) => void
   job?: (chunk: AppTerminalChunk) => void
   error?: (code: string) => void
@@ -119,6 +120,7 @@ export class TerminalStreamClient {
       this.pendingAdd = new Set(this.entries.keys())
       this.pendingRemove.clear()
       this.scheduleFlush()
+      for (const entry of this.entries.values()) entry.handlers.connected?.()
     })
     source.addEventListener('output', (event) => {
       let payload: StreamEvent
