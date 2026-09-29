@@ -10,7 +10,7 @@ import english from '@/i18n/pages/shared/en-US'
 import type { ClusterHost, PublicClusterShareHost } from '@/types/api'
 import type { GlobeHost } from './globeRenderer'
 
-const render = vi.hoisted(() => ({ draw: vi.fn(), focus: vi.fn(), move: vi.fn(), setHosts: vi.fn(), disconnect: vi.fn() }))
+const render = vi.hoisted(() => ({ draw: vi.fn(), focus: vi.fn(), move: vi.fn(), setHosts: vi.fn(), setZoom: vi.fn(), disconnect: vi.fn() }))
 vi.mock('./globeRenderer', async importOriginal => ({
   ...await importOriginal<typeof import('./globeRenderer')>(),
   GlobeRenderer: class {
@@ -21,7 +21,8 @@ vi.mock('./globeRenderer', async importOriginal => ({
     setFlag = vi.fn()
     resize = vi.fn()
     setPalette = vi.fn()
-    setZoom = vi.fn()
+    zoom = 1
+    setZoom(value: number) { this.zoom = value; render.setZoom(value) }
   },
 }))
 
@@ -38,9 +39,13 @@ function host(id: string, code?: string): ClusterHost {
 let wrapper: VueWrapper | undefined
 let frames: Map<number, FrameRequestCallback>
 let nextFrame: number
+let frameTime: number
 let intersect: (entries: { isIntersecting: boolean }[]) => void
 let reduced = false
+let motionChange: () => void
 function flushFrame(time = 40) {
+  time = Math.max(time, frameTime + 16)
+  frameTime = time
   const pending = [...frames.values()]
   frames.clear()
   pending.forEach(callback => callback(time))
@@ -48,7 +53,7 @@ function flushFrame(time = 40) {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  frames = new Map(); nextFrame = 0; reduced = false
+  frames = new Map(); nextFrame = 0; frameTime = 0; reduced = false
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({} as CanvasRenderingContext2D)
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frames.set(++nextFrame, callback); return nextFrame })
   vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id))
@@ -57,7 +62,7 @@ beforeEach(() => {
     constructor(callback: typeof intersect) { intersect = callback }
     observe = vi.fn(); disconnect = render.disconnect
   })
-  vi.stubGlobal('matchMedia', () => ({ matches: reduced, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
+  vi.stubGlobal('matchMedia', () => ({ get matches() { return reduced }, addEventListener: (_: string, callback: () => void) => { motionChange = callback }, removeEventListener: vi.fn() }))
 })
 afterEach(() => { wrapper?.unmount(); wrapper = undefined; vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
@@ -66,7 +71,120 @@ function setup(hosts: GlobeHost[] = [host('alpha', 'CN'), host('beta')], active 
   return wrapper
 }
 
+function wheel(view: VueWrapper, options: WheelEventInit, selector = 'canvas') {
+  const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, ...options })
+  view.get(selector).element.dispatchEvent(event)
+  return event
+}
+
+function settleZoom() {
+  for (let i = 0; i < 80 && frames.size; i++) flushFrame(frameTime + 16)
+}
+
 describe('cluster globe interaction and lifecycle', () => {
+  it('smoothly accumulates wheel input, reverses direction and stops drawing after settling', async () => {
+    const view = setup()
+    flushFrame()
+    expect(wheel(view, { deltaY: -100 }).defaultPrevented).toBe(true)
+    wheel(view, { deltaY: -100 })
+    await nextTick()
+    expect(render.setZoom).not.toHaveBeenCalled()
+    expect(view.get('.cluster-globe__zoom span').text()).toBe('135%')
+    flushFrame(56)
+    const intermediate = render.setZoom.mock.lastCall![0] as number
+    expect(intermediate).toBeGreaterThan(1)
+    expect(intermediate).toBeLessThan(1.35)
+    expect(frames.size).toBe(1)
+    settleZoom()
+    expect(render.setZoom.mock.lastCall![0]).toBeCloseTo(Math.exp(.3))
+    expect(frames.size).toBe(0)
+    expect(view.text()).toContain('自动旋转')
+    wheel(view, { deltaY: 100 })
+    await nextTick()
+    settleZoom()
+    expect(render.setZoom.mock.lastCall![0]).toBeCloseTo(Math.exp(.15))
+    expect(frames.size).toBe(0)
+  })
+
+  it.each([0, 1, 2])('normalizes wheel delta mode %s and retains fractional trackpad input', async deltaMode => {
+    const view = setup()
+    Object.defineProperty(view.get('canvas').element, 'clientHeight', { value: 480 })
+    wheel(view, { deltaY: deltaMode === 0 ? -48 : deltaMode === 1 ? -3 : -.1, deltaMode })
+    await nextTick(); settleZoom()
+    expect(render.setZoom.mock.lastCall![0]).toBeCloseTo(Math.exp(.072))
+    for (let i = 0; i < 10; i++) wheel(view, { deltaY: -.2 })
+    await nextTick(); settleZoom()
+    expect(render.setZoom.mock.lastCall![0]).toBeCloseTo(Math.exp(.075))
+  })
+
+  it('clamps both limits without scrolling the page and can reset an in-flight zoom', async () => {
+    const view = setup()
+    for (let i = 0; i < 10; i++) wheel(view, { deltaY: -10000 })
+    await nextTick(); settleZoom()
+    expect(render.setZoom.mock.lastCall![0]).toBe(2)
+    expect(view.get('[aria-label="放大地球"]').attributes('disabled')).toBeDefined()
+    expect(wheel(view, { deltaY: -100 }).defaultPrevented).toBe(true)
+    for (let i = 0; i < 10; i++) wheel(view, { deltaY: 10000 })
+    await nextTick(); settleZoom()
+    expect(render.setZoom.mock.lastCall![0]).toBe(1)
+    expect(view.get('[aria-label="缩小地球"]').attributes('disabled')).toBeDefined()
+    expect(wheel(view, { deltaY: 100 }).defaultPrevented).toBe(true)
+    await view.get('[aria-label="放大地球"]').trigger('click')
+    flushFrame(1400)
+    await view.get('canvas').trigger('keydown', { key: 'Home' })
+    for (let time = 1416; time < 2500 && frames.size; time += 16) flushFrame(time)
+    expect(render.setZoom.mock.lastCall![0]).toBe(1)
+    expect(view.get('.cluster-globe__zoom span').text()).toBe('100%')
+    expect(frames.size).toBe(0)
+  })
+
+  it('preserves browser zoom, horizontal gestures and scrolling outside the canvas', async () => {
+    const view = setup()
+    for (const options of [{ deltaY: -100, ctrlKey: true }, { deltaY: 1, deltaX: 50 }, { deltaY: 0 }]) {
+      expect(wheel(view, options).defaultPrevented).toBe(false)
+    }
+    expect(wheel(view, { deltaY: -100 }, '.cluster-globe__nodes').defaultPrevented).toBe(false)
+    await nextTick()
+    expect(view.get('.cluster-globe__zoom span').text()).toBe('100%')
+    expect(render.setZoom).not.toHaveBeenCalled()
+  })
+
+  it('applies zoom immediately with reduced motion, including changes during an animation', async () => {
+    const view = setup()
+    wheel(view, { deltaY: -100 })
+    await nextTick(); flushFrame()
+    reduced = true; motionChange()
+    await nextTick(); flushFrame(56)
+    expect(render.setZoom.mock.lastCall![0]).toBeCloseTo(Math.exp(.15))
+    expect(frames.size).toBe(0)
+    wheel(view, { deltaY: -100 })
+    expect(render.setZoom.mock.lastCall![0]).toBeCloseTo(Math.exp(.3))
+    await nextTick(); flushFrame(72)
+    expect(frames.size).toBe(0)
+  })
+
+  it('pauses a pending zoom offscreen and on inactive windows, resumes, and cancels on unmount', async () => {
+    const active = ref(true)
+    const view = setup(undefined, active)
+    wheel(view, { deltaY: -100 })
+    await nextTick(); flushFrame()
+    active.value = false; await nextTick()
+    expect(frames.size).toBe(0)
+    expect(wheel(view, { deltaY: -100 }).defaultPrevented).toBe(false)
+    active.value = true; await nextTick()
+    expect(frames.size).toBe(1)
+    intersect([{ isIntersecting: false }])
+    expect(frames.size).toBe(0)
+    intersect([{ isIntersecting: true }]); settleZoom()
+    expect(render.setZoom.mock.lastCall![0]).toBeCloseTo(Math.exp(.15))
+    expect(frames.size).toBe(0)
+    wheel(view, { deltaY: -100 })
+    await nextTick(); flushFrame(1500)
+    expect(frames.size).toBe(1)
+    view.unmount(); wrapper = undefined
+    expect(frames.size).toBe(0)
+  })
+
   it('lets metric columns and capacity labels reflow with enlarged text', () => {
     const source = globeSource
     expect(source).toMatch(/\.cluster-globe__metrics\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fit, minmax\(min\(100%, 6em\), 1fr\)\);/)
@@ -280,5 +398,6 @@ describe('cluster globe interaction and lifecycle', () => {
     expect(view.findAll('.cluster-globe__node')).toHaveLength(2)
     expect(view.get('.cluster-globe__controls button').attributes('disabled')).toBeDefined()
     expect(frames.size).toBe(0)
+    expect(wheel(view, { deltaY: -100 }).defaultPrevented).toBe(false)
   })
 })

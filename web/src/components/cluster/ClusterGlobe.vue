@@ -118,14 +118,21 @@ function schedule(): void {
 function tick(time: number): void {
   frame = 0
   if (!canRender()) return
-  // Draw at most 30 fps; no reactive updates or Vue renders in the animation loop.
-  if (dirty || time - lastTime >= 1000 / 30) {
+  // Zoom follows display frames; idle rotation stays at 30 fps without Vue updates.
+  const zooming = renderer!.zoom !== zoom.value
+  if (dirty || zooming || time - lastTime >= 1000 / 30) {
+    if (zooming) {
+      const delta = zoom.value - renderer!.zoom
+      const elapsed = lastTime ? Math.min(time - lastTime, 80) : 1000 / 60
+      const next = renderer!.zoom + delta * (1 - Math.exp(-elapsed / 90))
+      renderer!.setZoom(Math.abs(zoom.value - next) < .001 ? zoom.value : next)
+    }
     if (rotating.value && !drag) renderer!.move(Math.min(time - (lastTime || time), 80) * .003, 0)
     renderer!.draw()
     dirty = false
     lastTime = time
   }
-  if (rotating.value) frame = requestAnimationFrame(tick)
+  if (rotating.value || renderer!.zoom !== zoom.value) frame = requestAnimationFrame(tick)
 }
 
 function syncActivity(): void {
@@ -163,9 +170,18 @@ function stepNode(delta: number): void {
 }
 
 function setZoom(value: number): void {
-  zoom.value = Math.max(1, Math.min(2, Math.round(value * 100) / 100))
-  renderer?.setZoom(zoom.value)
+  zoom.value = Math.max(1, Math.min(2, value))
+  if (motion?.matches) renderer?.setZoom(zoom.value)
   schedule()
+}
+
+function wheelZoom(event: WheelEvent): void {
+  if (!canRender() || event.ctrlKey || !Number.isFinite(event.deltaY) || !event.deltaY || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return
+  event.preventDefault()
+  const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? canvas.value!.clientHeight : 1
+  const delta = Math.max(-240, Math.min(240, event.deltaY * unit))
+  rotating.value = false
+  setZoom(zoom.value * Math.exp(-delta * .0015))
 }
 
 function stateLabel(host: GlobeHost): string | undefined {
@@ -237,7 +253,11 @@ function keyboard(event: KeyboardEvent): void {
 }
 
 function syncMotion(): void {
-  if (motion?.matches) rotating.value = false
+  if (motion?.matches) {
+    rotating.value = false
+    renderer?.setZoom(zoom.value)
+    schedule()
+  }
 }
 
 watch([regions, selected], () => {
@@ -308,9 +328,9 @@ onBeforeUnmount(() => {
       <div class="cluster-globe__stage">
         <canvas
           ref="canvas" class="cluster-globe__canvas" tabindex="0" role="img"
-          :aria-label="phrase('节点地球：拖动或使用方向键旋转，Home 复位；也可从节点列表选择主机。')"
+          :aria-label="phrase('节点地球：滚轮缩放，拖动或使用方向键旋转，Home 复位；也可从节点列表选择主机。')"
           @pointerdown="startDrag" @pointermove="moveDrag" @pointerup="finishDrag"
-          @pointercancel="finishDrag" @lostpointercapture="finishDrag" @keydown="keyboard"
+          @pointercancel="finishDrag" @lostpointercapture="finishDrag" @keydown="keyboard" @wheel="wheelZoom"
         />
         <p v-if="unavailable" class="cluster-globe__fallback" role="status">地球绘制不可用，仍可从节点列表查看主机。</p>
       </div>
