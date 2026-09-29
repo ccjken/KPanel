@@ -1417,6 +1417,37 @@ func (s *Server) appJobOperation(w http.ResponseWriter, r *http.Request, request
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	case "resize":
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			writeProblem(w, requestID, http.StatusMethodNotAllowed, "method_not_allowed", "请求方法不允许", "")
+			return
+		}
+		if r.URL.RawQuery != "" {
+			writeProblem(w, requestID, http.StatusBadRequest, "invalid_app_job_request", "应用任务请求无效", "")
+			return
+		}
+		var input struct {
+			Rows    uint16 `json:"rows"`
+			Columns uint16 `json:"columns"`
+		}
+		if err := decodeJSON(w, r, &input); err != nil {
+			writeProblem(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式无效", "")
+			return
+		}
+		if input.Rows == 0 || input.Rows > 500 || input.Columns == 0 || input.Columns > 1000 {
+			writeProblem(w, requestID, http.StatusUnprocessableEntity, "invalid_terminal_size", "终端尺寸无效", "")
+			return
+		}
+		if err := s.appMarket.ResizeAppJobTerminal(id, input.Rows, input.Columns); err != nil {
+			status := http.StatusConflict
+			if errors.Is(err, appmarket.ErrNotFound) {
+				status = http.StatusNotFound
+			}
+			writeProblem(w, requestID, status, "app_terminal_resize_failed", "终端尺寸同步失败", safeDetail(err))
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"accepted": true})
 	case "cancel":
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", http.MethodPost)

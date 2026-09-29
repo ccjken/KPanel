@@ -176,6 +176,43 @@ func (s *Server) handleAppJobInput(w http.ResponseWriter, r *http.Request) {
 	s.writeAgentResponse(w, r, response)
 }
 
+func (s *Server) handleAppJobResize(w http.ResponseWriter, r *http.Request) {
+	if r.URL.RawPath != "" || r.URL.RawQuery != "" {
+		s.writeProblem(w, r, http.StatusNotFound, "route_not_found", "Route not found", "")
+		return
+	}
+	id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/v1/app-jobs/"), "/resize")
+	if !siteIDPattern.MatchString(id) {
+		s.writeProblem(w, r, http.StatusNotFound, "route_not_found", "Route not found", "")
+		return
+	}
+	if !s.checkOrigin(w, r) {
+		return
+	}
+	_, session, ok := s.requireSession(w, r)
+	if !ok || !s.checkCSRF(w, r, session) {
+		return
+	}
+	var input struct {
+		Rows    uint16 `json:"rows"`
+		Columns uint16 `json:"columns"`
+	}
+	if err := s.decodeJSON(w, r, &input); err != nil {
+		return
+	}
+	if input.Rows == 0 || input.Rows > 500 || input.Columns == 0 || input.Columns > 1000 {
+		s.writeValidationProblem(w, r, "size", "terminal dimensions must be within 1..500 rows and 1..1000 columns")
+		return
+	}
+	body, _ := json.Marshal(input)
+	response, err := s.hostOps.Do(r.Context(), http.MethodPost, "/v1/app-jobs/"+id+"/resize", "", requestID(r), body)
+	if err != nil {
+		s.writeProblem(w, r, http.StatusServiceUnavailable, "agent_unavailable", "Agent unavailable", "")
+		return
+	}
+	s.writeAgentResponse(w, r, response)
+}
+
 func (s *Server) handleAppJobCancel(w http.ResponseWriter, r *http.Request) {
 	if r.URL.RawPath != "" || r.URL.RawQuery != "" {
 		s.writeProblem(w, r, http.StatusNotFound, "route_not_found", "Route not found", "")

@@ -93,6 +93,13 @@ func RunInteractiveAppJob(ctx context.Context, stateDir, id string) error {
 		return registry.fail(record, "terminal_unavailable", err)
 	}
 	defer terminal.Close()
+	stopResize, err := serveTerminalResize(registry.resizePath(id), terminal)
+	if err != nil {
+		_ = terminal.Kill()
+		_ = terminal.Wait()
+		return registry.fail(record, "terminal_unavailable", err)
+	}
+	defer stopResize()
 
 	started := time.Now().UTC()
 	record.Status = "running"

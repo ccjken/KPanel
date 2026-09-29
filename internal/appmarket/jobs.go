@@ -1199,6 +1199,7 @@ func (registry *appJobRegistry) pruneLocked() {
 		_ = os.Remove(registry.logPath(record.ID))
 		_ = removeTerminalInput(registry.inputPath(record.ID))
 		_ = os.Remove(registry.cancelPath(record.ID))
+		_ = removeTerminalResize(registry.resizePath(record.ID))
 	}
 }
 
