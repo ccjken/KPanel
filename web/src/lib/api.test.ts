@@ -15,6 +15,30 @@ afterEach(() => {
 })
 
 describe('API client', () => {
+  it('serializes app terminal resize across reopening without blocking another job', async () => {
+    let finish!: (response: Response) => void
+    const fetchMock = vi.fn().mockReturnValueOnce(new Promise((resolve) => { finish = resolve }))
+      .mockImplementation(() => Promise.resolve(jsonResponse({ accepted: true })))
+    vi.stubGlobal('fetch', fetchMock)
+    const closingWindow = api.apps.terminalResize('same-job', 24, 80)
+    const reopenedWindow = api.apps.terminalResize('same-job', 30, 100)
+    await api.apps.terminalResize('other-job', 20, 70)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[1]?.[0]).toContain('other-job')
+    finish(jsonResponse({ accepted: true }))
+    await Promise.all([closingWindow, reopenedWindow])
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1].body))).toEqual({ rows: 30, columns: 100 })
+  })
+
+  it('releases the shared resize queue after failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce(jsonResponse({ accepted: true })))
+    const oldWindow = api.apps.terminalResize('retry-job', 24, 80)
+    const newWindow = api.apps.terminalResize('retry-job', 30, 100)
+    await expect(oldWindow).rejects.toThrow()
+    await expect(newWindow).resolves.toEqual({ accepted: true })
+  })
   it.each([520, 521, 522, 523, 524])('resumes the same site job after CDN HTTP %i without resubmitting', async (status) => {
     vi.useFakeTimers()
     const job = { id: 'cdn-job', status: 'running', stage: 'installing', progress: 88, message: 'installing' }

@@ -1168,6 +1168,25 @@ function normalizeJob(raw: RawJob): Job {
   }
 }
 
+// Keep resize ordering across component unmount/remount for the same running
+// job. An older request must finish before a reopened window applies its size.
+const appTerminalResizeQueues = new Map<string, Promise<{ accepted: boolean }>>()
+
+async function resizeAppTerminal(id: string, rows: number, columns: number): Promise<{ accepted: boolean }> {
+  const previous = appTerminalResizeQueues.get(id)
+  const pending = (previous?.catch(() => undefined) ?? Promise.resolve()).then(() =>
+    request<{ accepted: boolean }>(`/app-jobs/${encodeURIComponent(id)}/resize`, {
+      method: 'POST', body: { rows, columns },
+    }),
+  )
+  appTerminalResizeQueues.set(id, pending)
+  try {
+    return await pending
+  } finally {
+    if (appTerminalResizeQueues.get(id) === pending) appTerminalResizeQueues.delete(id)
+  }
+}
+
 export const api = {
   auth: {
     passkeys: {
@@ -2005,11 +2024,7 @@ export const api = {
         method: 'POST',
         body: { data },
       }),
-    terminalResize: (id: string, rows: number, columns: number): Promise<{ accepted: boolean }> =>
-      request<{ accepted: boolean }>(`/app-jobs/${encodeURIComponent(id)}/resize`, {
-        method: 'POST',
-        body: { rows, columns },
-      }),
+    terminalResize: resizeAppTerminal,
     cancelJob: (id: string): Promise<AppInstallJob> =>
       request<AppInstallJob>(`/app-jobs/${encodeURIComponent(id)}/cancel`, {
         method: 'POST',
