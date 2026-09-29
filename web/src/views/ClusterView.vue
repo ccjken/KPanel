@@ -1646,6 +1646,7 @@ onBeforeUnmount(() => {
             <small>{{ host.lastSnapshot.telemetry.publicNetwork.isp || '运营商未知' }}</small>
           </div>
           <RouterLink class="cluster-metric-link" :to="clusterHostMonitoringRoute(host, 'network')" :title="phrase('查看历史趋势')">
+            <span class="sr-only">{{ phrase('查看历史趋势') }} · {{ host.name }} · </span>
             <ClusterTrafficHeading :period="host.trafficPeriod" :details="inventory?.hostDetails?.[host.id]" />
             <strong :title="phrase('累计接收')">
               <span aria-hidden="true">↓</span>
