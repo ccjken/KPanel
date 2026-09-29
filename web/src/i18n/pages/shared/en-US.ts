@@ -128,7 +128,7 @@ export default [
   ["暂停旋转", "Pause rotation"],
   ["自动旋转", "Auto rotate"],
   ["位置未知", "Location unknown"],
-  ["节点地球：拖动或使用方向键旋转，Home 复位；也可从节点列表选择主机。", "Node globe: drag or use arrow keys to rotate, Home to reset. You can also select a host from the node list."],
+  ["节点地球：滚轮缩放，拖动或使用方向键旋转，Home 复位；也可从节点列表选择主机。", "Node globe: scroll to zoom, drag or use arrow keys to rotate, Home to reset. You can also select a host from the node list."],
   ["内存", "Memory"],
   ["磁盘", "Disk"],
   ["全球主机，一眼尽览", "Your hosts, around the world"],
