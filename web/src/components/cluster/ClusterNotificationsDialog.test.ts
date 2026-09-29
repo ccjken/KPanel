@@ -94,6 +94,25 @@ describe('withdrawn local resource notifications', () => {
 })
 
 describe('notification channels', () => {
+  it('saves one global expiry rule, restores it on reopen, and retains edits on failure', async () => {
+    const wrapper = await open()
+    const checkbox = () => wrapper.get('input[aria-label="启用服务器到期提醒"]')
+    const save = () => wrapper.findAll('button').find(button => button.text() === '保存设置')!.trigger('click')
+    expect((checkbox().element as HTMLInputElement).checked).toBe(false)
+    expect(wrapper.text()).toContain('所有已填写到期日期的主机')
+    await checkbox().setValue(true); await save(); await flushPromises()
+    expect(mocks.save.mock.lastCall?.[0]).toMatchObject({ enabled: false, rules: { hostExpiryEnabled: true }, expectedResourceVersion: 'v1' })
+    mocks.read.mockResolvedValue({ ...snapshot(), rules: mocks.save.mock.lastCall![0].rules, resourceVersion: 'v2' })
+    await wrapper.setProps({ open: false }); await wrapper.setProps({ open: true }); await flushPromises()
+    expect((checkbox().element as HTMLInputElement).checked).toBe(true)
+    await checkbox().setValue(false)
+    mocks.save.mockRejectedValueOnce(new Error('offline'))
+    await save(); await flushPromises()
+    expect((checkbox().element as HTMLInputElement).checked).toBe(false)
+    expect(wrapper.get('[role="alert"]').text()).toContain('通知操作失败')
+    await save(); await flushPromises()
+    expect(mocks.save.mock.lastCall?.[0].rules.hostExpiryEnabled).toBe(false)
+  })
   it('defaults service alerts off and saves the global rule with existing settings', async () => {
     const wrapper = await open()
     const checkbox = wrapper.get('input[aria-label="启用服务异常通知"]')

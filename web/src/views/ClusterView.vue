@@ -106,10 +106,9 @@ const shareOpen = ref(false)
 const notificationsOpen = ref(false)
 const adding = ref(false)
 const saving = ref(false)
-const editDetails = reactive({ expiresOn: '', expiryReminderEnabled: false, price: '', trafficResetDay: '' as number | string,
+const editDetails = reactive({ expiresOn: '', price: '', trafficResetDay: '' as number | string,
   trafficMonthlyQuotaGiB: '' as number | string, trafficCalculation: 'total' as ClusterTrafficCalculation,
   trafficTotalReceivedThresholdGiB: '' as number | string, trafficTotalSentThresholdGiB: '' as number | string, resourceVersion: '' })
-watch(() => editDetails.expiresOn, date => { if (!date) editDetails.expiryReminderEnabled = false })
 const manageError = ref('')
 const savedDetails = ref<ClusterHostDetailsValue>({})
 const savedName = ref('')
@@ -1057,7 +1056,6 @@ function openManage(host: ClusterHost): void {
   const details = inventory.value?.hostDetails?.[host.id]
   savedDetails.value = { ...details }
   editDetails.expiresOn = details?.expiresOn || ''
-  editDetails.expiryReminderEnabled = Boolean(details?.expiryReminderEnabled)
   editDetails.price = details?.price || ''
   editDetails.trafficResetDay = details?.trafficResetDay || ''
   editDetails.trafficMonthlyQuotaGiB = details?.trafficMonthlyQuotaGiB || ''
@@ -1137,10 +1135,9 @@ async function saveHost(): Promise<void> {
     expiresOn: editDetails.expiresOn, price: editDetails.price.trim(), trafficResetDay: Number(editDetails.trafficResetDay) || 0,
     trafficMonthlyQuotaGiB: quota, trafficCalculation: quota ? editDetails.trafficCalculation : '' as const,
     ...trafficLimits,
-    ...(editDetails.expiresOn && editDetails.expiryReminderEnabled ? { expiryReminderEnabled: true } : {}),
+    ...(editDetails.expiresOn && savedDetails.value.expiryReminderEnabled ? { expiryReminderEnabled: true } : {}),
   }
   const detailsChanged = details.expiresOn !== (savedDetails.value.expiresOn || '')
-    || Boolean(details.expiryReminderEnabled) !== Boolean(savedDetails.value.expiryReminderEnabled)
     || details.price !== (savedDetails.value.price || '')
     || details.trafficResetDay !== (savedDetails.value.trafficResetDay || 0)
     || details.trafficMonthlyQuotaGiB !== (savedDetails.value.trafficMonthlyQuotaGiB || 0)
@@ -2177,13 +2174,7 @@ onBeforeUnmount(() => {
         <div class="cluster-manage__details form-stack">
           <strong>{{ t('cluster.details.title') }}</strong>
           <div class="field">
-            <div class="cluster-manage__expiry-label">
-              <label :for="`${manageFormID}-expiry`">{{ t('cluster.details.expiresOn') }}</label>
-              <label class="cluster-manage__expiry-reminder" :title="t(editDetails.expiresOn ? 'cluster.details.expiryReminderHint' : 'cluster.details.expiryReminderRequiresDate')">
-                <input v-model="editDetails.expiryReminderEnabled" type="checkbox" :disabled="!editDetails.expiresOn || saving || deleting || enablingMutualFiles" />
-                <span>{{ t('cluster.details.expiryReminder') }}</span>
-              </label>
-            </div>
+            <label :for="`${manageFormID}-expiry`">{{ t('cluster.details.expiresOn') }}</label>
             <input :id="`${manageFormID}-expiry`" v-model="editDetails.expiresOn" type="date" min="0001-01-01" max="9999-12-31" :disabled="saving || deleting || enablingMutualFiles" />
           </div>
           <label class="field">
@@ -2319,9 +2310,6 @@ onBeforeUnmount(() => {
 .cluster-manage__traffic-limits .field,
 .cluster-manage__traffic-limits input,
 .cluster-manage__traffic-limits select { font-size: .875rem; }
-.cluster-manage__expiry-label { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
-.cluster-manage__expiry-reminder { display: inline-flex; align-items: center; gap: 7px; font-size: .875rem; cursor: pointer; }
-.cluster-manage__expiry-reminder input { flex: 0 0 auto; width: 16px; height: 16px; min-height: 16px; padding: 0; margin: 0; accent-color: var(--brand); }
 .cluster-manage__details-error { color: var(--danger); }
 .cluster-page {
   --cluster-accent: #6d5dfc;

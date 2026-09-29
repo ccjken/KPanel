@@ -120,7 +120,7 @@ func TestClusterHostDetailsExpiryReminderReachesNotificationHistory(t *testing.T
 	s, tokenPath := newTestServer(t)
 	session, csrf := bootstrapCookies(t, s, tokenPath)
 	input := clusterHostDetailsInput{
-		ClusterHostDetails:      store.ClusterHostDetails{ExpiresOn: time.Now().AddDate(0, 0, 7).Format("2006-01-02"), ExpiryReminderEnabled: true},
+		ClusterHostDetails:      store.ClusterHostDetails{ExpiresOn: time.Now().AddDate(0, 0, 7).Format("2006-01-02")},
 		ExpectedResourceVersion: s.clusterHostsView(context.Background()).HostDetails["local"].ResourceVersion,
 	}
 	body, _ := json.Marshal(input)
@@ -128,6 +128,15 @@ func TestClusterHostDetailsExpiryReminderReachesNotificationHistory(t *testing.T
 		map[string]string{"Content-Type": "application/json", "Origin": "http://panel.test", "X-CSRF-Token": csrf.Value})
 	if result.Code != http.StatusOK {
 		t.Fatalf("save: %d %s", result.Code, result.Body.String())
+	}
+	enabled := true
+	rules := notification.DefaultRules()
+	rules.HostExpiryEnabled = &enabled
+	notificationBody, _ := json.Marshal(notification.UpdateInput{Rules: rules, ExpectedResourceVersion: s.notifications.Snapshot().ResourceVersion})
+	updated := authenticatedRequest(s, http.MethodPut, clusterNotificationsPath, notificationBody, session, csrf,
+		map[string]string{"Content-Type": "application/json", "Origin": "http://panel.test", "X-CSRF-Token": csrf.Value})
+	if updated.Code != http.StatusOK {
+		t.Fatalf("global reminder save: %d %s", updated.Code, updated.Body.String())
 	}
 	s.notifications.Start(context.Background())
 	deadline := time.Now().Add(3 * time.Second)

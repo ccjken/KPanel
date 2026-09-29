@@ -316,6 +316,7 @@ export interface ClusterNotificationRules {
   sshLoginEnabled: boolean
   hostOfflineEnabled: boolean
   serviceChecksEnabled?: boolean
+  hostExpiryEnabled?: boolean
 }
 
 export type ClusterNotificationStatus = 'not_configured' | 'waiting_for_chat' | 'ready' | 'error'

@@ -17,7 +17,7 @@ import (
 // ClusterHostDetails are optional, center-owned server metadata, not telemetry.
 type ClusterHostDetails struct {
 	ExpiresOn                        string `json:"expiresOn,omitempty"`
-	ExpiryReminderEnabled            bool   `json:"expiryReminderEnabled,omitempty"`
+	ExpiryReminderEnabled            bool   `json:"expiryReminderEnabled,omitempty"` // Legacy; migrated to the global notification rule.
 	Price                            string `json:"price,omitempty"`
 	TrafficResetDay                  int    `json:"trafficResetDay,omitempty"`
 	TrafficMonthlyQuotaGiB           int    `json:"trafficMonthlyQuotaGiB,omitempty"`

@@ -12,7 +12,7 @@ const serverExpiryRuleKey = "server-expiry"
 // HostExpiry comes from the center's saved host metadata, never peer telemetry.
 type HostExpiry struct {
 	ExpiresOn string
-	Enabled   bool
+	Enabled   bool // Legacy opt-in, used only to initialize the global rule.
 }
 
 func validExpiryDate(value string) bool {
@@ -28,7 +28,7 @@ func (s *Service) expirySnapshot() map[string]HostExpiry {
 }
 
 func (s *Service) handleHostExpiry(host cluster.Host, details HostExpiry, now time.Time, locale string, record func(cluster.Host, string, string, string) (bool, bool)) bool {
-	if !details.Enabled || !validExpiryDate(details.ExpiresOn) {
+	if !validExpiryDate(details.ExpiresOn) {
 		return false
 	}
 	expiry, _ := time.Parse("2006-01-02", details.ExpiresOn)

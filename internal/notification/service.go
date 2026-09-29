@@ -124,6 +124,22 @@ func NewService(config Config) (*Service, error) {
 		return nil, err
 	}
 	state := store.stateSnapshot()
+	if state.Settings.Rules.HostExpiryEnabled == nil {
+		enabled := false
+		if config.HostExpiries != nil {
+			for _, details := range config.HostExpiries() {
+				if details.Enabled && validExpiryDate(details.ExpiresOn) {
+					enabled = true
+					break
+				}
+			}
+		}
+		state.Settings.Rules.HostExpiryEnabled = &enabled
+		state.ResourceVersion = configResourceVersion(state.Settings, state.Telegram)
+		if err := store.commitState(state); err != nil {
+			return nil, err
+		}
+	}
 	history := openHistory(store.directory, state)
 	historyState, _ := history.snapshot()
 	service := &Service{
@@ -239,6 +255,10 @@ func (s *Service) Configure(ctx context.Context, input UpdateInput) (Snapshot, e
 		return Snapshot{}, ErrConflict
 	}
 	rules := normalizeRules(input.Rules)
+	// An older client omitting the new rule must not reset an explicit choice.
+	if rules.HostExpiryEnabled == nil {
+		rules.HostExpiryEnabled = state.Settings.Rules.HostExpiryEnabled
+	}
 	// Freeze withdrawn resource rules, including explicit writes by old clients.
 	// Preserve the stored value verbatim so ordinary saves need no migration and
 	// rollback can resume with the original configuration.
@@ -267,7 +287,7 @@ func (s *Service) Configure(ctx context.Context, input UpdateInput) (Snapshot, e
 	if storedCredentialInvalid && newCredential == "" {
 		return Snapshot{}, &Error{Code: "invalid_credential", Cause: ErrInvalidCredential}
 	}
-	if err := s.ensureEnabledCanRun(input.Enabled, provider, newCredential, oldCredential, oldPresent, state.Telegram); err != nil {
+	if err := s.ensureEnabledCanRun(input.Enabled, state.Settings.Enabled, provider, newCredential, oldCredential, oldPresent, state.Telegram); err != nil {
 		return Snapshot{}, err
 	}
 	next := state
@@ -468,7 +488,7 @@ func (s *Service) Test(ctx context.Context) (Snapshot, error) {
 	return s.snapshot(ctx), nil
 }
 
-func (s *Service) ensureEnabledCanRun(enabled bool, provider Provider, newCredential, oldCredential string, oldPresent bool, meta telegramState) error {
+func (s *Service) ensureEnabledCanRun(enabled, alreadyEnabled bool, provider Provider, newCredential, oldCredential string, oldPresent bool, meta telegramState) error {
 	if !enabled {
 		return nil
 	}
@@ -482,7 +502,9 @@ func (s *Service) ensureEnabledCanRun(enabled bool, provider Provider, newCreden
 	if provider != oldProvider {
 		return credentialRequiredError(provider)
 	}
-	if meta.Status != TelegramReady || !meta.HasChat || meta.TokenFingerprint != tokenFingerprint(oldCredential) {
+	// A failed delivery must not prevent editing rules (especially disabling
+	// reminders) on an already enabled, unchanged and previously verified channel.
+	if (meta.Status != TelegramReady && !(alreadyEnabled && meta.Status == TelegramError)) || !meta.HasChat || meta.TokenFingerprint != tokenFingerprint(oldCredential) {
 		return channelNotReadyError(provider)
 	}
 	return nil
@@ -570,7 +592,9 @@ func (s *Service) evaluate(parent context.Context) error {
 		return true, true
 	}
 	for _, host := range hosts.Items {
-		stateChanged = s.handleHostExpiry(host, expiries[host.ID], now, locale, trySend) || stateChanged
+		if ruleEnabled(state.Settings.Rules, serverExpiryRuleKey) {
+			stateChanged = s.handleHostExpiry(host, expiries[host.ID], now, locale, trySend) || stateChanged
+		}
 		if host.LastSnapshot == nil {
 			if state.Settings.Rules.HostOfflineEnabled {
 				stateChanged = s.handleAvailability(host, now, locale, trySend) || stateChanged

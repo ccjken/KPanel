@@ -823,7 +823,7 @@ func TestServiceUsesConfiguredLocaleForResourceAlerts(t *testing.T) {
 	}
 }
 
-func TestServiceCannotEnableAfterChannelError(t *testing.T) {
+func TestServiceAllowsRuleEditsAfterChannelErrorButCannotReenable(t *testing.T) {
 	clock := &notificationTestClock{now: time.Date(2026, 8, 31, 16, 0, 0, 0, time.UTC)}
 	source := newNotificationTestHost(clock.Now())
 	telegram := &notificationTestTelegram{}
@@ -837,6 +837,20 @@ func TestServiceCannotEnableAfterChannelError(t *testing.T) {
 		t.Fatal("Test() unexpectedly succeeded with a failed channel")
 	}
 	state := service.Snapshot()
+	if _, err := service.Configure(context.Background(), UpdateInput{
+		Enabled: true, Rules: state.Rules, ExpectedResourceVersion: state.ResourceVersion,
+	}); err != nil {
+		t.Fatalf("editing an already enabled channel's rules: %v", err)
+	}
+	if service.Snapshot().Channel.Status != TelegramError {
+		t.Fatal("saving rules concealed the delivery error")
+	}
+	if _, err := service.Configure(context.Background(), UpdateInput{
+		Enabled: false, Rules: state.Rules, ExpectedResourceVersion: service.Snapshot().ResourceVersion,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	state = service.Snapshot()
 	if _, err := service.Configure(context.Background(), UpdateInput{
 		Enabled: true, Rules: state.Rules, ExpectedResourceVersion: state.ResourceVersion,
 	}); !errors.Is(err, ErrNotReady) {
