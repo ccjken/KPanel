@@ -24,6 +24,7 @@ Vue 三栏工作台 ── REST/SSE ── paneld AgentRuntime
 - Chat Completions 会捕获 Provider 实际返回的 `reasoning_content`、`reasoning_text` 或 `reasoning`，仅随对应工具调用保存在内部上下文；同一模型响应产生的可见内容、多个工具调用和 reasoning 会重建为一条完整 assistant 批次，不跨模型响应复用 reasoning。标准后续请求不主动猜测方言；只有端点在未输出内容时明确要求补充某一 reasoning 字段，Runtime 才以已保存的原文和指定字段重试并记住当前端点/模型方言。若旧工具历史没有保存原始推理内容，Runtime 不伪造空 reasoning 字段，而将已有工具结果降级为标注为不可信的历史数据后重试。该兼容链路由实际响应和端点错误驱动，不依赖 DeepSeek 型号名称；型号推断只控制原生思考强度参数。隐藏推理不进入 REST、SSE、日志或审计。
 - Anthropic 工具调用会将完整 assistant content block 序列及其中的 `thinking` / `redacted_thinking` 签名绑定到原 Provider/模型，包含新版 Claude 在多个工具之间产生的交错 thinking，并在续轮按原顺序回放；同一响应的多个 `tool_result` 合并到下一条 user 消息。Gemini 会保存每个 `functionCall` 实际返回的 ID 和 `thoughtSignature`，仅向生成它的原 Provider/模型对应调用回放，并将带原始 ID 的并行 `functionResponse` 合并到同一 user 内容。两类原生上下文均不通过 REST、SSE、日志或审计暴露；切换模型时不携带旧模型的签名上下文。
 - Responses 的 HTTP SSE 与 Realtime WebSocket 是不同接口；v1 不接入 `/v1/realtime`、音频或语音会话。
+- Responses 回放的原生工具批次若因审批、冲突或中断缺少部分结果，请求中为缺失项明确标记 `tool_output_unavailable` / `unknown`，提示先核对当前资源状态；保留已有真实结果，不推断执行成功或失败，不自动重放工具或改写历史。旧会话继续时使用同一兼容路径。
 - 公网 Provider 必须使用 HTTPS；拒绝 URL userinfo、query、fragment，以及每次 DNS 解析得到的回环、私网、链路本地、组播、未指定和保留地址。
 - 内网/本地 Provider 必须显式选择 `private`；只有此模式允许 HTTP。
 - 重定向最多三次；跨源重定向移除 `Authorization`、`X-Api-Key` 与 `X-Goog-Api-Key`。
