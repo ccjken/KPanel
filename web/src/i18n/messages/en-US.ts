@@ -2,7 +2,7 @@ import type { LocaleMessages } from './zh-CN'
 import { passkeyEnUS } from '../passkeys'
 
 export const enUSMessages = {
-  'cluster.traffic.monthly': 'Monthly traffic',
+  'cluster.traffic.monthly': 'Monthly',
   'cluster.traffic.cumulative': 'Cumulative traffic',
   'cluster.traffic.quota': 'Monthly traffic quota (GiB)',
   'cluster.traffic.quotaPlaceholder': 'Leave blank to hide percentage',
