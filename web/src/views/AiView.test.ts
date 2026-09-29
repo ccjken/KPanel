@@ -159,6 +159,50 @@ describe('AI workspace reconnect', () => {
     wrapper.unmount()
   })
 
+  it.each(['running', 'pending_approval'])('preserves the conversation after switching models and receiving a %s run update', async status => {
+    const router = await makeRouter()
+    const errorHandler = vi.fn()
+    const wrapper = mount(AiView, { global: { plugins: [router], config: { errorHandler } } })
+    await flushPromises()
+    const stream = MockEventSource.instances[0]!
+    const run = { id: 'run-active', sessionId: 's1', providerId: 'p1', modelId: 'm1', modelName: 'Mock', status: 'queued' }
+    const message = { id: 'history', sessionId: 's1', runId: run.id, role: 'assistant', content: '已有回答应保留', createdAt: '' }
+    const call = { id: 'tool-1', runId: run.id, name: 'host_docker_containers', status: 'completed', arguments: {}, resultPreview: 'healthy' }
+    stream.onopen?.()
+    stream.emit('run.snapshot', { run, messages: [message], toolCalls: [call] })
+    await flushPromises()
+    await wrapper.get('.ai-choice--model .ai-choice__trigger').trigger('click')
+    await wrapper.get('.ai-choice--model [data-value="m2"]').trigger('click')
+    await flushPromises()
+
+    // NativeRuntime publishes an AIRun here; reconnect sends the full snapshot above.
+    stream.emit('run.snapshot', { ...run, status })
+    await flushPromises()
+    expect(errorHandler).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-message-id="history"]').text()).toContain(message.content)
+    expect(wrapper.find('[data-tool-call-id="tool-1"]').exists()).toBe(true)
+    expect(wrapper.get('.ai-choice--model .ai-choice__trigger').text()).toContain('Next')
+    expect(wrapper.find('.ai-next-model').exists()).toBe(true)
+    expect(wrapper.find('button[aria-label="停止运行"]').exists()).toBe(true)
+    expect(MockEventSource.instances).toHaveLength(1)
+
+    stream.onerror?.()
+    stream.onopen?.()
+    stream.emit('run.snapshot', { run: { ...run, status }, messages: [message], toolCalls: [call] })
+    stream.emit('run.snapshot', { ...run, status: 'running' })
+    stream.emit('message.completed', { ...message, id: 'continued', content: '切模型后继续输出' })
+    await flushPromises()
+    expect(wrapper.get('[data-message-id="continued"]').text()).toContain('切模型后继续输出')
+    expect(wrapper.find('.ai-connection.online').exists()).toBe(true)
+    expect(errorHandler).not.toHaveBeenCalled()
+    mocks.send.mockResolvedValue({ runId: run.id })
+    await wrapper.get('.ai-composer textarea').setValue('继续检查')
+    await wrapper.get('button[aria-label="发送"]').trigger('click')
+    await flushPromises()
+    expect(mocks.send).toHaveBeenCalledWith('s1', '继续检查', [])
+    wrapper.unmount()
+  })
+
   it('switches approval mode for the next run', async () => {
 	const router = await makeRouter()
 	const wrapper = mount(AiView, { global: { plugins: [router] } })
