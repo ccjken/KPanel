@@ -481,6 +481,7 @@ export const zhTWMessages = {
   "ai.tool.completed": "已完成",
   "ai.tool.failed": "執行失敗",
   "ai.tool.rejected": "已拒絕",
+  'ai.error.copy': '複製失敗，請選取文字後手動複製。',
   "ai.error.workspaceLoad": "AI 工作台載入失敗",
   "ai.error.conversationLoad": "對話讀取失敗",
   "ai.error.olderMessages": "較早訊息載入失敗",
