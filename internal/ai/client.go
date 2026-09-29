@@ -196,6 +196,13 @@ func (c *HTTPModelClient) streamOpenAIResponses(ctx context.Context, provider Pr
 
 func (c *HTTPModelClient) streamOpenAIResponsesAttempt(ctx context.Context, provider Provider, apiKey string, request CompletionRequest, includeMessageIDs bool, emit func(CompletionEvent) error) error {
 	input := make([]any, 0, len(request.Messages))
+	callIDs := make(map[string]bool)
+	outputIDs := make(map[string]bool)
+	for _, message := range request.Messages {
+		if message.ToolCallID != "" {
+			outputIDs[message.ToolCallID] = true
+		}
+	}
 	if includeMessageIDs && request.System != "" {
 		input = append(input, map[string]any{
 			"id":   responsesInputItemID(ChatMessage{Role: "system", Content: request.System}, -1, "message", 0),
@@ -204,7 +211,32 @@ func (c *HTTPModelClient) streamOpenAIResponsesAttempt(ctx context.Context, prov
 	}
 	for messageIndex, message := range request.Messages {
 		providerItems, completeOutput := responsesProviderOutput(provider.ID, request.Model, message.ToolCalls)
-		input = append(input, providerItems...)
+		for _, native := range providerItems {
+			item, _ := native.(map[string]any)
+			id, _ := item["call_id"].(string)
+			if item["type"] == "function_call" && id != "" {
+				if callIDs[id] {
+					continue
+				}
+				callIDs[id] = true
+			}
+			input = append(input, native)
+		}
+		// Approval, conflict or interruption can leave only part of a native batch
+		// in history. Preserve that batch without claiming its missing calls ran.
+		for _, native := range providerItems {
+			item, ok := native.(map[string]any)
+			id, _ := item["call_id"].(string)
+			if !ok || item["type"] != "function_call" || id == "" || outputIDs[id] {
+				continue
+			}
+			output := map[string]any{"type": "function_call_output", "call_id": id, "output": responsesMissingToolOutput}
+			if includeMessageIDs {
+				output["id"] = responsesInputItemID(ChatMessage{ToolCallID: id, Content: responsesMissingToolOutput}, messageIndex, "function_call_output", 0)
+			}
+			input = append(input, output)
+			outputIDs[id] = true
+		}
 		if !completeOutput {
 			if (message.Content != "" || len(message.Attachments) > 0) && message.ToolCallID == "" {
 				item := map[string]any{"role": message.Role, "content": openAIContent(message, true)}
@@ -214,6 +246,12 @@ func (c *HTTPModelClient) streamOpenAIResponsesAttempt(ctx context.Context, prov
 				input = append(input, item)
 			}
 			for callIndex, call := range message.ToolCalls {
+				// A native batch can already contain a call whose stored result was
+				// separated by another message (or sorted earlier in the same ms).
+				if callIDs[call.ID] {
+					continue
+				}
+				callIDs[call.ID] = true
 				item := map[string]any{
 					"type": "function_call", "call_id": call.ID, "name": call.Name, "arguments": string(call.Arguments),
 				}
@@ -463,6 +501,8 @@ type responsesNativeContext struct {
 	Complete   bool              `json:"complete,omitempty"`
 	Items      []json.RawMessage `json:"items"`
 }
+
+const responsesMissingToolOutput = `{"code":"tool_output_unavailable","status":"unknown","message":"KPanel has no recorded output for this tool call. Do not assume it succeeded or failed. Read the current resource state before continuing; do not blindly repeat a write."}`
 
 func responsesProviderOutput(providerID, model string, calls []ToolCall) ([]any, bool) {
 	for _, call := range calls {
