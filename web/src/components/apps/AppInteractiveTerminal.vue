@@ -53,6 +53,12 @@ let inputSending = false
 let offset = 0
 let disposed = false
 let polling = false
+let resizeTimer: number | undefined
+let resizeSending = false
+let resizeGeneration = 0
+let resizeFailures = 0
+let syncedRows = 0
+let syncedColumns = 0
 const outputNormalizer = new TerminalOutputNormalizer()
 
 const { fullscreen, toggleFullscreen } = useTerminalFullscreen(fitTerminal)
@@ -125,6 +131,51 @@ function focusTerminalWhenInputOpens(): void {
 
 function fitTerminal(): void {
   fitAddon?.fit()
+  resizeFailures = 0
+  scheduleResize()
+}
+
+function scheduleResize(delay = 100): void {
+  if (disposed || (props.kind && props.kind !== 'app')) return
+  if (resizeTimer) window.clearTimeout(resizeTimer)
+  resizeTimer = window.setTimeout(() => {
+    resizeTimer = undefined
+    void syncResize()
+  }, delay)
+}
+
+async function syncResize(): Promise<void> {
+  if (disposed || resizeSending || !terminalInputOpen.value || connectionState.value === 'finished') return
+  if (!host.value?.clientWidth || !host.value.clientHeight) return
+  fitAddon?.fit()
+  const rows = terminal?.rows ?? 0
+  const columns = terminal?.cols ?? 0
+  if (!rows || !columns || rows > 500 || columns > 1000 || (rows === syncedRows && columns === syncedColumns)) return
+  const generation = resizeGeneration
+  resizeSending = true
+  try {
+    const result = await api.apps.terminalResize(props.jobId, rows, columns)
+    if (!result.accepted) throw new Error('terminal resize was not applied')
+    if (disposed || generation !== resizeGeneration) return
+    syncedRows = rows
+    syncedColumns = columns
+    resizeFailures = 0
+    if (terminal?.rows !== rows || terminal?.cols !== columns) scheduleResize()
+  } catch {
+    if (disposed || generation !== resizeGeneration) return
+    resizeFailures++
+    if (resizeFailures === 1) writeTerminalOutput(`\r\n\x1b[33m[KPanel] ${t('terminal.resizeFailed')}\x1b[0m\r\n`)
+    if (resizeFailures <= 3) scheduleResize(500 * 2 ** (resizeFailures - 1))
+  } finally {
+    resizeSending = false
+    if (!disposed && generation !== resizeGeneration) scheduleResize()
+  }
+}
+
+function resetResize(): void {
+  resizeGeneration++
+  syncedRows = syncedColumns = resizeFailures = 0
+  scheduleResize()
 }
 
 function containTerminalWheel(event: WheelEvent): void {
@@ -200,12 +251,14 @@ function handlePendingLineEnter(event: KeyboardEvent): void {
 }
 
 function applyJobChunk(chunk: AppTerminalChunk): void {
+  const reconnected = connectionState.value !== 'connected'
   const data = chunk.dataBase64 ? decodeBase64(chunk.dataBase64) : undefined
   if (data) writeTerminalOutput(data)
   if (chunk.finished) flushTerminalOutput()
   offset = chunk.nextOffset
   terminalInputOpen.value = chunk.inputOpen
   connectionState.value = chunk.finished ? 'finished' : 'connected'
+  if (reconnected && !chunk.finished) resetResize()
   if (terminalInputOpen.value && !inputQueue.empty) void flushInput()
   if (chunk.finished) stopOutput()
 }
@@ -285,6 +338,7 @@ async function poll(): Promise<void> {
 }
 
 function resetTerminal(): void {
+  resetResize()
   stopOutput()
   pollController?.abort()
   polling = false
@@ -309,6 +363,7 @@ watch(
 )
 watch(terminalInputOpen, (open) => {
   if (open) focusTerminalWhenInputOpens()
+  if (open) resetResize()
 })
 watch([themeColors, resolvedTheme], () => {
   void nextTick(() => {
@@ -337,8 +392,9 @@ onMounted(() => {
   if (host.value) {
     terminal.open(host.value)
     fitAddon.fit()
-    resizeObserver = new ResizeObserver(() => fitAddon?.fit())
+    resizeObserver = new ResizeObserver(fitTerminal)
     resizeObserver.observe(host.value)
+    scheduleResize()
     if (terminalInputOpen.value) window.requestAnimationFrame(focusTerminal)
   }
   startOutput()
@@ -350,6 +406,8 @@ onBeforeUnmount(() => {
   pollController?.abort()
   if (pollTimer) window.clearTimeout(pollTimer)
   if (inputTimer) window.clearTimeout(inputTimer)
+  resizeGeneration++
+  if (resizeTimer) window.clearTimeout(resizeTimer)
   resizeObserver?.disconnect()
   terminal?.dispose()
 })

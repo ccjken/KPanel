@@ -239,6 +239,32 @@ func TestApplicationTerminalRoutesValidateMethodAndOffset(t *testing.T) {
 	}
 }
 
+func TestApplicationTerminalResizeRoute(t *testing.T) {
+	server := testServer(t)
+	path := "/v1/app-jobs/" + strings.Repeat("a", 32) + "/resize"
+	for _, item := range []struct {
+		method, suffix, body string
+		status               int
+	}{
+		{http.MethodGet, "", "", http.StatusMethodNotAllowed},
+		{http.MethodPost, "?extra=1", `{"rows":24,"columns":80}`, http.StatusBadRequest},
+		{http.MethodPost, "", `{"rows":0,"columns":80}`, http.StatusUnprocessableEntity},
+		{http.MethodPost, "", `{"rows":24,"columns":1001}`, http.StatusUnprocessableEntity},
+		{http.MethodPost, "", `{"rows":-1,"columns":80}`, http.StatusBadRequest},
+		{http.MethodPost, "", `{"rows":24,"columns":80,"command":"bad"}`, http.StatusBadRequest},
+		{http.MethodPost, "", `{"rows":24,"columns":80}`, http.StatusNotFound},
+	} {
+		request := httptest.NewRequest(item.method, path+item.suffix, strings.NewReader(item.body))
+		request.Header.Set("Authorization", "Bearer "+strings.Repeat("x", 32))
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		server.ServeHTTP(response, request)
+		if response.Code != item.status {
+			t.Fatalf("%+v: %d %s", item, response.Code, response.Body.String())
+		}
+	}
+}
+
 func TestSitesPageEndpoint(t *testing.T) {
 	server := testServer(t)
 	request := httptest.NewRequest(http.MethodGet, "/v1/sites", nil)

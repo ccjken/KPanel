@@ -3,9 +3,45 @@ package panel
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
+
+func TestAppTerminalResizeAuthorizationAndValidation(t *testing.T) {
+	server, tokenPath := newTestServer(t)
+	sessionCookie, csrfCookie := bootstrapCookies(t, server, tokenPath)
+	id := strings.Repeat("a", 32)
+	path := "/api/v1/app-jobs/" + id + "/resize"
+	agent := &stubAgent{response: AgentResponse{StatusCode: http.StatusOK, ContentType: "application/json", Body: []byte(`{"accepted":true}`)}}
+	server.agent = agent
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"rows":24,"columns":80}`)))
+	if response.Code < 400 {
+		t.Fatal("unauthenticated resize accepted")
+	}
+	for _, body := range []string{`{"rows":0,"columns":80}`, `{"rows":501,"columns":80}`, `{"rows":24,"columns":1001}`, `{"rows":-1,"columns":80}`, `{"rows":24,"columns":80,"command":"anything"}`} {
+		response := authenticatedSiteRequest(server, sessionCookie, csrfCookie, http.MethodPost, path, []byte(body), true)
+		if response.Code < 400 {
+			t.Fatalf("invalid resize accepted: %s", body)
+		}
+	}
+	response = authenticatedSiteRequest(server, sessionCookie, csrfCookie, http.MethodPost, path, []byte(`{"rows":24,"columns":80}`), false)
+	if response.Code < 400 {
+		t.Fatal("resize without CSRF accepted")
+	}
+	if len(agent.snapshotCalls()) != 0 {
+		t.Fatal("rejected resize reached Agent")
+	}
+	response = authenticatedSiteRequest(server, sessionCookie, csrfCookie, http.MethodPost, path, []byte(`{"rows":24,"columns":80}`), true)
+	if response.Code != http.StatusOK {
+		t.Fatalf("resize: %d %s", response.Code, response.Body.String())
+	}
+	calls := agent.snapshotCalls()
+	if len(calls) != 1 || calls[0].path != "/v1/app-jobs/"+id+"/resize" || string(calls[0].body) != `{"rows":24,"columns":80}` {
+		t.Fatalf("resize forwarding: %#v", calls)
+	}
+}
 
 func TestAppManageHTTPForwardsBothResourceKinds(t *testing.T) {
 	server, tokenPath := newTestServer(t)

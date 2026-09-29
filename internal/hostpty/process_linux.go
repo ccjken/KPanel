@@ -100,6 +100,23 @@ func (process *linuxProcess) Resize(rows, columns uint16) error {
 	if rows == 0 || columns == 0 {
 		return errors.New("terminal dimensions must be positive")
 	}
+	current, err := unix.IoctlGetWinsize(int(process.Fd()), unix.TIOCGWINSZ)
+	if err != nil {
+		return err
+	}
+	if current.Row == rows && current.Col == columns {
+		// Reattaching a browser at the same size still needs a fresh TUI frame.
+		// TIOCSWINSZ only signals a changed size, so notify the actual foreground
+		// process group in this PTY rather than the detached shell's parent group.
+		group, err := unix.IoctlGetInt(int(process.Fd()), unix.TIOCGPGRP)
+		if err != nil {
+			return err
+		}
+		if group <= 0 {
+			return errors.New("terminal has no foreground process group")
+		}
+		return unix.Kill(-group, unix.SIGWINCH)
+	}
 	return unix.IoctlSetWinsize(
 		int(process.Fd()),
 		unix.TIOCSWINSZ,

@@ -2005,6 +2005,11 @@ export const api = {
         method: 'POST',
         body: { data },
       }),
+    terminalResize: (id: string, rows: number, columns: number): Promise<{ accepted: boolean }> =>
+      request<{ accepted: boolean }>(`/app-jobs/${encodeURIComponent(id)}/resize`, {
+        method: 'POST',
+        body: { rows, columns },
+      }),
     cancelJob: (id: string): Promise<AppInstallJob> =>
       request<AppInstallJob>(`/app-jobs/${encodeURIComponent(id)}/cancel`, {
         method: 'POST',

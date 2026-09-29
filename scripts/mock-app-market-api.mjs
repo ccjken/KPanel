@@ -2095,17 +2095,31 @@ createServer(async (request, response) => {
     const id = `${Date.now().toString(16).padStart(16, '0')}${'b'.repeat(16)}`
     const native = { id, appId: app.id, appName: app.name_zh, action: 'manage', interactive: true, inputOpen: true,
       status: 'running', stage: 'interactive', progress: 5, logs: ['模拟终端：未执行宿主机脚本'], createdAt: new Date().toISOString() }
-    appJobs.set(id, { native })
+    appJobs.set(id, { native, terminalOutput: `模拟数据 · ${app.name_zh}\r\n脚本管理终端已打开（未执行宿主机命令）\r\n1. 安装  2. 更新  3. 卸载  0. 返回\r\n请输入你的选择: ` })
     return send(response, 202, native)
   }
-  const appTerminalMatch = url.pathname.match(/^\/api\/v1\/app-jobs\/([a-f0-9]{32})\/(terminal|input|cancel)$/)
+  const appTerminalMatch = url.pathname.match(/^\/api\/v1\/app-jobs\/([a-f0-9]{32})\/(terminal|input|resize|cancel)$/)
   if (appTerminalMatch) {
-    const job = appJobs.get(appTerminalMatch[1])?.native
+    const entry = appJobs.get(appTerminalMatch[1])
+    const job = entry?.native
     if (!job) return send(response, 404, { title: '模拟任务不存在' })
     if (request.method === 'GET' && appTerminalMatch[2] === 'terminal') {
-      const output = Buffer.from(`模拟数据 · ${job.appName}\r\n脚本管理终端已打开（未执行宿主机命令）\r\n1. 安装  2. 更新  3. 卸载  0. 返回\r\n请输入你的选择: `)
+      const output = Buffer.from(entry.terminalOutput)
       const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0)
       return send(response, 200, { dataBase64: output.subarray(offset).toString('base64'), nextOffset: output.length, inputOpen: job.inputOpen, finished: !job.inputOpen })
+    }
+    if (request.method === 'POST' && appTerminalMatch[2] === 'resize') {
+      const { rows, columns } = await readJSON(request)
+      if (!job.inputOpen) return send(response, 409, { title: '模拟终端已关闭' })
+      if (!Number.isInteger(rows) || !Number.isInteger(columns) || rows < 1 || rows > 500 || columns < 1 || columns > 1000) {
+        return send(response, 422, { title: '终端尺寸无效' })
+      }
+      // Deliberately simulated cursor positioning: exposes clipping if the
+      // viewport does not send its actual geometry. No host process runs here.
+      const label = `MOCK PTY: ${rows} rows x ${columns} columns`
+      const frame = `\x1b[2J\x1b[H${label.slice(0, columns)}\x1b[2;1H模拟终端尺寸同步（未执行 Codex）\x1b[${rows};1H>\x1b[${rows};${columns}H+\x1b[${rows};3H`
+      if (Buffer.byteLength(entry.terminalOutput) + Buffer.byteLength(frame) <= 8 * 1024 * 1024) entry.terminalOutput += frame
+      return send(response, 200, { accepted: true })
     }
     if (request.method === 'POST' && appTerminalMatch[2] === 'input') return send(response, 200, { accepted: true })
     if (request.method === 'POST' && appTerminalMatch[2] === 'cancel') {
