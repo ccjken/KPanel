@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import ModalDialog from '@/components/common/ModalDialog.vue'
 import { backups, backupMessage, type BackupSettings, type BackupModule } from '@/lib/backup'
 import { phraseCatalogVersion, translatePhrase } from '@/i18n/phrase'
+import { getLocale } from '@/i18n'
 const props = defineProps<{ settings: BackupSettings; pending: boolean }>()
 const emit = defineEmits<{ close: []; saved: [settings: BackupSettings]; started: [] }>()
 function phrase(value: string) { phraseCatalogVersion.value; return translatePhrase(value) }
@@ -14,7 +15,7 @@ const notice = ref('')
 const confirmation = ref('')
 const modules: Array<[BackupModule, string]> = [['panel', '面板数据'], ['apps', '应用数据'], ['web', '网站数据'], ['docker', 'Docker 数据']]
 const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
-const nextRun = computed(() => props.settings.schedule.nextRun ? new Intl.DateTimeFormat(undefined, { timeZone: props.settings.schedule.timezone, dateStyle: 'medium', timeStyle: 'short' }).format(new Date(props.settings.schedule.nextRun)) : '')
+const nextRun = computed(() => props.settings.schedule.nextRun ? new Intl.DateTimeFormat(getLocale(), { timeZone: props.settings.schedule.timezone, dateStyle: 'medium', timeStyle: 'short' }).format(new Date(props.settings.schedule.nextRun)) : '')
 const valid = computed(() => plan.value.modules.length > 0 && !!clock.value && !!plan.value.timezone && (plan.value.password ? new TextEncoder().encode(plan.value.password).length >= 10 && new TextEncoder().encode(plan.value.password).length <= 256 && plan.value.password === confirmation.value : !plan.value.enabled || plan.value.hasPassword))
 async function save() {
   if (!valid.value || busy.value) return
