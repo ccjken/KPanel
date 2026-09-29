@@ -1,6 +1,7 @@
 import type { DockerImageUpdateResult } from '@/lib/dockerImageUpdate'
 import { TerminalStreamClient } from '@/lib/terminalStream'
 import type { PasskeyList } from '@/types/api'
+import type { ShareThemeList } from '@/lib/shareThemes'
 import type { ScenePack, ScenePackList, ScenePackSource } from '@/lib/scenePacks'
 import type { PasskeyCreationOptions, PasskeyRequestOptions, PasskeyCredentialJSON } from '@/lib/passkeys'
 import type {
@@ -1660,6 +1661,10 @@ export const api = {
       expectedResourceVersion: string
     }): Promise<ClusterHostOrderPreference> =>
       request<ClusterHostOrderPreference>('/cluster/host-order', { method: 'PUT', body }),
+    shareThemes: (signal?: AbortSignal): Promise<ShareThemeList> => request<ShareThemeList>('/cluster/share-themes', { signal }),
+    installShareTheme: (id: string, expectedResourceVersion: string): Promise<ScenePack> => request<ScenePack>(`/cluster/share-themes/${encodeURIComponent(id)}/install`, { method: 'POST', body: { expectedResourceVersion } }),
+    deleteShareTheme: (id: string, expectedResourceVersion: string): Promise<void> => request<void>(`/cluster/share-themes/${encodeURIComponent(id)}`, { method: 'DELETE', body: { expectedResourceVersion } }),
+    selectShareTheme: (selected: string, expectedResourceVersion: string): Promise<void> => request<void>('/cluster/share-themes/selection', { method: 'PUT', body: { selected, expectedResourceVersion } }),
     shareSettings: (signal?: AbortSignal): Promise<ClusterShareSettings> =>
       request<ClusterShareSettings>('/cluster/share', { signal }),
     notificationHistory: (filters: Record<string, string>, signal?: AbortSignal): Promise<NotificationHistoryPage> =>

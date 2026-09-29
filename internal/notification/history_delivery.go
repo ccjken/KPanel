@@ -27,7 +27,7 @@ func ruleEnabled(r Rules, rule string) bool {
 	case "ssh":
 		return r.SSHLoginEnabled
 	case serverExpiryRuleKey:
-		return true // The per-host setting is checked against the live expiry below.
+		return r.HostExpiryEnabled != nil && *r.HostExpiryEnabled
 	}
 	return false
 }
@@ -59,7 +59,7 @@ func (s *Service) deliverHistory(ctx context.Context, state persistedState, host
 		switch {
 		case !state.Settings.Enabled:
 			reason = "push_disabled"
-		case event.Rule == serverExpiryRuleKey && (!expiries[event.HostID].Enabled || expiries[event.HostID].ExpiresOn != event.ExpiryDate):
+		case event.Rule == serverExpiryRuleKey && expiries[event.HostID].ExpiresOn != event.ExpiryDate:
 			reason = "expiry_reminder_changed"
 		case !ruleEnabled(rules, event.Rule):
 			reason = "rule_disabled"
@@ -130,7 +130,7 @@ func (s *Service) deliverHistory(ctx context.Context, state persistedState, host
 		}
 		if event.Rule == serverExpiryRuleKey {
 			current := s.expirySnapshot()[event.HostID]
-			if !current.Enabled || current.ExpiresOn != event.ExpiryDate {
+			if current.ExpiresOn != event.ExpiryDate {
 				event.Delivery = "cancelled"
 				event.LastErrorCode = "expiry_reminder_changed"
 				continue

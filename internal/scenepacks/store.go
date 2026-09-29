@@ -28,12 +28,14 @@ type installedPack struct {
 	Token string `json:"token"`
 }
 type state struct {
+	Selected  string                   `json:"selected,omitempty"`
 	Schema    int                      `json:"schema"`
 	Source    string                   `json:"source"`
 	Installed map[string]installedPack `json:"installed"`
 }
 
 type Store struct {
+	profile     profile
 	ctx         context.Context
 	cancel      context.CancelFunc
 	mu          sync.Mutex
@@ -53,9 +55,11 @@ type Store struct {
 
 // Open degrades only optional artwork when its state is damaged. It never makes
 // the administration UI unavailable or replaces a malformed state with empty data.
-func Open(root string, fetch Fetch) *Store {
+func Open(root string, fetch Fetch) *Store { return openProfile(root, fetch, scenes) }
+
+func openProfile(root string, fetch Fetch, kind profile) *Store {
 	client := remotedownload.NewClient(remotedownload.Config{ResponseHeaderTimeout: 8 * time.Second, IdleTimeout: 15 * time.Second, RejectRedirects: true})
-	s := &Store{root: root, state: state{Schema: 1, Source: "auto", Installed: map[string]installedPack{}}, network: make(chan struct{}, 3), writeState: backup.AtomicFile}
+	s := &Store{profile: kind, root: root, state: state{Schema: 1, Source: "auto", Installed: map[string]installedPack{}}, network: make(chan struct{}, 3), writeState: backup.AtomicFile}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.fetch = func(ctx context.Context, address string, limit int64) ([]byte, error) {
 		response, err := client.Open(ctx, address)
@@ -82,7 +86,7 @@ func Open(root string, fetch Fetch) *Store {
 	}
 	data, err := backup.ReadFile(filepath.Join(root, "state.json"), MaxStateBytes)
 	if err == nil {
-		if json.Unmarshal(data, &s.state) != nil || !validState(s.state) {
+		if json.Unmarshal(data, &s.state) != nil || !validStateProfile(s.state, kind) {
 			s.unavailable = true
 			return s
 		}
@@ -96,14 +100,24 @@ func Open(root string, fetch Fetch) *Store {
 	return s
 }
 
-func validState(value state) bool {
+func validState(value state) bool { return validStateProfile(value, scenes) }
+
+func validStateProfile(value state, kind profile) bool {
+	if value.Selected != "" {
+		if !kind.themes {
+			return false
+		}
+		if _, ok := value.Installed[value.Selected]; !ok {
+			return false
+		}
+	}
 	if value.Schema != 1 || !ValidSource(value.Source) || value.Installed == nil || len(value.Installed) > MaxInstalled {
 		return false
 	}
 	var total int64
 	tokens := map[string]bool{}
 	for id, item := range value.Installed {
-		if id != item.Pack.ID || validatePack(item.Pack) != nil || !ValidToken(item.Token) || tokens[item.Token] {
+		if id != item.Pack.ID || validatePackProfile(item.Pack, kind) != nil || !ValidToken(item.Token) || tokens[item.Token] {
 			return false
 		}
 		tokens[item.Token] = true
@@ -148,7 +162,7 @@ func (s *Store) pruneObjects() error {
 
 func (s *Store) save(next state) error {
 	data, err := json.Marshal(next)
-	if err != nil || !validState(next) || int64(len(data)) > MaxStateBytes {
+	if err != nil || !validStateProfile(next, s.profile) || int64(len(data)) > MaxStateBytes {
 		return ErrInvalid
 	}
 	file := filepath.Join(s.root, "state.json")
@@ -165,7 +179,7 @@ func (s *Store) save(next state) error {
 }
 
 func (s *Store) nextState() state {
-	next := state{Schema: 1, Source: s.state.Source, Installed: map[string]installedPack{}}
+	next := state{Schema: 1, Source: s.state.Source, Selected: s.state.Selected, Installed: map[string]installedPack{}}
 	for id, item := range s.state.Installed {
 		next.Installed[id] = item
 	}
@@ -182,12 +196,12 @@ func (s *Store) download(ctx context.Context, source, relative string, limit int
 	default:
 		return nil, ErrBusy
 	}
-	roots := []string{officialRoot, mirrorRoot}
+	roots := []string{s.profile.official, s.profile.mirror}
 	s.mu.Lock()
 	preferMirror := source == "auto" && time.Now().Before(s.mirrorUntil)
 	s.mu.Unlock()
 	if preferMirror {
-		roots = []string{mirrorRoot, officialRoot}
+		roots = []string{s.profile.mirror, s.profile.official}
 	}
 	if source == "github" {
 		roots = roots[:1]
@@ -201,12 +215,12 @@ func (s *Store) download(ctx context.Context, source, relative string, limit int
 		if err == nil && expected == "" && int64(len(body)) <= limit {
 			// The catalog has no pinned digest. Validate its contents before a
 			// response can select a route or suppress the other provider's retry.
-			_, err = DecodeCatalog(body)
+			_, err = decodeCatalog(body, s.profile)
 		}
 		if err == nil && int64(len(body)) <= limit && (expected == "" || (int64(len(body)) == limit && contentDigest(body) == expected)) {
 			if source == "auto" {
 				s.mu.Lock()
-				if root == officialRoot {
+				if root == s.profile.official {
 					s.mirrorUntil = time.Time{}
 				} else if !preferMirror {
 					// Avoid paying a failed GitHub timeout for every file in a pack.
@@ -254,7 +268,7 @@ func (s *Store) refresh(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	catalog, err := DecodeCatalog(body)
+	catalog, err := decodeCatalog(body, s.profile)
 	if err != nil {
 		return ErrSource
 	}
@@ -270,7 +284,7 @@ func (s *Store) view(p Pack) View {
 	v := View{ID: p.ID, Version: p.Version, Name: p.Name, Description: p.Description, Author: p.Author, License: p.License, Tags: p.Tags, Theme: p.Theme, Cameras: p.Cameras, SizeBytes: p.SizeBytes, Installed: installed}
 	if installed {
 		version := item.Pack.Version
-		base := FilePrefix + p.ID + "/files/" + item.Token + "/"
+		base := s.profile.filePrefix + p.ID + "/files/" + item.Token + "/"
 		v.InstalledVersion = &version
 		v.FileBase = &base
 	}
@@ -310,6 +324,10 @@ func (s *Store) List(ctx context.Context) (List, error) {
 	result := List{Source: s.state.Source, Sources: []string{"auto", "github", "mirror"}, Packs: []View{}}
 	if err != nil {
 		result.Warning = "scene_pack_catalog_unavailable"
+	}
+	if s.profile.themes {
+		result.Selected = s.state.Selected
+		result.ResourceVersion = s.stateVersion()
 	}
 	for _, p := range s.packs() {
 		result.Packs = append(result.Packs, s.view(p))
@@ -462,6 +480,9 @@ func (s *Store) Delete(id, expected string) error {
 	}
 	next := s.nextState()
 	delete(next.Installed, id)
+	if next.Selected == id {
+		next.Selected = ""
+	}
 	if err := s.save(next); err != nil {
 		return err
 	}

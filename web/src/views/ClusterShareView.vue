@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import ClusterShareTheme from '@/components/cluster/ClusterShareTheme.vue'
 import ClusterHostDetails from '@/components/cluster/ClusterHostDetails.vue'
+import ClusterRemainingValue from '@/components/cluster/ClusterRemainingValue.vue'
 import ClusterTemporarySortMenu from '@/components/cluster/ClusterTemporarySortMenu.vue'
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
@@ -28,7 +30,8 @@ import { usePhraseCatalog } from '@/i18n/phrase'
 import { useI18n } from '@/i18n'
 import { sortPublicClusterHostsTemporarily, type ClusterHostTemporarySortKey, type ClusterHostTemporarySortDirection } from '@/lib/clusterHostTemporarySort'
 import { ApiError, api } from '@/lib/api'
-import { clusterTrafficCounters, formatNetworkTrafficCounter, trafficPeriodHint } from '@/lib/networkTraffic'
+import { clusterTrafficCounters, formatNetworkTrafficCounter } from '@/lib/networkTraffic'
+import ClusterTrafficHeading from '@/components/cluster/ClusterTrafficHeading.vue'
 import {
   clampPercent,
   formatDateTime,
@@ -47,6 +50,9 @@ usePhraseCatalog((locale) => locale === 'en-US'
 
 const route = useRoute()
 const snapshot = ref<PublicClusterShareSnapshot>()
+const publicDetails = computed(() => Object.fromEntries((snapshot.value?.items || []).map(host => [host.id, {
+  price: host.price, expiresOn: host.expiresOn,
+}])))
 const loading = ref(true)
 const refreshing = ref(false)
 const errorMessage = ref('')
@@ -221,6 +227,7 @@ onBeforeUnmount(() => {
         </div>
       </header>
 
+      <ClusterShareTheme :snapshot="snapshot" :error-message="errorMessage">
       <section v-if="snapshot" class="share-hero">
         <div class="share-hero__copy">
           <span class="share-kicker"><Globe2 :size="14" /> PUBLIC FLEET</span>
@@ -232,6 +239,7 @@ onBeforeUnmount(() => {
           <div><strong>{{ snapshot.total }}</strong><span>全部机器</span></div>
           <div class="is-online"><strong>{{ snapshot.online }}</strong><span>在线</span></div>
           <div class="is-attention"><strong>{{ snapshot.attention }}</strong><span>需关注</span></div>
+          <ClusterRemainingValue :hosts="snapshot.items" :details="publicDetails" read-only />
         </div>
       </section>
 
@@ -371,7 +379,7 @@ onBeforeUnmount(() => {
               </dd>
             </div>
             <div class="share-details__traffic">
-              <dt :title="trafficPeriodHint(host.trafficPeriod, t)" :aria-label="trafficPeriodHint(host.trafficPeriod, t)">累计流量</dt>
+              <dt><ClusterTrafficHeading :period="host.trafficPeriod" :details="host" /></dt>
               <dd>
                 <span title="累计接收">
                   <ArrowDown :size="13" aria-hidden="true" />
@@ -397,6 +405,8 @@ onBeforeUnmount(() => {
         <Server :size="26" />
         <strong>还没有可展示的机器</strong>
       </section>
+
+      </ClusterShareTheme>
 
       <footer class="share-footer">
         <span>Powered by <strong>KPanel</strong></span>
@@ -536,8 +546,9 @@ onBeforeUnmount(() => {
 .share-hero p { max-width: 670px; margin: 0 0 7px; color: var(--text-soft); font-size: 14px; line-height: 1.5; }
 .share-hero small { color: var(--muted); }
 
-.share-stats { display: grid; grid-template-columns: repeat(3, minmax(90px, 1fr)); }
-.share-stats div { display: grid; gap: 3px; padding: 2px 16px; border-left: 1px solid var(--border); }
+.share-stats { display: grid; grid-template-columns: repeat(3, minmax(70px, 1fr)); align-items: center; }
+.share-stats:has(> .cluster-value) { grid-template-columns: repeat(3, minmax(70px, 1fr)) minmax(150px, 1.6fr); }
+.share-stats > div { display: grid; gap: 3px; padding: 2px 16px; border-left: 1px solid var(--border); }
 .share-stats strong { font-size: 25px; line-height: 1; }
 .share-stats span { color: var(--muted); font-size: 12px; }
 .share-stats .is-online strong { color: var(--brand); }
@@ -663,7 +674,8 @@ onBeforeUnmount(() => {
   .share-refresh span { display: none; }
   .share-hero { gap: 14px; padding: 18px 16px; border-radius: 18px; }
   .share-hero h1 { font-size: 30px; }
-  .share-stats { width: 100%; }
+  .share-stats, .share-stats:has(> .cluster-value) { width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .share-stats > .cluster-value { grid-column: 1 / -1; margin-top: .75rem; padding-top: .75rem; border-left: 0; border-top: 1px solid var(--border); }
   .share-stats div { padding: 2px 13px; }
   .share-stats div:first-child { border-left: 0; }
   .share-grid { grid-template-columns: minmax(0, 1fr); }

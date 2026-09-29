@@ -260,11 +260,15 @@ export interface ClusterHostList {
   hostOrder?: ClusterHostOrderPreference
 }
 
+export type ClusterTrafficCalculation = 'total' | 'received' | 'sent' | 'max'
+
 export interface ClusterHostDetails {
   expiresOn?: string
   expiryReminderEnabled?: boolean
   price?: string
   trafficResetDay?: number
+  trafficMonthlyQuotaGiB?: number
+  trafficCalculation?: ClusterTrafficCalculation | ''
   trafficTotalReceivedThresholdGiB?: number
   trafficTotalSentThresholdGiB?: number
 }
@@ -312,6 +316,7 @@ export interface ClusterNotificationRules {
   sshLoginEnabled: boolean
   hostOfflineEnabled: boolean
   serviceChecksEnabled?: boolean
+  hostExpiryEnabled?: boolean
 }
 
 export type ClusterNotificationStatus = 'not_configured' | 'waiting_for_chat' | 'ready' | 'error'
@@ -368,7 +373,7 @@ export interface ClusterNotificationResources {
 
 export type PublicClusterShareHostState = 'online' | 'degraded' | 'offline' | 'pending'
 
-export interface PublicClusterShareHost extends Pick<ClusterHostDetails, 'expiresOn' | 'price' | 'trafficResetDay'> {
+export interface PublicClusterShareHost extends Pick<ClusterHostDetails, 'expiresOn' | 'price' | 'trafficResetDay' | 'trafficMonthlyQuotaGiB' | 'trafficCalculation'> {
 	trafficPeriod?: ClusterTrafficPeriod
 	id: string
 	name: string
@@ -392,6 +397,7 @@ export interface PublicClusterShareHost extends Pick<ClusterHostDetails, 'expire
 }
 
 export interface PublicClusterShareSnapshot {
+ theme?: import('@/lib/shareThemes').ShareTheme
 	title: string
 	description?: string
 	generatedAt: string

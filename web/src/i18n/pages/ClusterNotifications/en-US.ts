@@ -1,4 +1,7 @@
 export default [
+  ["服务器到期提醒","Server expiry reminders"],
+  ["启用服务器到期提醒","Enable server expiry reminders"],
+  ["统一提醒所有已填写到期日期的主机，按当前 KPanel 时区，在提前 7、3、1 天及到期当天各提醒一次。","Notify for all hosts with an expiry date, once 7, 3 and 1 days before expiry and on the expiry date, using this KPanel's timezone."],
   ["通知记录", "Notification history"],
   ["事件默认保存在本机，可选开启外部渠道推送。", "Events are saved locally by default. External delivery is optional."],
   ["本地记录暂时不可用", "Local recording unavailable"],

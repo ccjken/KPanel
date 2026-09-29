@@ -2,6 +2,7 @@ import { createServer } from 'node:http'
 import { mockMonitoringHistory } from './mock-monitoring-history.mjs'
 import { mockBackups } from './mock-backups.mjs'
 import { mockEditorFiles, handleMockEditor } from './mock-file-editor.mjs'
+import { mockShareThemes, activeShareTheme } from './mock-share-themes.mjs'
 import { mockScenePacks } from './mock-scene-packs.mjs'
 import { mockDesktopWallpapers } from './mock-desktop-wallpapers.mjs'
 import { readFile } from 'node:fs/promises'
@@ -648,9 +649,11 @@ const mockNotificationEvents = Array.from({ length: 64 }, (_, index) => {
 let mockHostDetailsRevision = 1
 let mockHostNameRevision = 1
 const mockHostDetails = Object.fromEntries(visualClusterHosts.map((host, index) => [host.id, {
-  ...(index === 0 ? { expiresOn: '2027-09-28', price: '¥99/年', trafficResetDay: 15 } : {}),
-  ...(index === 1 ? { expiresOn: '2026-12-31', price: '¥12/月', trafficResetDay: 1 } : {}),
+  ...(index === 0 ? { expiresOn: '2027-09-28', price: '¥99/年', trafficResetDay: 15, trafficMonthlyQuotaGiB: 100, trafficCalculation: 'received' } : {}),
+  ...(index === 1 ? { expiresOn: '2026-12-31', price: '¥12/月', trafficResetDay: 1, trafficMonthlyQuotaGiB: 100, trafficCalculation: 'total' } : {}),
   ...(index === 2 ? { expiresOn: '2027-03-15', price: '$5/月' } : {}),
+  ...(index === 3 ? { trafficResetDay: 1, trafficMonthlyQuotaGiB: 100, trafficCalculation: 'total' } : {}),
+  ...(index === 4 ? { trafficResetDay: 1 } : {}),
   resourceVersion: mockRevision(900),
 }]))
 
@@ -669,8 +672,8 @@ function mockTrafficPeriod(host) {
   }
   const offset = now < boundary(0) ? -1 : 0
   const period = {
-    receivedBytes: host.id === visualClusterHosts[0].id ? 2 * 1024 ** 3 : 512 * 1024 ** 2,
-    sentBytes: 256 * 1024 ** 2,
+    receivedBytes: [29, 60, 0, 80, 10][visualClusterHosts.indexOf(host)] * 1024 ** 3 || 0,
+    sentBytes: [68, 20, 0, 40, 10][visualClusterHosts.indexOf(host)] * 1024 ** 3 || 0,
     available: Boolean(host.lastSnapshot),
     startedAt: boundary(offset).toISOString(), endsAt: boundary(offset + 1).toISOString(),
     partial: true, estimated: false,
@@ -693,7 +696,7 @@ let mockNotificationSnapshot = {
     trafficEnabled: false, trafficThresholdMiBPerSecond: 100,
     trafficTotalReceivedEnabled: true, trafficTotalReceivedThresholdGiB: 100,
     trafficTotalSentEnabled: true, trafficTotalSentThresholdGiB: 100,
-    sshLoginEnabled: true, hostOfflineEnabled: true, serviceChecksEnabled: false,
+    sshLoginEnabled: true, hostOfflineEnabled: true, serviceChecksEnabled: false, hostExpiryEnabled: false,
   },
   resources: {
     certificateStatus: 'ready', containerStatus: 'ready', observedAt: new Date().toISOString(), stateCapacityReached: false,
@@ -753,6 +756,8 @@ function visualClusterPublicSnapshot() {
       expiresOn: mockHostDetails[host.id]?.expiresOn,
       price: mockHostDetails[host.id]?.price,
       trafficResetDay: mockHostDetails[host.id]?.trafficResetDay,
+      trafficMonthlyQuotaGiB: mockHostDetails[host.id]?.trafficMonthlyQuotaGiB,
+      trafficCalculation: mockHostDetails[host.id]?.trafficCalculation,
       trafficPeriod: mockTrafficPeriod(host),
       os: telemetry?.os,
       architecture: telemetry?.architecture,
@@ -1487,6 +1492,7 @@ function mockMonitoringCheckSnapshot() {
 createServer(async (request, response) => {
   const url = new URL(request.url, 'http://127.0.0.1:8080')
   if (await mockBackups(request, response, url, send, readJSON)) return
+  if (await mockShareThemes(request, response, url, send, readJSON)) return
   if (await mockScenePacks(request, response, url, send, readJSON)) return
   if (await mockDesktopWallpapers(request, response, url, send)) return
   if (url.pathname === '/api/v1/monitoring/checks' && request.method === 'GET') {
@@ -1726,7 +1732,7 @@ createServer(async (request, response) => {
   }
   const publicClusterShareMatch = url.pathname.match(/^\/api\/v1\/public\/cluster-share\/([a-f0-9]{64})$/)
   if (request.method === 'GET' && publicClusterShareMatch) {
-    send(response, publicClusterShareMatch[1] === visualClusterShareToken ? 200 : 404, publicClusterShareMatch[1] === visualClusterShareToken ? visualClusterPublicSnapshot() : { title: '分享不存在', status: 404, code: 'not_found' })
+    send(response, publicClusterShareMatch[1] === visualClusterShareToken ? 200 : 404, publicClusterShareMatch[1] === visualClusterShareToken ? { ...visualClusterPublicSnapshot(), theme: activeShareTheme() } : { title: '分享不存在', status: 404, code: 'not_found' })
     return
   }
   if (request.method === 'GET' && url.pathname === '/api/v1/files') {
@@ -2448,8 +2454,10 @@ createServer(async (request, response) => {
       return
     }
     const { expiresOn = '', expiryReminderEnabled = false, price = '', trafficResetDay = 0,
+      trafficMonthlyQuotaGiB = 0, trafficCalculation = '',
       trafficTotalReceivedThresholdGiB = 0, trafficTotalSentThresholdGiB = 0 } = input
-    if ([trafficTotalReceivedThresholdGiB, trafficTotalSentThresholdGiB].some(value => !Number.isInteger(value) || value < 0 || value > 1_048_576) ||
+    if ([trafficMonthlyQuotaGiB, trafficTotalReceivedThresholdGiB, trafficTotalSentThresholdGiB].some(value => !Number.isInteger(value) || value < 0 || value > 1_048_576) ||
+        !['', 'total', 'received', 'sent', 'max'].includes(trafficCalculation) ||
         typeof expiryReminderEnabled !== 'boolean' || (expiryReminderEnabled && !expiresOn) ||
         !Number.isInteger(trafficResetDay) || trafficResetDay < 0 || trafficResetDay > 31 ||
         typeof price !== 'string' || [...price].length > 40 || /[\u0000-\u001f\u007f]/.test(price) ||
@@ -2458,7 +2466,7 @@ createServer(async (request, response) => {
       return
     }
     const resetChanged = trafficResetDay !== (mockHostDetails[id].trafficResetDay || 0)
-    mockHostDetails[id] = { expiresOn, expiryReminderEnabled, price: price.trim(), trafficResetDay, trafficTotalReceivedThresholdGiB, trafficTotalSentThresholdGiB, resourceVersion: mockRevision(900 + ++mockHostDetailsRevision) }
+    mockHostDetails[id] = { expiresOn, expiryReminderEnabled, price: price.trim(), trafficResetDay, trafficMonthlyQuotaGiB, trafficCalculation, trafficTotalReceivedThresholdGiB, trafficTotalSentThresholdGiB, resourceVersion: mockRevision(900 + ++mockHostDetailsRevision) }
     if (resetChanged) {
       mockTrafficPeriods.delete(id)
       const period = mockTrafficPeriod(visualClusterHosts.find(host => host.id === id))

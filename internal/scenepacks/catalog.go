@@ -100,10 +100,12 @@ type View struct {
 	ResourceVersion  string   `json:"resourceVersion"`
 }
 type List struct {
-	Source  string   `json:"source"`
-	Sources []string `json:"sources"`
-	Packs   []View   `json:"packs"`
-	Warning string   `json:"warning,omitempty"`
+	Selected        string   `json:"selected,omitempty"`
+	ResourceVersion string   `json:"resourceVersion,omitempty"`
+	Source          string   `json:"source"`
+	Sources         []string `json:"sources"`
+	Packs           []View   `json:"packs"`
+	Warning         string   `json:"warning,omitempty"`
 }
 
 func ValidID(id string) bool       { return idPattern.MatchString(id) }
@@ -184,11 +186,20 @@ func validText(text Text, chinese, english int) bool {
 	return true
 }
 
-func validatePack(p Pack) error {
-	if p.Schema != 1 || !ValidID(p.ID) || !versionPattern.MatchString(p.Version) || p.Runtime != "kpanel-scene-pack@1" || p.Path != p.ID+"/dist" ||
+func validatePack(p Pack) error { return validatePackProfile(p, scenes) }
+
+func validatePackProfile(p Pack, kind profile) error {
+	if p.Schema != 1 || !ValidID(p.ID) || !versionPattern.MatchString(p.Version) || p.Runtime != kind.runtime || p.Path != p.ID+"/dist" ||
 		!validText(p.Name, 20, 40) || !validText(p.Description, 40, 90) || p.Author.Name == "" || len(p.Author.Name) > 160 || len(p.Author.URL) > 500 || len(p.License) > 160 || p.License == "" ||
 		!colorPattern.MatchString(p.Theme.Brand) || !colorPattern.MatchString(p.Theme.Neutral) || !colorPattern.MatchString(p.Theme.Signature) ||
-		p.Entry != "index.html" || p.Poster != "poster.webp" || p.Thumb != "thumb.webp" || len(p.Cameras) < 1 || len(p.Cameras) > 6 || len(p.Tags) > 6 || len(p.Files) < 4 || len(p.Files) > MaxFiles {
+		p.Entry != "index.html" || len(p.Tags) > 6 || len(p.Files) < 2 || len(p.Files) > MaxFiles {
+		return ErrInvalid
+	}
+	if kind.themes {
+		if p.Poster != "" || p.Thumb != "" || len(p.Cameras) != 0 || len(p.Files) > 40 || p.SizeBytes > 5<<20 {
+			return ErrInvalid
+		}
+	} else if p.Poster != "poster.webp" || p.Thumb != "thumb.webp" || len(p.Cameras) < 1 || len(p.Cameras) > 6 || len(p.Files) < 4 {
 		return ErrInvalid
 	}
 	seenCameras := map[string]bool{}
@@ -230,20 +241,22 @@ func validatePack(p Pack) error {
 			}
 		}
 	}
-	if total > MaxPackBytes || total != p.SizeBytes || !files["index.html"] || !files["manifest.json"] || !files["poster.webp"] || !files["thumb.webp"] {
+	if total > MaxPackBytes || total != p.SizeBytes || !files["index.html"] || !files["manifest.json"] || (!kind.themes && (!files["poster.webp"] || !files["thumb.webp"])) {
 		return ErrInvalid
 	}
 	return nil
 }
 
-func DecodeCatalog(data []byte) (Catalog, error) {
+func DecodeCatalog(data []byte) (Catalog, error) { return decodeCatalog(data, scenes) }
+
+func decodeCatalog(data []byte, kind profile) (Catalog, error) {
 	var result Catalog
 	if int64(len(data)) > MaxCatalogBytes || json.Unmarshal(data, &result) != nil || result.Schema != 1 || result.Packs == nil || len(result.Packs) > MaxPacks {
 		return Catalog{}, ErrInvalid
 	}
 	seen := map[string]bool{}
 	for _, p := range result.Packs {
-		if seen[p.ID] || validatePack(p) != nil {
+		if seen[p.ID] || validatePackProfile(p, kind) != nil {
 			return Catalog{}, ErrInvalid
 		}
 		seen[p.ID] = true

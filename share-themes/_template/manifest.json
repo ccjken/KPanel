@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "id": "my-fleet",
+  "version": "1.0.0",
+  "runtime": "kpanel-share-theme@1",
+  "name": {
+    "zh-CN": "我的主题",
+    "en-US": "My fleet",
+    "zh-TW": "我的主题"
+  },
+  "description": {
+    "zh-CN": "分享主题模板",
+    "en-US": "A public fleet theme template"
+  },
+  "author": {
+    "name": "KPanel",
+    "url": "https://github.com/kejilion/KPanel"
+  },
+  "license": "AGPL-3.0-only",
+  "tags": [
+    "fleet"
+  ],
+  "theme": {
+    "brand": "#3476aa",
+    "neutral": "#17202c",
+    "signature": "#8ce1bd"
+  },
+  "entry": "index.html"
+}

@@ -378,6 +378,10 @@ func syncDirectory(path string) error {
 }
 
 func clonePersistedState(source persistedState) persistedState {
+	if source.Settings.Rules.HostExpiryEnabled != nil {
+		enabled := *source.Settings.Rules.HostExpiryEnabled
+		source.Settings.Rules.HostExpiryEnabled = &enabled
+	}
 	source.Settings.Rules.ResourceAlerts = cloneResourceRules(source.Settings.Rules.ResourceAlerts)
 	alertStates := make(map[string]alertState, len(source.AlertStates))
 	for key, value := range source.AlertStates {

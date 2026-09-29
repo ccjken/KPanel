@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ClusterShareView from './ClusterShareView.vue'
 import { ApiError } from '@/lib/api'
 import type { ClusterHostTemporarySortKey } from '@/lib/clusterHostTemporarySort'
-import type { PublicClusterShareHost, PublicClusterShareSnapshot } from '@/types/api'
+import type { ClusterHostDetails, PublicClusterShareHost, PublicClusterShareSnapshot } from '@/types/api'
 
 const mocks = vi.hoisted(() => ({
   publicShare: vi.fn(),
@@ -29,6 +29,7 @@ vi.mock('@/lib/api', () => ({
 }))
 
 interface ShareBindings {
+  publicDetails: ComputedRef<Record<string, ClusterHostDetails>>
   sortKey: Ref<ClusterHostTemporarySortKey>
   changeSort: (key: ClusterHostTemporarySortKey) => void
   sortDirection: Ref<'asc' | 'desc'>
@@ -96,6 +97,19 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('ClusterShareView anonymous snapshot', () => {
+  it('derives value details from the whole public snapshot and clears them on revocation', async () => {
+    const view = setupView()
+    const data = publicSnapshot()
+    data.items[0] = { ...data.items[0]!, price: '$120/year', expiresOn: '2027-01-01', trafficMonthlyQuotaGiB: 100, trafficCalculation: 'sent' }
+    view.snapshot.value = data
+    view.search.value = 'no matches'
+    expect(view.filteredHosts.value).toEqual([])
+    expect(view.publicDetails.value).toEqual({ 'host-public-id': { price: '$120/year', expiresOn: '2027-01-01' } })
+    mocks.publicShare.mockRejectedValueOnce(new ApiError('revoked', 404))
+    await view.load(true)
+    expect(view.publicDetails.value).toEqual({})
+  })
+
   it.each(['cpu', 'memory', 'disk', 'traffic'] as const)('sorts public %s in both directions with pending hosts last and refreshes the order', async key => {
     const view = setupView()
     const data = publicSnapshot()
@@ -297,8 +311,8 @@ describe('ClusterShareView anonymous snapshot', () => {
     expect(source).toContain(':hosts="filteredHosts"')
     expect(source).toContain('const { resolved: resolvedTheme, setTheme } = useTheme()')
     expect(source).toContain(':class="`is-${viewMode}`"')
-    expect(source.indexOf('<dt>实时流量</dt>')).toBeLessThan(source.indexOf('>累计流量</dt>'))
-    expect(source.indexOf('>累计流量</dt>')).toBeLessThan(source.indexOf('运行时间</dt>'))
+    expect(source.indexOf('<dt>实时流量</dt>')).toBeLessThan(source.indexOf('<dt><ClusterTrafficHeading'))
+    expect(source.indexOf('<dt><ClusterTrafficHeading')).toBeLessThan(source.indexOf('运行时间</dt>'))
     expect(source).toContain('<div class="share-details__uptime">')
     expect(source).toContain('grid-template-columns: minmax(300px, 1fr) minmax(300px, 0.95fr) 24rem;')
     expect(source).toMatch(/\.share-grid\.is-list \.share-details \{[^}]*grid-template-columns:\s*minmax\(0, 13rem\) minmax\(0, 11rem\);[^}]*justify-content:\s*start;/)

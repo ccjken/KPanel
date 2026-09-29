@@ -27,7 +27,18 @@ func expiryTestService(t *testing.T, now time.Time, zone *time.Location) (*Servi
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = s.Close() })
+	setGlobalExpiryRule(t, s, true)
 	return s, hosts, clock, details
+}
+
+func setGlobalExpiryRule(t *testing.T, s *Service, enabled bool) {
+	t.Helper()
+	snapshot := s.Snapshot()
+	rules := snapshot.Rules
+	rules.HostExpiryEnabled = &enabled
+	if _, err := s.Configure(context.Background(), UpdateInput{Enabled: snapshot.Enabled, Rules: rules, ExpectedResourceVersion: snapshot.ResourceVersion}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func expiryEvents(t *testing.T, s *Service) []Event {
@@ -76,22 +87,23 @@ func TestHostExpiryMilestonesRestartAndClockRollback(t *testing.T) {
 	}
 }
 
-func TestHostExpiryOptInRenewalAndOfflineHost(t *testing.T) {
+func TestHostExpiryGlobalToggleRenewalAndOfflineHost(t *testing.T) {
 	s, hosts, clock, details := expiryTestService(t, time.Date(2026, 9, 23, 8, 0, 0, 0, time.UTC), time.UTC)
 	hosts.host.LastSnapshot = nil
+	setGlobalExpiryRule(t, s, false)
 	details[hosts.host.ID] = HostExpiry{ExpiresOn: "2026-09-30"}
 	tickHistory(t, s, clock, 1)
 	if len(expiryEvents(t, s)) != 0 {
-		t.Fatal("unchecked host notified")
+		t.Fatal("globally disabled reminder notified")
 	}
-	details[hosts.host.ID] = HostExpiry{ExpiresOn: "2026-09-30", Enabled: true}
+	setGlobalExpiryRule(t, s, true)
 	tickHistory(t, s, clock, 1)
 	if len(expiryEvents(t, s)) != 1 {
 		t.Fatal("offline host did not notify")
 	}
-	details[hosts.host.ID] = HostExpiry{ExpiresOn: "2026-09-30"}
+	setGlobalExpiryRule(t, s, false)
 	tickHistory(t, s, clock, 1)
-	details[hosts.host.ID] = HostExpiry{ExpiresOn: "2026-09-30", Enabled: true}
+	setGlobalExpiryRule(t, s, true)
 	tickHistory(t, s, clock, 1)
 	if len(expiryEvents(t, s)) != 1 {
 		t.Fatal("checkbox toggle duplicated a recorded milestone")
@@ -209,7 +221,7 @@ func TestHostExpiryCancelsPendingAfterUncheckRenewalOrRemoval(t *testing.T) {
 			tickHistory(t, s, clock, 1)
 			switch change {
 			case "uncheck":
-				details[hosts.host.ID] = HostExpiry{ExpiresOn: "2026-09-30"}
+				setGlobalExpiryRule(t, s, false)
 			case "renew":
 				details[hosts.host.ID] = HostExpiry{ExpiresOn: "2027-09-30", Enabled: true}
 			case "remove":
@@ -246,7 +258,7 @@ func (s *expiryAfterFirstTelegram) SendMessage(ctx context.Context, credential s
 	return nil
 }
 func TestHostExpiryRetryCancellationDuringBatch(t *testing.T) {
-	for _, change := range []string{"uncheck", "renew", "clear"} {
+	for _, change := range []string{"clear-date", "renew", "clear"} {
 		t.Run(change, func(t *testing.T) {
 			now := time.Date(2026, 9, 23, 8, 0, 0, 0, time.UTC)
 			first := newNotificationTestHost(now).host
@@ -282,8 +294,8 @@ func TestHostExpiryRetryCancellationDuringBatch(t *testing.T) {
 			tg.sendErr = nil
 			tg.afterFirst = func() {
 				switch change {
-				case "uncheck":
-					details[second.ID] = HostExpiry{ExpiresOn: "2026-09-30"}
+				case "clear-date":
+					details[second.ID] = HostExpiry{}
 				case "renew":
 					details[second.ID] = HostExpiry{ExpiresOn: "2027-09-30", Enabled: true}
 				case "clear":

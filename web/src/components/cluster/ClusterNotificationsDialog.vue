@@ -52,6 +52,7 @@ const form = reactive({
   sshLoginEnabled: true,
   hostOfflineEnabled: true,
   serviceChecksEnabled: false,
+  hostExpiryEnabled: false,
   channelCredential: '',
 })
 
@@ -139,6 +140,7 @@ function applySnapshot(value: ClusterNotificationSnapshot): void {
   form.sshLoginEnabled = value.rules.sshLoginEnabled
   form.hostOfflineEnabled = value.rules.hostOfflineEnabled
   form.serviceChecksEnabled = value.rules.serviceChecksEnabled ?? false
+  form.hostExpiryEnabled = value.rules.hostExpiryEnabled ?? false
   form.channelCredential = ''
   if (modalControl) {
     void nextTick(() => {
@@ -175,6 +177,7 @@ function rulesFromForm(): ClusterNotificationRules {
     sshLoginEnabled: form.sshLoginEnabled,
     hostOfflineEnabled: form.hostOfflineEnabled,
     serviceChecksEnabled: form.serviceChecksEnabled,
+    hostExpiryEnabled: form.hostExpiryEnabled,
   }
 }
 
@@ -505,6 +508,10 @@ onBeforeUnmount(() => {
             </div>
           </div>
           <div class="cluster-notifications__event-rules">
+            <label class="cluster-notifications__event-rule cluster-notifications__expiry-rule">
+              <span><strong>{{ phrase('服务器到期提醒') }}</strong><small>{{ phrase('统一提醒所有已填写到期日期的主机，按当前 KPanel 时区，在提前 7、3、1 天及到期当天各提醒一次。') }}</small></span>
+              <input v-model="form.hostExpiryEnabled" type="checkbox" :aria-label="phrase('启用服务器到期提醒')" />
+            </label>
             <label class="cluster-notifications__event-rule cluster-notifications__service-rule">
               <span><strong>{{ phrase('服务异常通知') }}</strong><small>{{ phrase('监控所有主机的 Ping、TCP、HTTP 检测项，连续 3 次失败时告警，恢复后通知。') }}</small></span>
               <input v-model="form.serviceChecksEnabled" type="checkbox" :aria-label="phrase('启用服务异常通知')" />
@@ -889,8 +896,8 @@ onBeforeUnmount(() => {
   line-height: 1.4;
 }
 
-.cluster-notifications__service-rule strong { font-size: 14px; }
-.cluster-notifications__service-rule small { font-size: 13px; }
+.cluster-notifications__expiry-rule strong, .cluster-notifications__service-rule strong { font-size: 14px; }
+.cluster-notifications__expiry-rule small, .cluster-notifications__service-rule small { font-size: 13px; }
 
 .cluster-notifications__threshold {
   display: inline-flex;

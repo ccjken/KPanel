@@ -17,7 +17,7 @@ func TestClusterHostDetailsPersistenceConflictClearAndBoundedCleanup(t *testing.
 		t.Fatal(err)
 	}
 	initial := ClusterHostDetailsResourceVersion("local", ClusterHostDetails{})
-	value := ClusterHostDetails{ExpiresOn: "2028-02-29", ExpiryReminderEnabled: true, Price: "$5/month", TrafficResetDay: 31, TrafficTotalReceivedThresholdGiB: 1024, TrafficTotalSentThresholdGiB: 2048}
+	value := ClusterHostDetails{ExpiresOn: "2028-02-29", ExpiryReminderEnabled: true, Price: "$5/month", TrafficResetDay: 31, TrafficMonthlyQuotaGiB: 1500, TrafficCalculation: "max", TrafficTotalReceivedThresholdGiB: 1024, TrafficTotalSentThresholdGiB: 2048}
 	if err := s.ReplaceClusterHostDetails("local", initial, value, []string{"local", "remote"}); err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestClusterHostDetailsIncludedInPanelBackup(t *testing.T) {
 	if err := source.CreateInitialAdmin(User{ID: "admin", Username: "admin", PasswordHash: strings.Repeat("h", 32), Role: "admin", CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
-	value := ClusterHostDetails{ExpiresOn: "2028-02-29", ExpiryReminderEnabled: true, Price: "¥99/年", TrafficResetDay: 31, TrafficTotalReceivedThresholdGiB: 1024, TrafficTotalSentThresholdGiB: 2048}
+	value := ClusterHostDetails{ExpiresOn: "2028-02-29", ExpiryReminderEnabled: true, Price: "¥99/年", TrafficResetDay: 31, TrafficMonthlyQuotaGiB: 1500, TrafficCalculation: "max", TrafficTotalReceivedThresholdGiB: 1024, TrafficTotalSentThresholdGiB: 2048}
 	if err := source.ReplaceClusterHostDetails("local", ClusterHostDetailsResourceVersion("local", ClusterHostDetails{}), value, []string{"local"}); err != nil {
 		t.Fatal(err)
 	}
@@ -121,6 +121,7 @@ func TestClusterHostDetailsRejectInvalidInputAndRollbackWriteFailure(t *testing.
 		{ExpiresOn: "2027-02-29"}, {ExpiresOn: "2026-9-28"}, {ExpiresOn: "0000-01-01"},
 		{Price: strings.Repeat("贵", 41)}, {Price: "5\n/month"}, {Price: " 5 "}, {Price: string([]byte{0xff})},
 		{TrafficResetDay: -1}, {TrafficResetDay: 32},
+		{TrafficMonthlyQuotaGiB: -1}, {TrafficMonthlyQuotaGiB: 1_048_577}, {TrafficCalculation: "invalid"},
 	} {
 		if ValidateClusterHostDetails(value) == nil {
 			t.Fatalf("accepted invalid value: %+v", value)
@@ -142,11 +143,35 @@ func TestClusterHostDetailsRejectInvalidInputAndRollbackWriteFailure(t *testing.
 		t.Fatal(err)
 	}
 	s.path = filepath.Join(blocker, "state.json")
-	if err := s.ReplaceClusterHostDetails("local", version, ClusterHostDetails{Price: "$1", TrafficTotalReceivedThresholdGiB: 500, TrafficTotalSentThresholdGiB: 1000}, []string{"local"}); err == nil {
+	if err := s.ReplaceClusterHostDetails("local", version, ClusterHostDetails{Price: "$1", TrafficMonthlyQuotaGiB: 100, TrafficCalculation: "sent", TrafficTotalReceivedThresholdGiB: 500, TrafficTotalSentThresholdGiB: 1000}, []string{"local"}); err == nil {
 		t.Fatal("write should fail")
 	}
 	if len(s.ClusterHostDetails()) != 0 {
 		t.Fatal("failed write changed memory")
 	}
 	s.path = path
+}
+
+func TestClusterMonthlyQuotaUpdatesPreserveTrafficAndNotificationThresholds(t *testing.T) {
+	s := trafficStore(t, 15)
+	at := time.Date(2026, 9, 16, 0, 0, 0, 0, time.UTC)
+	sampleTraffic(t, s, at, 100, 200, 1000)
+	before := sampleTraffic(t, s, at.Add(time.Minute), 200, 500, 1060)
+	for _, mode := range []string{"", "total", "received", "sent", "max"} {
+		old := s.ClusterHostDetails()["local"]
+		next := old
+		next.TrafficMonthlyQuotaGiB = 100
+		next.TrafficCalculation = mode
+		next.TrafficTotalReceivedThresholdGiB = 42
+		next.TrafficTotalSentThresholdGiB = 84
+		if err := s.ReplaceClusterHostDetails("local", ClusterHostDetailsResourceVersion("local", old), next, []string{"local"}); err != nil {
+			t.Fatal(err)
+		}
+		if got := sampleTraffic(t, s, at.Add(time.Minute), 200, 500, 1060); got != before {
+			t.Fatalf("quota change reset traffic: before=%+v after=%+v", before, got)
+		}
+		if s.ClusterHostDetails()["local"] != next {
+			t.Fatal("quota change altered other metadata")
+		}
+	}
 }
