@@ -15,6 +15,7 @@ import (
 
 	"github.com/kejilion/kejilion-panel/internal/cluster"
 	"github.com/kejilion/kejilion-panel/internal/contract"
+	"github.com/kejilion/kejilion-panel/internal/scenepacks"
 	"github.com/kejilion/kejilion-panel/internal/store"
 )
 
@@ -50,6 +51,7 @@ type clusterShareSettingsResponse struct {
 }
 
 type publicClusterShareSnapshot struct {
+	Theme       *scenepacks.ActiveTheme  `json:"theme,omitempty"`
 	Title       string                   `json:"title"`
 	Description string                   `json:"description,omitempty"`
 	GeneratedAt time.Time                `json:"generatedAt"`
@@ -263,7 +265,11 @@ func (s *Server) handlePublicClusterShare(w http.ResponseWriter, r *http.Request
 		http.NotFound(w, r)
 		return
 	}
-	s.writeJSON(w, http.StatusOK, s.clusterShareSnapshot(r.Context(), value, version))
+	snapshot := s.clusterShareSnapshot(r.Context(), value, version)
+	if s.shareThemes != nil {
+		snapshot.Theme = s.shareThemes.ActiveTheme()
+	}
+	s.writeJSON(w, http.StatusOK, snapshot)
 }
 
 func clusterShareSettingsView(value store.ClusterShare, version string) clusterShareSettingsResponse {

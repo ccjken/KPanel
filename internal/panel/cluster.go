@@ -80,6 +80,9 @@ func (s *Server) Close() error {
 	s.requestsMu.Lock()
 	s.requestsClosed = true
 	s.requestsMu.Unlock()
+	if s.shareThemes != nil {
+		s.shareThemes.Close()
+	}
 	if s.scenePacks != nil {
 		s.scenePacks.Close()
 	}

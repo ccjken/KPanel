@@ -396,6 +396,7 @@ export interface PublicClusterShareHost extends Pick<ClusterHostDetails, 'expire
 }
 
 export interface PublicClusterShareSnapshot {
+ theme?: import('@/lib/shareThemes').ShareTheme
 	title: string
 	description?: string
 	generatedAt: string

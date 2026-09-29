@@ -2,6 +2,7 @@ import { createServer } from 'node:http'
 import { mockMonitoringHistory } from './mock-monitoring-history.mjs'
 import { mockBackups } from './mock-backups.mjs'
 import { mockEditorFiles, handleMockEditor } from './mock-file-editor.mjs'
+import { mockShareThemes, activeShareTheme } from './mock-share-themes.mjs'
 import { mockScenePacks } from './mock-scene-packs.mjs'
 import { mockDesktopWallpapers } from './mock-desktop-wallpapers.mjs'
 import { readFile } from 'node:fs/promises'
@@ -1491,6 +1492,7 @@ function mockMonitoringCheckSnapshot() {
 createServer(async (request, response) => {
   const url = new URL(request.url, 'http://127.0.0.1:8080')
   if (await mockBackups(request, response, url, send, readJSON)) return
+  if (await mockShareThemes(request, response, url, send, readJSON)) return
   if (await mockScenePacks(request, response, url, send, readJSON)) return
   if (await mockDesktopWallpapers(request, response, url, send)) return
   if (url.pathname === '/api/v1/monitoring/checks' && request.method === 'GET') {
@@ -1730,7 +1732,7 @@ createServer(async (request, response) => {
   }
   const publicClusterShareMatch = url.pathname.match(/^\/api\/v1\/public\/cluster-share\/([a-f0-9]{64})$/)
   if (request.method === 'GET' && publicClusterShareMatch) {
-    send(response, publicClusterShareMatch[1] === visualClusterShareToken ? 200 : 404, publicClusterShareMatch[1] === visualClusterShareToken ? visualClusterPublicSnapshot() : { title: '分享不存在', status: 404, code: 'not_found' })
+    send(response, publicClusterShareMatch[1] === visualClusterShareToken ? 200 : 404, publicClusterShareMatch[1] === visualClusterShareToken ? { ...visualClusterPublicSnapshot(), theme: activeShareTheme() } : { title: '分享不存在', status: 404, code: 'not_found' })
     return
   }
   if (request.method === 'GET' && url.pathname === '/api/v1/files') {

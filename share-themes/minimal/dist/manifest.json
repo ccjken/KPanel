@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "id": "minimal",
+  "version": "1.0.0",
+  "runtime": "kpanel-share-theme@1",
+  "name": {
+    "zh-CN": "简约看板",
+    "en-US": "Minimal fleet",
+    "zh-TW": "简约看板"
+  },
+  "description": {
+    "zh-CN": "清晰的卡片与轻盈留白",
+    "en-US": "Clean cards and generous spacing"
+  },
+  "author": {
+    "name": "KPanel",
+    "url": "https://github.com/kejilion/KPanel"
+  },
+  "license": "AGPL-3.0-only",
+  "tags": [
+    "fleet"
+  ],
+  "theme": {
+    "brand": "#3476aa",
+    "neutral": "#17202c",
+    "signature": "#8ce1bd"
+  },
+  "entry": "index.html"
+}

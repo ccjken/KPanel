@@ -25,26 +25,39 @@ const maxScenePackStreamQueue = scenepacks.MaxFiles + 2*scenepacks.MaxPacks
 var sceneHostPattern = regexp.MustCompile(`^[a-zA-Z0-9.:[\]-]+$`)
 
 func scenePackFilePath(requestPath string) (id, token, name string, ok bool) {
-	if !strings.HasPrefix(requestPath, scenePacksPath+"/") {
+	return libraryFilePath(requestPath, scenePacksPath)
+}
+
+func libraryFilePath(requestPath, prefix string) (id, token, name string, ok bool) {
+	if !strings.HasPrefix(requestPath, prefix+"/") {
 		return
 	}
-	parts := strings.SplitN(strings.TrimPrefix(requestPath, scenePacksPath+"/"), "/", 4)
+	parts := strings.SplitN(strings.TrimPrefix(requestPath, prefix+"/"), "/", 4)
 	if len(parts) != 4 || parts[1] != "files" || !scenepacks.ValidID(parts[0]) || !scenepacks.ValidToken(parts[2]) || !scenepacks.ValidPath(parts[3]) {
 		return
 	}
 	return parts[0], parts[2], parts[3], true
 }
 
+const shareThemesPath = "/api/v1/cluster/share-themes"
+
 func (s *Server) handleScenePacks(w http.ResponseWriter, r *http.Request) {
+	s.handlePackLibrary(w, r, s.scenePacks, scenePacksPath, false)
+}
+func (s *Server) handleShareThemes(w http.ResponseWriter, r *http.Request) {
+	s.handlePackLibrary(w, r, s.shareThemes, shareThemesPath, true)
+}
+
+func (s *Server) handlePackLibrary(w http.ResponseWriter, r *http.Request, library *scenepacks.Store, prefix string, isTheme bool) {
 	if r.URL.RawPath != "" || len(r.URL.RawQuery) > 100 || (r.URL.RawQuery != "" && (!strings.HasSuffix(r.URL.Path, "/thumb") || len(r.URL.Query()) != 1 || len(r.URL.Query()["v"]) != 1)) {
 		s.writeProblem(w, r, http.StatusBadRequest, "scene_pack_request_invalid", "Invalid scene pack request", "")
 		return
 	}
-	if s.scenePacks == nil {
+	if library == nil {
 		s.scenePackError(w, r, scenepacks.ErrUnavailable)
 		return
 	}
-	if id, token, name, ok := scenePackFilePath(r.URL.Path); ok {
+	if id, token, name, ok := libraryFilePath(r.URL.Path, prefix); ok {
 		if r.Method != http.MethodGet {
 			s.scenePackMethodError(w, r)
 			return
@@ -53,7 +66,7 @@ func (s *Server) handleScenePacks(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer func() { <-s.scenePackStreams }()
-		body, contentType, err := s.scenePacks.File(id, token, name)
+		body, contentType, err := library.File(id, token, name)
 		if err != nil {
 			s.scenePackError(w, r, err)
 			return
@@ -66,11 +79,12 @@ func (s *Server) handleScenePacks(w http.ResponseWriter, r *http.Request) {
 		if s.requestUsesHTTPS(r) {
 			scheme = "https"
 		}
-		base := scheme + "://" + r.Host + scenepacks.FilePrefix + id + "/files/" + token + "/"
+		base := scheme + "://" + r.Host + prefix + "/" + id + "/files/" + token + "/"
 		// A path-scoped source (not 'self') prevents the opaque frame from sending
 		// requests to other Panel endpoints. CORS applies only to capability files.
 		w.Header().Set("Content-Security-Policy", "sandbox allow-scripts; default-src 'none'; script-src "+base+" 'wasm-unsafe-eval'; style-src "+base+" 'unsafe-inline'; img-src "+base+" data: blob:; media-src "+base+" blob:; font-src "+base+" data:; connect-src "+base+"; worker-src "+base+" blob:; frame-src 'none'; frame-ancestors 'self'; form-action 'none'; base-uri 'none'; object-src 'none'")
 		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Cross-Origin-Resource-Policy", "cross-origin")
 		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(), autoplay=()")
@@ -87,8 +101,8 @@ func (s *Server) handleScenePacks(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && !s.checkCSRF(w, r, session) {
 		return
 	}
-	if r.URL.Path == scenePacksPath && r.Method == http.MethodGet {
-		list, err := s.scenePacks.List(r.Context())
+	if r.URL.Path == prefix && r.Method == http.MethodGet {
+		list, err := library.List(r.Context())
 		if err != nil {
 			s.scenePackError(w, r, err)
 			return
@@ -96,13 +110,13 @@ func (s *Server) handleScenePacks(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusOK, list)
 		return
 	}
-	parts := strings.Split(strings.TrimPrefix(r.URL.Path, scenePacksPath+"/"), "/")
-	if len(parts) == 2 && scenepacks.ValidID(parts[0]) && (parts[1] == "thumb" || parts[1] == "poster") && r.Method == http.MethodGet {
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, prefix+"/"), "/")
+	if !isTheme && len(parts) == 2 && scenepacks.ValidID(parts[0]) && (parts[1] == "thumb" || parts[1] == "poster") && r.Method == http.MethodGet {
 		if !s.scenePackStream(w, r) {
 			return
 		}
 		defer func() { <-s.scenePackStreams }()
-		body, err := s.scenePacks.Image(r.Context(), parts[0], parts[1]+".webp")
+		body, err := library.Image(r.Context(), parts[0], parts[1]+".webp")
 		if err != nil {
 			s.scenePackError(w, r, err)
 			return
@@ -112,12 +126,14 @@ func (s *Server) handleScenePacks(w http.ResponseWriter, r *http.Request) {
 	}
 	var input struct {
 		Source                  string `json:"source"`
+		Selected                string `json:"selected"`
 		ExpectedResourceVersion string `json:"expectedResourceVersion"`
 	}
 	sourceChange := len(parts) == 1 && parts[0] == "source" && r.Method == http.MethodPut
 	install := len(parts) == 2 && scenepacks.ValidID(parts[0]) && parts[1] == "install" && r.Method == http.MethodPost
 	remove := len(parts) == 1 && scenepacks.ValidID(parts[0]) && r.Method == http.MethodDelete
-	if !sourceChange && !install && !remove {
+	selectTheme := isTheme && len(parts) == 1 && parts[0] == "selection" && r.Method == http.MethodPut
+	if !sourceChange && !install && !remove && !selectTheme {
 		s.scenePackMethodError(w, r)
 		return
 	}
@@ -134,22 +150,31 @@ func (s *Server) handleScenePacks(w http.ResponseWriter, r *http.Request) {
 	} else if remove {
 		action = "desktop.scene-pack.delete"
 	}
+	if selectTheme {
+		action = "desktop.scene-pack.select"
+	}
+	if isTheme {
+		action = strings.Replace(action, "desktop.scene-pack", "cluster.share-theme", 1)
+	}
 	if err := s.audit(r, session.User.ID, action, "desktop-scene-pack", parts[0], "intent", nil); err != nil {
 		s.writeProblem(w, r, http.StatusServiceUnavailable, "audit_unavailable", "Audit storage unavailable", "")
 		return
 	}
 	var result any
 	var err error
-	if sourceChange {
-		err = s.scenePacks.SetSource(input.Source)
+	if selectTheme {
+		err = library.Select(input.Selected, input.ExpectedResourceVersion)
+		result = map[string]string{"selected": input.Selected}
+	} else if sourceChange {
+		err = library.SetSource(input.Source)
 		result = map[string]string{"source": input.Source}
 	} else if install {
 		// paneld defaults to a 60-second write deadline. Catalog refresh plus a
 		// bounded 3-minute installation must still be able to return its result.
 		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(4 * time.Minute))
-		result, err = s.scenePacks.Install(r.Context(), parts[0], input.ExpectedResourceVersion)
+		result, err = library.Install(r.Context(), parts[0], input.ExpectedResourceVersion)
 	} else {
-		err = s.scenePacks.Delete(parts[0], input.ExpectedResourceVersion)
+		err = library.Delete(parts[0], input.ExpectedResourceVersion)
 	}
 	if err != nil {
 		_ = s.audit(r, session.User.ID, action, "desktop-scene-pack", parts[0], "failure", nil)

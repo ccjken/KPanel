@@ -109,6 +109,7 @@ type Server struct {
 	desktopWallpapers       *desktopwallpapers.Store
 	desktopWallpaperUploads chan struct{}
 	scenePacks              *scenepacks.Store
+	shareThemes             *scenepacks.Store
 	scenePackStreams        chan struct{}
 	scenePackStreamQueue    chan struct{}
 	terminalCommands        *terminalcommands.Store
@@ -234,6 +235,7 @@ func NewServer(config Config, authService *auth.Service, storage *store.Store, a
 		desktopWallpapers:       desktopWallpapers,
 		desktopWallpaperUploads: make(chan struct{}, 1),
 		scenePacks:              scenepacks.Open(filepath.Join(config.DataDir, "scene-packs"), nil),
+		shareThemes:             scenepacks.OpenShareThemes(filepath.Join(config.DataDir, "share-themes"), nil),
 		scenePackStreams:        make(chan struct{}, 4),
 		scenePackStreamQueue:    make(chan struct{}, maxScenePackStreamQueue),
 		terminalCommands:        terminalCommands,
@@ -406,6 +408,8 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleAutomaticUpdateSettings(w, r)
 	case r.URL.Path == "/api/v1/settings/kpanel-release":
 		s.handleKPanelRelease(w, r)
+	case r.URL.Path == shareThemesPath || strings.HasPrefix(r.URL.Path, shareThemesPath+"/"):
+		s.handleShareThemes(w, r)
 	case r.URL.Path == "/api/v1/cluster/share":
 		s.handleClusterShareSettings(w, r)
 	case r.URL.Path == "/api/v1/cluster/share/token":
@@ -922,6 +926,9 @@ func (s *Server) handleSecurityEntrance(w http.ResponseWriter, r *http.Request) 
 }
 
 func securityEntrancePublicPath(requestPath string) bool {
+	if _, _, _, ok := libraryFilePath(requestPath, shareThemesPath); ok {
+		return true
+	}
 	if _, _, _, ok := scenePackFilePath(requestPath); ok {
 		return true
 	}

@@ -1,0 +1,111 @@
+{
+  "schema": 1,
+  "packs": [
+    {
+      "schema": 1,
+      "id": "midnight",
+      "version": "1.0.0",
+      "runtime": "kpanel-share-theme@1",
+      "name": {
+        "zh-CN": "午夜终端",
+        "en-US": "Midnight fleet",
+        "zh-TW": "午夜终端"
+      },
+      "description": {
+        "zh-CN": "紧凑的技术风格机器清单",
+        "en-US": "A compact technical server list"
+      },
+      "author": {
+        "name": "KPanel",
+        "url": "https://github.com/kejilion/KPanel"
+      },
+      "license": "AGPL-3.0-only",
+      "tags": [
+        "fleet"
+      ],
+      "theme": {
+        "brand": "#3476aa",
+        "neutral": "#17202c",
+        "signature": "#8ce1bd"
+      },
+      "entry": "index.html",
+      "path": "midnight/dist",
+      "files": [
+        {
+          "path": "index.html",
+          "size": 297,
+          "sha256": "c5c54d2e27a347e89dbb3c0ab0277a5cae57e6dd6041485813bafe85d6df326d"
+        },
+        {
+          "path": "manifest.json",
+          "size": 591,
+          "sha256": "ee05a942514dad39e554b41e9b07f1b465a392e84ff2e145084ac67f7a0fa98a"
+        },
+        {
+          "path": "theme.css",
+          "size": 3885,
+          "sha256": "5f8e576bcf8c9d01127efec1903176fdb14fa978757a3fd20439855add43cb10"
+        },
+        {
+          "path": "theme.js",
+          "size": 6464,
+          "sha256": "720dfdbf7e4d51f83c7292003bbb4819eaf7a6df97d0af3bbeff2bb67f77c1bf"
+        }
+      ],
+      "sizeBytes": 11237
+    },
+    {
+      "schema": 1,
+      "id": "minimal",
+      "version": "1.0.0",
+      "runtime": "kpanel-share-theme@1",
+      "name": {
+        "zh-CN": "简约看板",
+        "en-US": "Minimal fleet",
+        "zh-TW": "简约看板"
+      },
+      "description": {
+        "zh-CN": "清晰的卡片与轻盈留白",
+        "en-US": "Clean cards and generous spacing"
+      },
+      "author": {
+        "name": "KPanel",
+        "url": "https://github.com/kejilion/KPanel"
+      },
+      "license": "AGPL-3.0-only",
+      "tags": [
+        "fleet"
+      ],
+      "theme": {
+        "brand": "#3476aa",
+        "neutral": "#17202c",
+        "signature": "#8ce1bd"
+      },
+      "entry": "index.html",
+      "path": "minimal/dist",
+      "files": [
+        {
+          "path": "index.html",
+          "size": 297,
+          "sha256": "c5c54d2e27a347e89dbb3c0ab0277a5cae57e6dd6041485813bafe85d6df326d"
+        },
+        {
+          "path": "manifest.json",
+          "size": 587,
+          "sha256": "6a708e7b5b0a16c1da033907a00f6af1b57ceed2bb26a185426b1c22b58a23e8"
+        },
+        {
+          "path": "theme.css",
+          "size": 3125,
+          "sha256": "d1c5f0657f599b4c67d2505224ff09358b915e058b93b3a212be33ca26f45258"
+        },
+        {
+          "path": "theme.js",
+          "size": 6464,
+          "sha256": "720dfdbf7e4d51f83c7292003bbb4819eaf7a6df97d0af3bbeff2bb67f77c1bf"
+        }
+      ],
+      "sizeBytes": 10473
+    }
+  ]
+}

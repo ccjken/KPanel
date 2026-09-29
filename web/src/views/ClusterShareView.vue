@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ClusterShareTheme from '@/components/cluster/ClusterShareTheme.vue'
 import ClusterHostDetails from '@/components/cluster/ClusterHostDetails.vue'
 import ClusterRemainingValue from '@/components/cluster/ClusterRemainingValue.vue'
 import ClusterTemporarySortMenu from '@/components/cluster/ClusterTemporarySortMenu.vue'
@@ -226,6 +227,7 @@ onBeforeUnmount(() => {
         </div>
       </header>
 
+      <ClusterShareTheme :snapshot="snapshot" :error-message="errorMessage">
       <section v-if="snapshot" class="share-hero">
         <div class="share-hero__copy">
           <span class="share-kicker"><Globe2 :size="14" /> PUBLIC FLEET</span>
@@ -403,6 +405,8 @@ onBeforeUnmount(() => {
         <Server :size="26" />
         <strong>还没有可展示的机器</strong>
       </section>
+
+      </ClusterShareTheme>
 
       <footer class="share-footer">
         <span>Powered by <strong>KPanel</strong></span>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ClusterShareThemes from '@/components/cluster/ClusterShareThemes.vue'
 import { computed, defineAsyncComponent, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, useId, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from '@/i18n'
@@ -1742,6 +1743,8 @@ onBeforeUnmount(() => {
           </span>
           <input v-model="shareForm.applyPanelOrder" type="checkbox" role="switch" />
         </label>
+
+        <ClusterShareThemes />
 
         <section class="cluster-share__privacy">
           <ShieldCheck :size="19" />
