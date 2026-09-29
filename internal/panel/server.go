@@ -27,6 +27,7 @@ import (
 	"github.com/kejilion/kejilion-panel/internal/ai"
 	"github.com/kejilion/kejilion-panel/internal/auth"
 	"github.com/kejilion/kejilion-panel/internal/backup"
+	"github.com/kejilion/kejilion-panel/internal/backupremote"
 	"github.com/kejilion/kejilion-panel/internal/cluster"
 	"github.com/kejilion/kejilion-panel/internal/contract"
 	"github.com/kejilion/kejilion-panel/internal/desktopwallpapers"
@@ -58,6 +59,12 @@ type Server struct {
 	requestsClosed          bool
 	backups                 *backup.Manager
 	backupRestart           chan struct{}
+	backupRemote            *backupremote.Store
+	backupRemoteClient      func(backupremote.Storage) (backupRemoteTransport, error)
+	backupRemoteGate        chan struct{}
+	backupScheduleMu        sync.Mutex
+	backupScheduleCancel    context.CancelFunc
+	backupScheduleWG        sync.WaitGroup
 	config                  Config
 	auth                    *auth.Service
 	passkeys                *auth.PasskeyService
@@ -254,6 +261,12 @@ func NewServer(config Config, authService *auth.Service, storage *store.Store, a
 		return nil, fmt.Errorf("initialize backups: %w", err)
 	}
 	server.backupRestart = make(chan struct{}, 1)
+	server.backupRemote, err = backupremote.OpenStore(filepath.Join(config.DataDir, "backup-settings"))
+	if err != nil {
+		server.backups.Close()
+		return nil, fmt.Errorf("initialize backup settings: %w", err)
+	}
+	server.backupRemoteGate = make(chan struct{}, 2)
 	if !PanelRestorePending(config) {
 		for _, r := range server.backups.List() {
 			if r.Status == "restarting" {

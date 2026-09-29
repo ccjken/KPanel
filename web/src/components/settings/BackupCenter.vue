@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { Archive, Download, Upload, RefreshCw } from '@lucide/vue'
+import { Archive, Download, Upload, RefreshCw, Clock, Cloud } from '@lucide/vue'
 import ModalDialog from '@/components/common/ModalDialog.vue'
-import { backups, type BackupInventory, type BackupModule, type BackupRecord } from '@/lib/backup'
+import BackupStorageDialog from './BackupStorageDialog.vue'
+import BackupScheduleDialog from './BackupScheduleDialog.vue'
+import { backups, backupMessage, type BackupInventory, type BackupModule, type BackupRecord, type BackupSettings, type RemoteBackupFile } from '@/lib/backup'
 import { formatBytes, formatDateTime } from '@/lib/format'
 import { phraseCatalogVersion, translatePhrase } from '@/i18n/phrase'
 
@@ -16,7 +18,14 @@ const choices: Array<{ id: BackupModule; name: string; detail: string }> = [
 ]
 const records = ref<BackupRecord[]>([])
 const inventory = ref<BackupInventory>()
-const dialog = ref<'export' | 'import' | 'restore' | 'delete' | 'recover' | ''>('')
+const dialog = ref<'export' | 'import' | 'restore' | 'delete' | 'recover' | 'upload' | ''>('')
+const settings = ref<BackupSettings>()
+const optionsDialog = ref<'storage' | 'schedule' | ''>('')
+const storageId = ref('')
+const remoteFiles = ref<RemoteBackupFile[]>([])
+const remoteKey = ref('')
+const filesLoading = ref(false)
+let filesRequest = 0
 const selected = ref<BackupModule[]>(choices.map(c => c.id))
 const password = ref('')
 const confirmation = ref('')
@@ -32,13 +41,13 @@ const notice = ref('')
 let timer: ReturnType<typeof setTimeout> | undefined
 let disposed = false
 const pending = computed(() => records.value.some(r => ['queued', 'running', 'restarting'].includes(r.status)))
-const title = computed(() => ({ export: '导出备份', import: '导入恢复', restore: '确认恢复', delete: '删除备份记录', recover: '处理恢复中断', '': '' }[dialog.value]))
+const title = computed(() => ({ export: '导出备份', import: '导入恢复', restore: '确认恢复', delete: '删除备份记录', recover: '处理恢复中断', upload: '上传到远程存储', '': '' }[dialog.value]))
 const available = computed(() => dialog.value === 'restore' ? choices.filter(c => source.value?.modules.includes(c.id)) : choices)
 const estimate = computed(() => selected.value.reduce((total, module) => total + (module === 'panel' ? inventory.value?.panelBytes || 0 : inventory.value?.host?.modules.find(m => m.id === module)?.bytes || 0), 0))
 const validPassword = computed(() => new TextEncoder().encode(password.value).length >= 10 && new TextEncoder().encode(password.value).length <= 256)
 const missingDependencies = computed(() => dialog.value !== 'export' ? [] : inventory.value?.host?.modules.filter(m => selected.value.includes(m.id)).flatMap(m => m.requires).filter(m => !selected.value.includes(m)) || [])
 const selectedRoots = computed(() => dialog.value === 'restore' ? (source.value?.roots || []).filter(root => selected.value.includes(root.module)) : [])
-const canSubmit = computed(() => !busy.value && !loading.value && (dialog.value === 'delete' || dialog.value === 'recover' || (dialog.value === 'import' ? !!file.value && validPassword.value : selected.value.length > 0 && missingDependencies.value.length === 0 && ((dialog.value === 'restore' && previewReady.value) || (dialog.value === 'export' && !!inventory.value && validPassword.value && password.value === confirmation.value)))))
+const canSubmit = computed(() => !busy.value && !loading.value && !filesLoading.value && (dialog.value === 'upload' ? !!storageId.value : dialog.value === 'delete' || dialog.value === 'recover' || (dialog.value === 'import' ? (storageId.value ? !!remoteKey.value : !!file.value) && validPassword.value : selected.value.length > 0 && missingDependencies.value.length === 0 && ((dialog.value === 'restore' && previewReady.value) || (dialog.value === 'export' && !!inventory.value && validPassword.value && password.value === confirmation.value)))))
 const name = (id: BackupModule) => phrase(choices.find(c => c.id === id)?.name || id)
 function unavailable(id: BackupModule) { return dialog.value === 'export' && id !== 'panel' && (!inventory.value?.hostAvailable || !!inventory.value.host?.modules.find(m => m.id === id)?.issue) }
 function unavailableReason(id: BackupModule) {
@@ -46,16 +55,40 @@ function unavailableReason(id: BackupModule) {
   return ({ protected_panel_data: '所选目录与面板自身数据重叠，请将业务数据与面板目录分开。', user_namespace_requires_adapter: '用户命名空间运行模式暂不支持此类备份。', auto_remove_requires_stop: '容器启用了停止后自动删除，请先调整容器配置。', container_not_stable: '有容器正在暂停或重启，请等待其恢复稳定。', volume_driver_requires_external_backup: '数据卷需要存储驱动提供的专用备份工具。', data_path_cannot_be_archived: '数据目录包含不可归档内容（如链接或独立挂载点），请先处理。' } as Record<string, string>)[issue || ''] || 'Agent 暂不可用，请检查连接。'
 }
 function status(record: BackupRecord) {
+  if (record.status === 'expired') return '备份文件已过期，请重新导出或上传'
+  if (record.errorCode === 'remote_upload_failed') return '远程上传失败，本地备份可下载或重试上传'
+  if (record.errorCode === 'remote_download_failed') return '远程取回失败，请检查存储后重试'
+  if (record.errorCode === 'retention_failed') return '备份已保存，旧备份清理未完成'
+	if (record.stage === 'uploading_remote' && record.status === 'running') return '正在上传到远程存储'
+	if (record.stage === 'downloading_remote' && record.status === 'running') return '正在取回远程备份'
 	if (record.errorCode === 'host_busy') return '请关闭宿主机终端，并等待已有主机任务完成后重试。'
   if (record.status === 'running') return ({ backing_up_services: '正在备份服务数据', encrypting: '正在加密备份文件', checking_services: '正在检查服务数据', restoring_services: '正在恢复服务数据' } as Record<string, string>)[record.stage] || '正在处理'
   if (record.errorCode === 'partially_restored') return '部分数据已恢复，请查看已完成类别'
-  if (record.status === 'expired') return '备份文件已过期，请重新导出或上传'
   if (record.errorCode === 'cleanup_pending') return '数据已恢复，旧数据清理尚未完成'
   if (record.errorCode === 'recovery_required') return '恢复中断，需要继续回滚或清理'
   if (record.errorCode === 'rolled_back') return '恢复失败，已回滚所选数据'
   return ({ queued: '等待执行', running: '正在处理', completed: '已完成', ready: '检查通过，待确认恢复', failed: '未完成，请检查后重试', restarting: '正在重载面板，请稍后重新登录' } as Record<string, string>)[record.status] || record.status
 }
-function action(record: BackupRecord) { return ({ export: '备份导出', import: '备份检查', restore: '数据恢复', recover: '恢复中断处理' })[record.action] }
+function action(record: BackupRecord) { return record.automatic ? '自动备份' : ({ export: '备份导出', import: '备份检查', restore: '数据恢复', recover: '恢复中断处理' })[record.action] }
+function localReady(record: BackupRecord) { return record.action === 'export' && (record.localReady || record.status === 'completed' && !record.remote) }
+async function loadSettings() { settings.value = await backups.settings() }
+async function openOptions(which: 'storage' | 'schedule') {
+  error.value = ''; listError.value = ''
+  try { await loadSettings(); optionsDialog.value = which } catch { listError.value = '暂时无法读取备份设置，请刷新重试。' }
+}
+async function loadRemoteFiles() {
+  const request = ++filesRequest
+  remoteFiles.value = []; remoteKey.value = ''; error.value = ''; filesLoading.value = false
+  if (!storageId.value) return
+  filesLoading.value = true
+  try { const result = await backups.files(storageId.value); if (request === filesRequest) remoteFiles.value = result.items }
+  catch (reason) { if (request === filesRequest) error.value = backupMessage(reason) }
+  finally { if (request === filesRequest) filesLoading.value = false }
+}
+async function openUpload(record: BackupRecord) {
+  try { await loadSettings() } catch { listError.value = '暂时无法读取备份设置，请刷新重试。'; return }
+  source.value = record; storageId.value = settings.value?.storages.find(s => s.id === record.remote?.storageId)?.id || settings.value?.storages[0]?.id || ''; dialog.value = 'upload'; error.value = ''
+}
 async function refresh() {
   if (refreshing || disposed) return
   refreshing = true; clearTimeout(timer)
@@ -64,35 +97,37 @@ async function refresh() {
   if (!disposed) timer = setTimeout(refresh, pending.value ? 2000 : 15000)
 }
 function refreshNow() { clearTimeout(timer); void refresh() }
-function close() { if (busy.value) return; dialog.value = ''; password.value = ''; confirmation.value = ''; file.value = undefined; error.value = '' }
+function close() { if (busy.value) return; dialog.value = ''; password.value = ''; confirmation.value = ''; file.value = undefined; error.value = ''; storageId.value = ''; remoteKey.value = ''; remoteFiles.value = []; filesRequest++; filesLoading.value = false }
 async function openExport() {
-  dialog.value = 'export'; error.value = ''; loading.value = true; inventory.value = undefined
+  dialog.value = 'export'; error.value = ''; loading.value = true; inventory.value = undefined; storageId.value = ''
   try { inventory.value = await backups.inventory(); selected.value = choices.filter(c => !unavailable(c.id)).map(c => c.id) }
   catch { error.value = '无法读取备份内容，请稍后重试。' }
   finally { loading.value = false }
 }
-function openImport() { dialog.value = 'import'; error.value = ''; file.value = undefined }
+function openImport() { dialog.value = 'import'; error.value = ''; file.value = undefined; storageId.value = ''; remoteKey.value = '' }
 function chooseFile(event: Event) { file.value = (event.target as HTMLInputElement).files?.[0] }
 async function openRestore(record: BackupRecord) {
   source.value = record; selected.value = [...record.modules]; dialog.value = 'restore'; error.value = ''; loading.value = true; previewReady.value = false
-  try { source.value = await backups.preview(record.id); previewReady.value = true } catch (reason) { error.value = reason instanceof Error ? reason.message : '操作未完成，请刷新后重试。' } finally { loading.value = false }
+  try { source.value = await backups.preview(record.id); previewReady.value = true } catch (reason) { error.value = backupMessage(reason) } finally { loading.value = false }
 }
 function openDelete(record: BackupRecord) { source.value = record; dialog.value = 'delete'; error.value = '' }
 async function submit() {
   if (!canSubmit.value) return
   busy.value = true; error.value = ''
   try {
-    if (dialog.value === 'export') await backups.export(selected.value, password.value, inventory.value?.host?.revision)
-    if (dialog.value === 'import' && file.value) await backups.import(file.value, password.value)
+    if (dialog.value === 'export') await backups.export(selected.value, password.value, inventory.value?.host?.revision, storageId.value)
+    if (dialog.value === 'import' && storageId.value) await backups.remoteImport(storageId.value, remoteKey.value, password.value)
+    if (dialog.value === 'import' && !storageId.value && file.value) await backups.import(file.value, password.value)
+    if (dialog.value === 'upload' && source.value) await backups.upload(source.value.id, storageId.value)
     if (dialog.value === 'restore' && source.value) await backups.restore(source.value, selected.value)
     if (dialog.value === 'delete' && source.value) await backups.delete(source.value.id)
     if (dialog.value === 'recover' && source.value) await backups.recover(source.value.id)
     notice.value = dialog.value === 'delete' ? '备份记录已删除。' : '任务已受理，可在下方查看进度。'
     busy.value = false; close(); refreshNow()
-  } catch (reason) { error.value = reason instanceof Error ? reason.message : '操作未完成，请刷新后重试。' }
+  } catch (reason) { error.value = backupMessage(reason) }
   finally { busy.value = false }
 }
-onMounted(refresh)
+onMounted(() => { void refresh(); void loadSettings().catch(() => {}) })
 onBeforeUnmount(() => { disposed = true; clearTimeout(timer) })
 </script>
 
@@ -107,6 +142,8 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(timer) })
         <div class="backup-actions backup-command__actions">
           <button type="button" class="button button--primary" :disabled="pending" @click="openExport"><Download :size="16" />导出备份</button>
           <button type="button" class="button button--secondary" :disabled="pending" @click="openImport"><Upload :size="16" />导入恢复</button>
+          <button type="button" class="button button--secondary" @click="openOptions('schedule')"><Clock :size="16" />{{ phrase('自动备份') }}</button>
+          <button type="button" class="button button--secondary" @click="openOptions('storage')"><Cloud :size="16" />{{ phrase('远程存储') }}</button>
         </div>
         <p class="backup-note">支持全部或按类别选择。备份包使用密码加密，请下载到其他设备妥善保存。</p>
       </div>
@@ -121,8 +158,9 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(timer) })
         <ul v-else class="backup-records" aria-label="备份任务记录">
           <li v-for="record in records" :key="record.id">
             <div class="backup-record-main"><strong>{{ action(record) }}</strong><span>{{ record.modules?.map(name).join(' · ') }}</span><small>{{ formatDateTime(record.createdAt) }}<template v-if="record.size"> · {{ formatBytes(record.size) }}</template></small></div>
-            <div class="backup-record-status"><span>{{ status(record) }}</span><small v-if="record.completedModules?.length">{{ phrase('已恢复：') }} {{ record.completedModules.map(name).join(' · ') }}</small><div class="backup-actions">
-              <a v-if="record.action === 'export' && record.status === 'completed'" class="button button--secondary" :href="backups.download(record.id)" download>下载备份</a>
+            <div class="backup-record-status"><span>{{ phrase(status(record)) }}</span><small v-if="record.remote">{{ record.remote.storageName }} · {{ phrase(record.remote.status === 'completed' ? '远程副本已保存' : record.remote.status === 'failed' ? '远程副本未完成' : '等待远程传输') }}</small><small v-if="record.completedModules?.length">{{ phrase('已恢复：') }} {{ record.completedModules.map(name).join(' · ') }}</small><div class="backup-actions">
+              <a v-if="localReady(record)" class="button button--secondary" :href="backups.download(record.id)" download>下载备份</a>
+              <button v-if="localReady(record) && settings?.storages.length" type="button" class="button button--secondary" :disabled="pending" @click="openUpload(record)">{{ phrase(record.remote?.status === 'failed' ? '重试上传' : '上传到远程') }}</button>
               <button v-if="record.status === 'ready'" type="button" class="button button--primary" :disabled="pending" @click="openRestore(record)">选择恢复内容</button>
               <button v-if="record.status === 'failed' && ['cleanup_pending', 'recovery_required'].includes(record.errorCode || '')" type="button" class="button button--secondary" :disabled="pending" @click="source = record; dialog = 'recover'">处理恢复中断</button>
               <button v-if="!['running', 'queued', 'restarting'].includes(record.status)" type="button" class="button button--ghost button--danger-text" :disabled="pending" @click="openDelete(record)">删除记录</button>
@@ -131,6 +169,8 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(timer) })
         </ul>
       </section>
     </div>
+    <BackupStorageDialog v-if="optionsDialog === 'storage' && settings" :settings="settings" @close="optionsDialog = ''" @saved="settings = $event" />
+    <BackupScheduleDialog v-if="optionsDialog === 'schedule' && settings" :settings="settings" :pending="pending" @close="optionsDialog = ''" @saved="settings = $event" @started="refreshNow" />
     <ModalDialog :open="!!dialog" :title="phrase(title)" size="medium" :close-disabled="busy" @close="close">
       <form class="backup-form" @submit.prevent="submit">
         <p v-if="loading" role="status">{{ phrase('正在计算备份内容…') }}</p>
@@ -143,9 +183,13 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(timer) })
           <p class="backup-note">{{ phrase('应用、网站和 Docker 备份会短暂停止相关容器，完成后恢复原运行状态。') }}</p>
         </template>
         <template v-if="dialog === 'import'">
-          <label>{{ phrase('选择备份文件') }}<input type="file" accept=".kpb" required :disabled="busy" @change="chooseFile" /></label>
+          <label>{{ phrase('备份来源') }}<select v-model="storageId" :disabled="busy" @change="loadRemoteFiles"><option value="">{{ phrase('本地文件') }}</option><option v-for="storage in settings?.storages || []" :key="storage.id" :value="storage.id">{{ storage.name }}</option></select></label>
+          <label v-if="!storageId">{{ phrase('选择备份文件') }}<input type="file" accept=".kpb" required :disabled="busy" @change="chooseFile" /></label>
+          <template v-else><label>{{ phrase('远程备份文件') }}<select v-model="remoteKey" required :disabled="busy || filesLoading"><option value="" disabled>{{ phrase('选择备份文件') }}</option><option v-for="item in remoteFiles" :key="item.key" :value="item.key">{{ item.key }} · {{ formatBytes(item.size) }}</option></select></label><p v-if="filesLoading" role="status">{{ phrase('正在读取远程文件…') }}</p><p v-else-if="!remoteFiles.length" class="backup-note">{{ phrase('此目录中没有可用的 .kpb 备份。') }}</p><button type="button" class="button button--secondary" :disabled="busy || filesLoading" @click="loadRemoteFiles">{{ phrase('刷新文件') }}</button></template>
           <p class="backup-note">{{ phrase('上传后先检查内容；确认恢复前不会覆盖当前数据。支持 KPanel 或脚本通用备份导出的 .kpb 文件。') }}</p>
         </template>
+        <label v-if="dialog === 'export' || dialog === 'upload'">{{ phrase('保存到') }}<select v-model="storageId" :disabled="busy"><option v-if="dialog === 'export'" value="">{{ phrase('仅本机') }}</option><option v-for="storage in settings?.storages || []" :key="storage.id" :value="storage.id">{{ storage.name }}</option></select></label>
+        <p v-if="dialog === 'upload'" class="backup-note">{{ phrase('直接上传已有加密备份，不会重新打包或停止服务。') }}</p>
         <template v-if="dialog === 'export' || dialog === 'import'">
           <label>{{ phrase('备份密码') }}<input v-model="password" type="password" autocomplete="new-password" required :disabled="busy" maxlength="256" /></label>
           <label v-if="dialog === 'export'">{{ phrase('再次输入密码') }}<input v-model="confirmation" type="password" autocomplete="new-password" required :disabled="busy" maxlength="256" /></label>
@@ -159,16 +203,17 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(timer) })
           <p class="backup-note">{{ phrase('AI 只替换 API 接入配置，不导入会话；通知恢复后默认关闭。') }}</p>
         </template>
         <p v-if="dialog === 'recover'">{{ phrase('继续完成已提交的清理，或回滚未完成的恢复；不会重新执行导入。') }}</p>
-        <p v-if="dialog === 'delete'">{{ phrase('删除服务器上的备份文件与记录，已经下载的副本不受影响。') }}</p>
+        <p v-if="dialog === 'delete'">{{ phrase('删除本机文件与记录，远程和已下载副本仍会保留。') }}</p>
         <p v-if="error" class="backup-error" role="alert">{{ phrase(error) }}</p>
         <p v-if="busy" role="status">{{ phrase('正在提交，请保持页面打开…') }}</p>
-        <footer class="backup-actions"><button class="button button--ghost" type="button" :disabled="busy" @click="close">{{ phrase('取消') }}</button><button class="button" :class="dialog === 'delete' ? 'button--danger' : 'button--primary'" type="submit" :disabled="!canSubmit">{{ phrase(dialog === 'recover' ? '确认处理' : dialog === 'restore' ? '确认恢复' : dialog === 'import' ? '上传并检查' : dialog === 'delete' ? '确认删除' : '开始备份') }}</button></footer>
+        <footer class="backup-actions"><button class="button button--ghost" type="button" :disabled="busy" @click="close">{{ phrase('取消') }}</button><button class="button" :class="dialog === 'delete' ? 'button--danger' : 'button--primary'" type="submit" :disabled="!canSubmit">{{ phrase(dialog === 'recover' ? '确认处理' : dialog === 'restore' ? '确认恢复' : dialog === 'upload' ? '开始上传' : dialog === 'import' ? (storageId ? '取回并检查' : '上传并检查') : dialog === 'delete' ? '确认删除' : '开始备份') }}</button></footer>
       </form>
     </ModalDialog>
   </section>
 </template>
 
 <style scoped>
+.backup-form select { width:100%; min-width:0; min-height:40px; font-size:14px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); color:var(--text); padding:8px 12px; }
 .backup-center {
   font-size: 14px;
   line-height: 1.6;

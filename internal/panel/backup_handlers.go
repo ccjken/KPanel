@@ -21,6 +21,7 @@ import (
 )
 
 type backupRequest struct {
+	StorageID     string   `json:"storageId,omitempty"`
 	Password      string   `json:"password"`
 	Modules       []string `json:"modules"`
 	Revision      string   `json:"revision"`
@@ -93,6 +94,9 @@ func (s *Server) serveBackupOperation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/backups"), "/")
+	if s.serveRemoteBackups(w, r, parts) {
+		return
+	}
 	if len(parts) == 1 && parts[0] == "" && r.Method == "GET" {
 		s.writeJSON(w, 200, map[string]any{"items": s.backups.List(), "maxBytes": backup.MaxBytes})
 		return
@@ -143,7 +147,7 @@ func (s *Server) serveBackupOperation(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if len(parts) == 3 && parts[2] == "download" && r.Method == "GET" && record.Status == "completed" && record.Action == "export" {
+	if len(parts) == 3 && parts[2] == "download" && r.Method == "GET" && (record.LocalReady || record.Status == "completed" && record.Remote == nil) && record.Action == "export" {
 		f, err := backup.OpenRegular(filepath.Join(s.backups.Root, record.ID, "backup.kpb"), backup.MaxEncryptedBytes)
 		if err != nil {
 			s.backupError(w, r, err)
@@ -315,101 +319,94 @@ func hostBackupModules(modules []string) []string {
 
 func (s *Server) backupExport(w http.ResponseWriter, r *http.Request) {
 	input, err := s.decodeBackupRequest(r)
-	if err != nil || backup.ValidatePassword(input.Password) != nil {
+	if err != nil {
 		s.backupError(w, r, backup.ErrInvalid)
 		return
 	}
-	modules, err := backup.Selection(input.Modules)
+	record, err := s.startBackupExport(input, 0)
 	if err != nil {
-		s.backupError(w, r, err)
-		return
-	}
-	record, err := s.backups.Reserve("export", modules)
-	if err != nil {
-		s.backupError(w, r, err)
-		return
-	}
-	err = s.backups.Run(record.ID, func(ctx context.Context, id string) error {
-		defer func() { input.Password = "" }()
-		dir := filepath.Join(s.backups.Root, id)
-		sources := []backup.Source{}
-		defer func() {
-			for _, m := range modules {
-				_ = os.Remove(filepath.Join(dir, m+".payload"))
-			}
-		}()
-		if slices.Contains(modules, "panel") {
-			data, err := s.exportPanelBackup(ctx)
-			if err != nil {
-				return err
-			}
-			if err := backup.AtomicFile(filepath.Join(dir, "panel.payload"), data); err != nil {
-				return err
-			}
-			sources = append(sources, backup.Source{Module: "panel", Path: filepath.Join(dir, "panel.payload")})
-		}
-		if host := hostBackupModules(modules); len(host) > 0 {
-			var job backup.Record
-			if err := s.backupAgentJSON(ctx, "POST", "/v1/backups", hostbackup.Request{Action: "export", Modules: host, Revision: input.AgentRevision}, &job); err != nil {
-				return err
-			}
-			if err := s.backups.Update(id, func(r *backup.Record) { r.Stage = "backing_up_services"; r.AgentID = job.ID }); err != nil {
-				return err
-			}
-			if _, err := s.backupAgentWait(ctx, job.ID); err != nil {
-				return err
-			}
-			defer s.backupAgentJSON(context.Background(), "DELETE", "/v1/backups/"+job.ID, nil, nil)
-			for _, module := range host {
-				f, err := os.OpenFile(filepath.Join(dir, module+".payload"), os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
-				if err != nil {
-					return err
-				}
-				err = s.backupAgentCopy(ctx, "GET", job.ID, module, f)
-				err = errors.Join(err, f.Close())
-				if err != nil {
-					return err
-				}
-				sources = append(sources, backup.Source{Module: module, Path: f.Name()})
-			}
-		}
-		var bytes int64
-		for _, source := range sources {
-			info, err := os.Stat(source.Path)
-			if err != nil {
-				return err
-			}
-			bytes += info.Size()
-		}
-		if err := backup.RequireSpace(dir, bytes+(32<<20)); err != nil {
-			return err
-		}
-		if err := s.backups.Update(id, func(r *backup.Record) { r.Stage = "encrypting" }); err != nil {
-			return err
-		}
-		path := filepath.Join(dir, "backup.kpb")
-		f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
-		if err != nil {
-			return err
-		}
-		manifest, err := backup.WriteContext(ctx, f, input.Password, version.Version, sources)
-		if err == nil {
-			err = f.Sync()
-		}
-		info, statErr := f.Stat()
-		err = errors.Join(err, statErr, f.Close())
-		if err != nil {
-			_ = os.Remove(path)
-			return err
-		}
-		return s.backups.Update(id, func(r *backup.Record) { r.Manifest = &manifest; r.Size = info.Size() })
-	})
-	if err != nil {
-		_ = s.backups.Abort(record.ID, "start_failed")
 		s.backupError(w, r, err)
 		return
 	}
 	s.writeJSON(w, 202, record)
+}
+
+func (s *Server) generateBackup(ctx context.Context, id string, input backupRequest) error {
+	modules := input.Modules
+
+	defer func() { input.Password = "" }()
+	dir := filepath.Join(s.backups.Root, id)
+	sources := []backup.Source{}
+	defer func() {
+		for _, m := range modules {
+			_ = os.Remove(filepath.Join(dir, m+".payload"))
+		}
+	}()
+	if slices.Contains(modules, "panel") {
+		data, err := s.exportPanelBackup(ctx)
+		if err != nil {
+			return err
+		}
+		if err := backup.AtomicFile(filepath.Join(dir, "panel.payload"), data); err != nil {
+			return err
+		}
+		sources = append(sources, backup.Source{Module: "panel", Path: filepath.Join(dir, "panel.payload")})
+	}
+	if host := hostBackupModules(modules); len(host) > 0 {
+		var job backup.Record
+		if err := s.backupAgentJSON(ctx, "POST", "/v1/backups", hostbackup.Request{Action: "export", Modules: host, Revision: input.AgentRevision}, &job); err != nil {
+			return err
+		}
+		if err := s.backups.Update(id, func(r *backup.Record) { r.Stage = "backing_up_services"; r.AgentID = job.ID }); err != nil {
+			return err
+		}
+		if _, err := s.backupAgentWait(ctx, job.ID); err != nil {
+			return err
+		}
+		defer s.backupAgentJSON(context.Background(), "DELETE", "/v1/backups/"+job.ID, nil, nil)
+		for _, module := range host {
+			f, err := os.OpenFile(filepath.Join(dir, module+".payload"), os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
+			if err != nil {
+				return err
+			}
+			err = s.backupAgentCopy(ctx, "GET", job.ID, module, f)
+			err = errors.Join(err, f.Close())
+			if err != nil {
+				return err
+			}
+			sources = append(sources, backup.Source{Module: module, Path: f.Name()})
+		}
+	}
+	var bytes int64
+	for _, source := range sources {
+		info, err := os.Stat(source.Path)
+		if err != nil {
+			return err
+		}
+		bytes += info.Size()
+	}
+	if err := backup.RequireSpace(dir, bytes+(32<<20)); err != nil {
+		return err
+	}
+	if err := s.backups.Update(id, func(r *backup.Record) { r.Stage = "encrypting" }); err != nil {
+		return err
+	}
+	path := filepath.Join(dir, "backup.kpb")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
+	if err != nil {
+		return err
+	}
+	manifest, err := backup.WriteContext(ctx, f, input.Password, version.Version, sources)
+	if err == nil {
+		err = f.Sync()
+	}
+	info, statErr := f.Stat()
+	err = errors.Join(err, statErr, f.Close())
+	if err != nil {
+		_ = os.Remove(path)
+		return err
+	}
+	return s.backups.Update(id, func(r *backup.Record) { r.Manifest = &manifest; r.Size = info.Size(); r.LocalReady = true })
 }
 
 func (s *Server) backupImport(w http.ResponseWriter, r *http.Request) {
@@ -469,104 +466,7 @@ func (s *Server) backupImport(w http.ResponseWriter, r *http.Request) {
 		s.backupError(w, r, err)
 		return
 	}
-	err = s.backups.Run(record.ID, func(ctx context.Context, id string) (operationErr error) {
-		defer clear(password)
-		defer func() {
-			if operationErr != nil {
-				for _, name := range []string{"upload.kpb", "panel.payload", "apps.payload", "web.payload", "docker.payload"} {
-					_ = os.Remove(filepath.Join(dir, name))
-				}
-			}
-		}()
-		f, err := backup.OpenRegular(filepath.Join(dir, "upload.kpb"), backup.MaxEncryptedBytes)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		manifest, err := backup.ReadContext(ctx, f, string(password), dir)
-		err = errors.Join(err, f.Close())
-		if err != nil {
-			return err
-		}
-		modules := []string{}
-		for _, p := range manifest.Parts {
-			modules = append(modules, p.Module)
-		}
-		if slices.Contains(modules, "panel") {
-			data, err := backup.ReadFile(filepath.Join(dir, "panel.payload"), backup.MaxPanelBytes)
-			if err != nil {
-				return err
-			}
-			value, err := decodePanelBackup(data)
-			if err != nil {
-				return err
-			}
-			if err := s.validatePanelRestore(value, filepath.Join(dir, "validate-panel")); err != nil {
-				return err
-			}
-		}
-		revision := "host-only"
-		if slices.Contains(modules, "panel") {
-			current, err := s.exportPanelBackup(ctx)
-			if err != nil {
-				return err
-			}
-			revision, err = panelBackupRevision(current)
-			if err != nil {
-				return err
-			}
-		}
-		if err := s.backups.Update(id, func(r *backup.Record) {
-			r.Modules = modules
-			r.Manifest = &manifest
-			r.Size = size
-			r.TargetRevision = revision
-			r.Stage = "checking_services"
-		}); err != nil {
-			return err
-		}
-		if host := hostBackupModules(modules); len(host) > 0 {
-			var job backup.Record
-			if err := s.backupAgentJSON(ctx, "POST", "/v1/backups", hostbackup.Request{Action: "import", Modules: host}, &job); err != nil {
-				return err
-			}
-			defer func() {
-				if operationErr != nil {
-					cleanup, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-					defer cancel()
-					_ = s.backupAgentJSON(cleanup, "POST", "/v1/backups/"+job.ID+"/abort", struct{}{}, nil)
-				}
-			}()
-			if err := s.backups.Update(id, func(r *backup.Record) { r.AgentID = job.ID }); err != nil {
-				return err
-			}
-			for _, module := range host {
-				f, err := backup.OpenRegular(filepath.Join(dir, module+".payload"), backup.MaxBytes)
-				if err != nil {
-					return err
-				}
-				err = s.backupAgentCopy(ctx, "PUT", job.ID, module, f)
-				f.Close()
-				if err != nil {
-					return err
-				}
-			}
-			if err := s.backupAgentJSON(ctx, "POST", "/v1/backups/"+job.ID+"/inspect", struct{}{}, nil); err != nil {
-				return err
-			}
-			checked, err := s.backupAgentWait(ctx, job.ID)
-			if err != nil {
-				return err
-			}
-			if err := s.backups.Update(id, func(r *backup.Record) { r.AgentRevision = checked.TargetRevision; r.Roots = checked.Roots }); err != nil {
-				return err
-			}
-			for _, module := range host {
-				_ = os.Remove(filepath.Join(dir, module+".payload"))
-			}
-		}
-		return os.Remove(filepath.Join(dir, "upload.kpb"))
-	})
+	err = s.backups.Run(record.ID, func(ctx context.Context, id string) error { return s.inspectBackup(ctx, id, password, size) })
 	if err != nil {
 		clear(password)
 		_ = s.backups.Abort(record.ID, "start_failed")
@@ -574,6 +474,107 @@ func (s *Server) backupImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeJSON(w, 202, record)
+}
+
+func (s *Server) inspectBackup(ctx context.Context, id string, password []byte, size int64) (operationErr error) {
+	dir := filepath.Join(s.backups.Root, id)
+
+	defer clear(password)
+	defer func() {
+		if operationErr != nil {
+			for _, name := range []string{"upload.kpb", "panel.payload", "apps.payload", "web.payload", "docker.payload"} {
+				_ = os.Remove(filepath.Join(dir, name))
+			}
+		}
+	}()
+	f, err := backup.OpenRegular(filepath.Join(dir, "upload.kpb"), backup.MaxEncryptedBytes)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	manifest, err := backup.ReadContext(ctx, f, string(password), dir)
+	err = errors.Join(err, f.Close())
+	if err != nil {
+		return err
+	}
+	modules := []string{}
+	for _, p := range manifest.Parts {
+		modules = append(modules, p.Module)
+	}
+	if slices.Contains(modules, "panel") {
+		data, err := backup.ReadFile(filepath.Join(dir, "panel.payload"), backup.MaxPanelBytes)
+		if err != nil {
+			return err
+		}
+		value, err := decodePanelBackup(data)
+		if err != nil {
+			return err
+		}
+		if err := s.validatePanelRestore(value, filepath.Join(dir, "validate-panel")); err != nil {
+			return err
+		}
+	}
+	revision := "host-only"
+	if slices.Contains(modules, "panel") {
+		current, err := s.exportPanelBackup(ctx)
+		if err != nil {
+			return err
+		}
+		revision, err = panelBackupRevision(current)
+		if err != nil {
+			return err
+		}
+	}
+	if err := s.backups.Update(id, func(r *backup.Record) {
+		r.Modules = modules
+		r.Manifest = &manifest
+		r.Size = size
+		r.TargetRevision = revision
+		r.Stage = "checking_services"
+	}); err != nil {
+		return err
+	}
+	if host := hostBackupModules(modules); len(host) > 0 {
+		var job backup.Record
+		if err := s.backupAgentJSON(ctx, "POST", "/v1/backups", hostbackup.Request{Action: "import", Modules: host}, &job); err != nil {
+			return err
+		}
+		defer func() {
+			if operationErr != nil {
+				cleanup, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				_ = s.backupAgentJSON(cleanup, "POST", "/v1/backups/"+job.ID+"/abort", struct{}{}, nil)
+			}
+		}()
+		if err := s.backups.Update(id, func(r *backup.Record) { r.AgentID = job.ID }); err != nil {
+			return err
+		}
+		for _, module := range host {
+			f, err := backup.OpenRegular(filepath.Join(dir, module+".payload"), backup.MaxBytes)
+			if err != nil {
+				return err
+			}
+			err = s.backupAgentCopy(ctx, "PUT", job.ID, module, f)
+			f.Close()
+			if err != nil {
+				return err
+			}
+		}
+		if err := s.backupAgentJSON(ctx, "POST", "/v1/backups/"+job.ID+"/inspect", struct{}{}, nil); err != nil {
+			return err
+		}
+		checked, err := s.backupAgentWait(ctx, job.ID)
+		if err != nil {
+			return err
+		}
+		if err := s.backups.Update(id, func(r *backup.Record) { r.AgentRevision = checked.TargetRevision; r.Roots = checked.Roots }); err != nil {
+			return err
+		}
+		for _, module := range host {
+			_ = os.Remove(filepath.Join(dir, module+".payload"))
+		}
+	}
+	return os.Remove(filepath.Join(dir, "upload.kpb"))
 }
 
 func (s *Server) backupRestore(w http.ResponseWriter, r *http.Request, source backup.Record) {
@@ -657,6 +658,11 @@ func (s *Server) backupRestore(w http.ResponseWriter, r *http.Request, source ba
 			}
 		}
 		if slices.Contains(modules, "panel") {
+			if s.backupRemote != nil {
+				if err := s.backupRemote.Pause(); err != nil {
+					return err
+				}
+			}
 			if err := s.backups.Update(id, func(r *backup.Record) { r.Status = "restarting"; r.Stage = "restarting" }); err != nil {
 				return err
 			}

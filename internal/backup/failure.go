@@ -13,7 +13,7 @@ func FailureCode(err error) string {
 	var failure *Failure
 	if errors.As(err, &failure) {
 		switch failure.Code {
-		case "rolled_back", "recovery_required", "cleanup_pending", "partially_restored", "host_busy":
+		case "rolled_back", "recovery_required", "cleanup_pending", "partially_restored", "host_busy", "remote_upload_failed", "remote_download_failed":
 			return failure.Code
 		}
 	}

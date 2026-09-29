@@ -117,6 +117,38 @@ func TestBackupJobRecoveryAndSingleWriter(t *testing.T) {
 	}
 }
 
+func TestBackupLegacyExportRemainsDownloadableDuringUploadRetry(t *testing.T) {
+	m, err := OpenManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	r, err := m.Reserve("export", []string{"panel"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(m.Root, r.ID, "backup.kpb"), []byte("legacy encrypted fixture"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = m.Update(r.ID, func(r *Record) { r.Status = "completed"; r.Size = 24 }); err != nil {
+		t.Fatal(err)
+	}
+	m.mu.Lock()
+	m.active = ""
+	m.mu.Unlock()
+	r, err = m.ReserveUpload(r.ID)
+	if err != nil || !r.LocalReady {
+		t.Fatal(r, err)
+	}
+	if err = m.Abort(r.ID, "remote_upload_failed"); err != nil {
+		t.Fatal(err)
+	}
+	r, _ = m.Get(r.ID)
+	if !r.LocalReady {
+		t.Fatal("failed retry hid local package")
+	}
+}
+
 func TestOpenManagerAcceptsRecordsBeyondTheLegacy32KiBCap(t *testing.T) {
 	// A legal large Docker import can approach 3x4096 root refs, which the
 	// legacy 32 KiB record budget rejected after the next restart. Build a
