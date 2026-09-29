@@ -60,23 +60,25 @@ type publicClusterShareSnapshot struct {
 }
 
 type publicClusterShareHost struct {
-	TrafficPeriod   *contract.TrafficPeriod    `json:"trafficPeriod,omitempty"`
-	ExpiresOn       string                     `json:"expiresOn,omitempty"`
-	Price           string                     `json:"price,omitempty"`
-	TrafficResetDay int                        `json:"trafficResetDay,omitempty"`
-	ID              string                     `json:"id"`
-	Name            string                     `json:"name"`
-	State           string                     `json:"state"`
-	OS              string                     `json:"os,omitempty"`
-	Architecture    string                     `json:"architecture,omitempty"`
-	UptimeSeconds   uint64                     `json:"uptimeSeconds,omitempty"`
-	Load            publicClusterShareLoad     `json:"load,omitempty"`
-	CPU             publicClusterShareCPU      `json:"cpu,omitempty"`
-	Memory          publicClusterShareCapacity `json:"memory,omitempty"`
-	Disk            publicClusterShareCapacity `json:"disk,omitempty"`
-	Network         publicClusterShareNetwork  `json:"network,omitempty"`
-	Location        publicClusterShareLocation `json:"location,omitempty"`
-	CollectedAt     *time.Time                 `json:"collectedAt,omitempty"`
+	TrafficPeriod          *contract.TrafficPeriod    `json:"trafficPeriod,omitempty"`
+	ExpiresOn              string                     `json:"expiresOn,omitempty"`
+	Price                  string                     `json:"price,omitempty"`
+	TrafficResetDay        int                        `json:"trafficResetDay,omitempty"`
+	TrafficMonthlyQuotaGiB int                        `json:"trafficMonthlyQuotaGiB,omitempty"`
+	TrafficCalculation     string                     `json:"trafficCalculation,omitempty"`
+	ID                     string                     `json:"id"`
+	Name                   string                     `json:"name"`
+	State                  string                     `json:"state"`
+	OS                     string                     `json:"os,omitempty"`
+	Architecture           string                     `json:"architecture,omitempty"`
+	UptimeSeconds          uint64                     `json:"uptimeSeconds,omitempty"`
+	Load                   publicClusterShareLoad     `json:"load,omitempty"`
+	CPU                    publicClusterShareCPU      `json:"cpu,omitempty"`
+	Memory                 publicClusterShareCapacity `json:"memory,omitempty"`
+	Disk                   publicClusterShareCapacity `json:"disk,omitempty"`
+	Network                publicClusterShareNetwork  `json:"network,omitempty"`
+	Location               publicClusterShareLocation `json:"location,omitempty"`
+	CollectedAt            *time.Time                 `json:"collectedAt,omitempty"`
 }
 
 type publicClusterShareLoad struct {
@@ -340,11 +342,13 @@ func (s *Server) clusterShareSnapshot(ctx context.Context, value store.ClusterSh
 	for _, host := range orderClusterShareHosts(inventory.Items, value.HostOrder) {
 		item := publicClusterShareHost{
 			ID: publicClusterShareHostID(value.Token, host.ID), Name: host.Name,
-			State:           publicClusterShareState(host.State),
-			ExpiresOn:       details[host.ID].ExpiresOn,
-			Price:           details[host.ID].Price,
-			TrafficResetDay: details[host.ID].TrafficResetDay,
-			TrafficPeriod:   host.TrafficPeriod,
+			State:                  publicClusterShareState(host.State),
+			ExpiresOn:              details[host.ID].ExpiresOn,
+			Price:                  details[host.ID].Price,
+			TrafficResetDay:        details[host.ID].TrafficResetDay,
+			TrafficMonthlyQuotaGiB: details[host.ID].TrafficMonthlyQuotaGiB,
+			TrafficCalculation:     details[host.ID].TrafficCalculation,
+			TrafficPeriod:          host.TrafficPeriod,
 		}
 		if item.State == "online" {
 			result.Online++

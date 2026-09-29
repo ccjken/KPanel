@@ -17,6 +17,18 @@ beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date(2026, 0, 1, 12)
 afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.unmount()); vi.useRealTimers() })
 
 describe('remaining value summary and details', () => {
+  it('shows public estimates without management actions or edit instructions', async () => {
+    const wrapper = render({ one: { price: '$30/月', expiresOn: '2026-01-16' } })
+    await wrapper.setProps({ readOnly: true })
+    await wrapper.get('.cluster-value__trigger').trigger('click')
+    expect(wrapper.text()).toContain('US$15.00')
+    expect(wrapper.find('.cluster-value__result button').exists()).toBe(false)
+    expect(wrapper.emitted('manage')).toBeUndefined()
+    await wrapper.setProps({ details: {} })
+    expect(wrapper.get('[role="status"]').text()).toContain('公开资料暂不足')
+    expect(wrapper.text()).not.toContain('管理')
+  })
+
   it('opens an honest empty state with a path to edit and escapes host names', async () => {
     const wrapper = render()
     expect(wrapper.get('.cluster-value__trigger').text()).toContain('—')

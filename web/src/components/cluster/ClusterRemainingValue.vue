@@ -1,13 +1,13 @@
-<script setup lang="ts">
+<script setup lang="ts" generic="THost extends { id: string; name: string }">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ChevronRight } from '@lucide/vue'
 import ModalDialog from '@/components/common/ModalDialog.vue'
 import { useI18n } from '@/i18n'
 import { formatClusterMoney, summarizeRemainingValue } from '@/lib/clusterRemainingValue'
-import type { ClusterHost, ClusterHostDetails } from '@/types/api'
+import type { ClusterHostDetails } from '@/types/api'
 
-const props = defineProps<{ hosts: readonly ClusterHost[]; details: Readonly<Record<string, ClusterHostDetails>> }>()
-const emit = defineEmits<{ manage: [host: ClusterHost] }>()
+const props = defineProps<{ hosts: readonly THost[]; details: Readonly<Record<string, ClusterHostDetails>>; readOnly?: boolean }>()
+const emit = defineEmits<{ manage: [host: THost] }>()
 const { t, locale } = useI18n()
 const open = ref(false)
 const now = ref(new Date())
@@ -21,7 +21,8 @@ const coverage = computed(() => t('cluster.value.coverage', {
   included: summary.value.included, total: props.hosts.length, excluded: summary.value.excluded,
 }))
 function show() { now.value = new Date(); open.value = true }
-async function manage(host: ClusterHost) {
+async function manage(host: THost) {
+  if (props.readOnly) return
   open.value = false
   await nextTick()
   emit('manage', host)
@@ -35,7 +36,7 @@ async function manage(host: ClusterHost) {
       <span>{{ t('cluster.value.title') }} <ChevronRight :size="13" aria-hidden="true" /></span>
       <small v-if="summary.groups.length > 1">{{ t('cluster.value.otherCurrencies', { currency: primary?.currency || '', count: summary.groups.length - 1 }) }}</small>
     </button>
-    <ModalDialog :open="open" :title="t('cluster.value.title')" :description="t('cluster.value.description')" size="large" @close="open = false">
+    <ModalDialog :open="open" :title="t('cluster.value.title')" :description="t(readOnly ? 'cluster.value.publicDescription' : 'cluster.value.description')" size="large" @close="open = false">
       <div class="cluster-value__content">
         <p class="cluster-value__coverage">{{ coverage }}</p>
         <div v-if="summary.groups.length" class="cluster-value__groups">
@@ -48,7 +49,7 @@ async function manage(host: ClusterHost) {
             </dl>
           </section>
         </div>
-        <p v-else class="cluster-value__empty" role="status">{{ t('cluster.value.empty') }}</p>
+        <p v-else class="cluster-value__empty" role="status">{{ t(readOnly ? 'cluster.value.publicEmpty' : 'cluster.value.empty') }}</p>
         <p class="cluster-value__formula">{{ t('cluster.value.formula') }}</p>
         <ul class="cluster-value__hosts">
           <li v-for="row in summary.rows" :key="row.host.id">
@@ -60,7 +61,7 @@ async function manage(host: ClusterHost) {
             <div class="cluster-value__result">
               <strong v-if="row.estimate.remaining !== undefined">{{ money(row.estimate.remaining, row.estimate.currency) }}</strong>
               <small>{{ row.estimate.status === 'active' ? t('cluster.value.days', { days: row.estimate.remainingDays }) : t(`cluster.value.${row.estimate.status}`) }}</small>
-              <button class="button button--secondary button--small" type="button" :aria-label="t('cluster.value.manageHost', { name: row.host.name })" @click="manage(row.host)">{{ t('cluster.value.manage') }}</button>
+              <button v-if="!readOnly" class="button button--secondary button--small" type="button" :aria-label="t('cluster.value.manageHost', { name: row.host.name })" @click="manage(row.host)">{{ t('cluster.value.manage') }}</button>
             </div>
           </li>
         </ul>

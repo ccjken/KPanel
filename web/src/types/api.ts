@@ -372,7 +372,7 @@ export interface ClusterNotificationResources {
 
 export type PublicClusterShareHostState = 'online' | 'degraded' | 'offline' | 'pending'
 
-export interface PublicClusterShareHost extends Pick<ClusterHostDetails, 'expiresOn' | 'price' | 'trafficResetDay'> {
+export interface PublicClusterShareHost extends Pick<ClusterHostDetails, 'expiresOn' | 'price' | 'trafficResetDay' | 'trafficMonthlyQuotaGiB' | 'trafficCalculation'> {
 	trafficPeriod?: ClusterTrafficPeriod
 	id: string
 	name: string

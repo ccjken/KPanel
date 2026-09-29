@@ -101,6 +101,12 @@ func TestClusterShareLifecycleRedactsPrivateFieldsAndBypassesSecurityEntrance(t 
 		t.Fatalf("stored share host order = %v, want [%s]", storedShare.HostOrder, cluster.LocalHostID)
 	}
 	shareToken := strings.TrimPrefix(settings.SharePath, clusterSharePagePrefix)
+	// Only the display quota and calculation mode join the public whitelist.
+	details := store.ClusterHostDetails{TrafficMonthlyQuotaGiB: 100, TrafficCalculation: "sent", TrafficTotalSentThresholdGiB: 80}
+	if err := server.store.ReplaceClusterHostDetails(cluster.LocalHostID,
+		store.ClusterHostDetailsResourceVersion(cluster.LocalHostID, store.ClusterHostDetails{}), details, []string{cluster.LocalHostID}); err != nil {
+		t.Fatal(err)
+	}
 	publicResponse := performRequest(server, http.MethodGet, clusterShareAPIPrefix+shareToken, nil, nil)
 	if publicResponse.Code != http.StatusOK || publicResponse.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("public share status = %d cache=%q body=%s", publicResponse.Code, publicResponse.Header().Get("Cache-Control"), publicResponse.Body.String())
@@ -120,6 +126,9 @@ func TestClusterShareLifecycleRedactsPrivateFieldsAndBypassesSecurityEntrance(t 
 		t.Fatalf("public cumulative network bytes = received:%d sent:%d, want 123456/654321", item.Network.ReceivedBytes, item.Network.SentBytes)
 	}
 	serialized := publicResponse.Body.String()
+	if item.TrafficMonthlyQuotaGiB != 100 || item.TrafficCalculation != "sent" || strings.Contains(serialized, "trafficTotalSentThresholdGiB") {
+		t.Fatalf("public quota contract mismatch: %s", serialized)
+	}
 	for _, privateValue := range []string{
 		"203.0.113.10", "2001:db8::10", "secret-panel-version",
 		"secret-agent-version", "secret-protocol", "secret-kernel", "secret-cpu-model",
@@ -146,6 +155,7 @@ func TestClusterShareLifecycleRedactsPrivateFieldsAndBypassesSecurityEntrance(t 
 	assertClusterShareJSONKeys(t, publicItems[0],
 		"id", "name", "state", "os", "architecture", "uptimeSeconds", "load", "cpu",
 		"memory", "disk", "network", "location", "collectedAt",
+		"trafficMonthlyQuotaGiB", "trafficCalculation",
 	)
 	for field, allowed := range map[string][]string{
 		"load":     {"one", "five", "fifteen"},

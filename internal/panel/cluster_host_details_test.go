@@ -66,7 +66,10 @@ func TestClusterHostDetailsAuthorizationLifecycleAndPublicWhitelist(t *testing.T
 	if public.Items[0].Price != "$5/month" || public.Items[0].ExpiresOn != "2027-09-28" || public.Items[0].TrafficResetDay != 31 {
 		t.Fatalf("public metadata missing: %s", encoded)
 	}
-	for _, forbidden := range []string{"trafficMonthlyQuotaGiB", "trafficCalculation", "trafficTotalReceivedThresholdGiB", "trafficTotalSentThresholdGiB", "expiryReminderEnabled", "resourceVersion", "expectedResourceVersion", "origin", "peerFingerprint", "remoteNodeId"} {
+	if public.Items[0].TrafficMonthlyQuotaGiB != 1500 || public.Items[0].TrafficCalculation != "sent" {
+		t.Fatalf("public quota missing: %s", encoded)
+	}
+	for _, forbidden := range []string{"trafficTotalReceivedThresholdGiB", "trafficTotalSentThresholdGiB", "expiryReminderEnabled", "resourceVersion", "expectedResourceVersion", "origin", "peerFingerprint", "remoteNodeId"} {
 		if strings.Contains(string(encoded), `"`+forbidden+`"`) {
 			t.Fatalf("leaked %s", forbidden)
 		}
@@ -105,7 +108,7 @@ func TestClusterHostDetailsAuthorizationLifecycleAndPublicWhitelist(t *testing.T
 	}
 	public = s.clusterShareSnapshot(context.Background(), settings, "share-version")
 	encoded, _ = json.Marshal(public.Items[0])
-	if strings.Contains(string(encoded), "expiresOn") || strings.Contains(string(encoded), "price") || strings.Contains(string(encoded), "trafficResetDay") {
+	if strings.Contains(string(encoded), "expiresOn") || strings.Contains(string(encoded), "price") || strings.Contains(string(encoded), "trafficResetDay") || strings.Contains(string(encoded), "trafficMonthlyQuotaGiB") || strings.Contains(string(encoded), "trafficCalculation") {
 		t.Fatalf("empty metadata exposed: %s", encoded)
 	}
 	if result = authenticatedRequest(s, http.MethodPut, "/api/v1/cluster/hosts/missing/details", body, session, csrf, headers); result.Code != http.StatusNotFound {

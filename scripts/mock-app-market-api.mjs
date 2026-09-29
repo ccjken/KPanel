@@ -755,6 +755,8 @@ function visualClusterPublicSnapshot() {
       expiresOn: mockHostDetails[host.id]?.expiresOn,
       price: mockHostDetails[host.id]?.price,
       trafficResetDay: mockHostDetails[host.id]?.trafficResetDay,
+      trafficMonthlyQuotaGiB: mockHostDetails[host.id]?.trafficMonthlyQuotaGiB,
+      trafficCalculation: mockHostDetails[host.id]?.trafficCalculation,
       trafficPeriod: mockTrafficPeriod(host),
       os: telemetry?.os,
       architecture: telemetry?.architecture,
