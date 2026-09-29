@@ -12,6 +12,7 @@ const frame = ref<HTMLIFrameElement>()
 const ready = ref(false)
 const fallback = ref(false)
 const failed = ref(false)
+const height = ref(720)
 const url = computed(() => shareThemeURL(props.snapshot?.theme))
 const name = computed(() => props.snapshot?.theme?.name[locale.value] || props.snapshot?.theme?.name['en-US'] || '')
 let timer: ReturnType<typeof setTimeout> | undefined
@@ -20,15 +21,20 @@ function stop(error = false) { clearTimer(); fallback.value = true; ready.value 
 function send() {
   if (!ready.value || !props.snapshot) return
   frame.value?.contentWindow?.postMessage({ source: 'kpanel-share', type: 'snapshot', schema: 1,
-    locale: locale.value, mode: resolved.value, data: shareThemeModel(props.snapshot, locale.value) }, '*')
+    locale: locale.value, mode: resolved.value, data: shareThemeModel(props.snapshot, locale.value, new Date(), t) }, '*')
 }
 function message(event: MessageEvent) {
   if (!frame.value || event.source !== frame.value.contentWindow || event.origin !== 'null') return
-  if (event.data?.source !== 'kpanel-share-theme' || event.data?.type !== 'ready' || ready.value) return
+  if (event.data?.source !== 'kpanel-share-theme') return
+  if (ready.value && event.data?.type === 'resize') {
+    if (Number.isInteger(event.data.height) && event.data.height >= 320 && event.data.height <= 32768) height.value = event.data.height
+    return
+  }
+  if (event.data?.type !== 'ready' || ready.value) return
   clearTimer(); ready.value = true; send()
 }
 watch(url, () => {
-  clearTimer(); ready.value = false; fallback.value = false; failed.value = false
+  clearTimer(); ready.value = false; fallback.value = false; failed.value = false; height.value = 720
   if (url.value) timer = setTimeout(() => stop(true), 12_000)
 }, { immediate: true })
 watch([() => props.snapshot, locale, resolved], send)
@@ -44,7 +50,7 @@ onBeforeUnmount(() => { clearTimer(); window.removeEventListener('message', mess
       <button class="button button--secondary" type="button" @click="stop()">{{ t('cluster.themes.useDefault') }}</button>
     </div>
     <iframe ref="frame" :key="url" :src="url" :title="name" sandbox="allow-scripts" referrerpolicy="no-referrer"
-      :class="{ 'is-ready': ready }" :tabindex="ready ? 0 : -1" :aria-hidden="!ready" @error="stop(true)" />
+      :class="{ 'is-ready': ready }" :style="{ '--theme-height': `${height}px` }" :tabindex="ready ? 0 : -1" :aria-hidden="!ready" @error="stop(true)" />
   </section>
   <p v-if="failed" class="share-theme__notice" role="status">{{ t('cluster.themes.fallback') }}</p>
   <slot v-if="!ready" />
@@ -52,7 +58,7 @@ onBeforeUnmount(() => { clearTimer(); window.removeEventListener('message', mess
 
 <style scoped>
 .share-theme__bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem; font-size: 0.875rem; color: var(--text-soft); }
-iframe { display: none; border: 0; width: 100%; height: max(680px, calc(100dvh - 180px)); background: var(--bg); border-radius: var(--radius-lg); }
-iframe.is-ready { display: block; }
+iframe { display: block; visibility: hidden; border: 0; width: 100%; height: 0; background: var(--bg); border-radius: var(--radius-lg); }
+iframe.is-ready { visibility: visible; height: var(--theme-height); }
 .share-theme__notice { font-size: 0.875rem; color: var(--text-soft); }
 </style>

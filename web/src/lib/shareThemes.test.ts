@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { shareThemeModel, shareThemeURL } from './shareThemes'
 import type { PublicClusterShareSnapshot } from '@/types/api'
+import { useI18n } from '@/i18n'
 
 export function themeSnapshot(): PublicClusterShareSnapshot {
   return { title: 'Public fleet', generatedAt: '2026-01-01T12:00:00Z', total: 1, online: 1, attention: 0,
@@ -33,5 +34,21 @@ describe('share theme protocol', () => {
     const waiting = shareThemeModel(snapshot, 'en-US')
     expect(waiting.hosts[0]?.traffic.percent).toBe('')
     expect(waiting.hosts[0]?.traffic.received).toBe('—')
+  })
+  it('preserves core incomplete/estimated/waiting and accounting explanations', () => {
+    const snapshot = themeSnapshot(), { t } = useI18n()
+    snapshot.items[0]!.trafficPeriod!.partial = true
+    snapshot.items[0]!.trafficPeriod!.estimated = true
+    const traffic = shareThemeModel(snapshot, 'zh-CN', new Date(), t).hosts[0]!.traffic
+    expect(traffic).toMatchObject({ partial: true, estimated: true })
+    expect(traffic.hint).toContain('统计不完整')
+    expect(traffic.hint).toContain('按时间比例估算')
+    expect(traffic.hint).toContain('收发取较大值')
+    snapshot.items[0]!.trafficPeriod!.available = false
+    expect(shareThemeModel(snapshot, 'zh-CN', new Date(), t).hosts[0]!.traffic.hint).toContain('等待有效采样')
+    delete snapshot.items[0]!.trafficPeriod
+    snapshot.items[0]!.trafficResetDay = 1
+    expect(shareThemeModel(snapshot, 'zh-CN', new Date(), t).hosts[0]!.traffic.monthly).toBe(true)
+    expect(shareThemeModel(snapshot, 'zh-CN', new Date(), t).hosts[0]!.traffic.hint).toContain('等待有效采样')
   })
 })

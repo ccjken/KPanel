@@ -36,3 +36,6 @@ dd { margin:0; text-align:right; overflow-wrap:anywhere; }
 footer { padding:24px 0 4px; font-size:13px; color:var(--muted); }
 .empty { grid-column:1/-1; text-align:center; padding:32px; }
 @media(max-width:640px) { .stats { grid-template-columns:repeat(2,minmax(0,1fr)); }.hosts { grid-template-columns:1fr; }.host { padding:16px; } }
+
+.traffic-note { grid-column:1/-1; margin-top:10px; font-size:13px; color:var(--muted); overflow-wrap:anywhere; }
+@media(max-width:400px) { .stats { grid-template-columns:1fr 1fr; } .value { grid-column:1/-1; } }

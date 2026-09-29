@@ -21,9 +21,11 @@
 parent.postMessage({ source: 'kpanel-share-theme', type: 'ready' }, '*')
 ```
 
-父页面发送 `{ source: 'kpanel-share', type: 'snapshot', schema: 1, locale, mode, data }`。先验证 `event.source === parent`，再校验 source/type/schema。`mode` 为 `light` / `dark`；`locale` 为 `zh-CN` / `zh-TW` / `en-US`。数据更新时再次发送，无需主题自行轮询。
+父页面发送 `{ source: 'kpanel-share', type: 'snapshot', schema: 1, locale, mode, data }`。先验证 `event.source === parent`，再校验 source/type/schema。`mode` 为 `light` / `dark`；`locale` 为 `zh-CN` / `zh-TW` / `en-US`。数据更新时再次发送，无需主题自行轮询。可选发送 `{ source: 'kpanel-share-theme', type: 'resize', height }` 调整内容高度；只接受 320–32768 的整数像素，避免嵌套滚动条，超出范围保持原高度。
 
 `data` 包含 `title`、`description`、`generatedAt`、`total`、`online`、`attention`、`value` 和 `hosts`。主机字段及完整示例见 `_template/src/theme.js`。`value.groups` 按原币种分别列出已格式化估算金额；`included` / `excluded` 标明资料覆盖。`hosts[].traffic` 提供 `monthly`、`percent`、`tone`、`received`、`sent`；不得把上行和下行分别除以配额再当成两个总百分比。未知数值使用 `—`，不算成零。剩余价值是按已公开价格、到期日估算的预付价值，不代表退款金额。
+
+`traffic.hint` 是核心提供的本地化说明，包含周期、等待数据、不完整/估算状态、用量/配额、计费方向和接近/超过配额提示，必须展示或提供可访问详情。另有 `available`、`partial`、`estimated`、`startedAt`、`endsAt` 供布局使用，不得隐藏影响解读的状态。
 
 所有指标沿用 KPanel 核心计算，主题只负责展示。协议不包含分享令牌、面板地址、真实节点 ID 或管理资料。对名称、介绍等用户数据必须使用 `textContent`，不能插入 HTML。提供搜索、空状态、超长名称换行、可见键盘焦点；文字最小 12px，正文和操作最小 14px，辅助文字最小 13px。颜色不能独自表达状态。
 

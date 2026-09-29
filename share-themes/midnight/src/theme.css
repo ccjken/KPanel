@@ -49,3 +49,6 @@ footer { padding:24px 0 4px; font-size:13px; color:var(--muted); }
 .metric strong,.traffic span { font-family:ui-monospace,monospace; }
 .stats { border-radius:8px; }
 @media(max-width:720px) { .host { grid-template-columns:1fr; }.resources { margin-top:8px; } }
+
+.traffic-note { grid-column:1/-1; margin-top:10px; font-size:13px; color:var(--muted); overflow-wrap:anywhere; }
+@media(max-width:400px) { .stats { grid-template-columns:1fr 1fr; } .value { grid-column:1/-1; } }

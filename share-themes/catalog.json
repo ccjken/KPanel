@@ -43,16 +43,16 @@
         },
         {
           "path": "theme.css",
-          "size": 3885,
-          "sha256": "5f8e576bcf8c9d01127efec1903176fdb14fa978757a3fd20439855add43cb10"
+          "size": 4098,
+          "sha256": "53edd50b91f1048281481c18be531d6b60564fe0704a9955daae2f165aa0b928"
         },
         {
           "path": "theme.js",
-          "size": 6464,
-          "sha256": "720dfdbf7e4d51f83c7292003bbb4819eaf7a6df97d0af3bbeff2bb67f77c1bf"
+          "size": 7535,
+          "sha256": "c1488c82becca909b5247221ea971c61d4749b2371f035bc018452ff324fc85b"
         }
       ],
-      "sizeBytes": 11237
+      "sizeBytes": 12521
     },
     {
       "schema": 1,
@@ -96,16 +96,16 @@
         },
         {
           "path": "theme.css",
-          "size": 3125,
-          "sha256": "d1c5f0657f599b4c67d2505224ff09358b915e058b93b3a212be33ca26f45258"
+          "size": 3338,
+          "sha256": "75f9267e0fd65c4ef1d901a39ab2ace96526a1bcb0e7ad86952a9d3a1340eb06"
         },
         {
           "path": "theme.js",
-          "size": 6464,
-          "sha256": "720dfdbf7e4d51f83c7292003bbb4819eaf7a6df97d0af3bbeff2bb67f77c1bf"
+          "size": 7535,
+          "sha256": "c1488c82becca909b5247221ea971c61d4749b2371f035bc018452ff324fc85b"
         }
       ],
-      "sizeBytes": 10473
+      "sizeBytes": 11757
     }
   ]
 }

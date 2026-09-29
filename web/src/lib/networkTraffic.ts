@@ -23,6 +23,19 @@ export function monthlyTrafficUsage(period?: ClusterTrafficPeriod, details?: Clu
     tone: percent >= 95 ? 'danger' : percent >= 80 ? 'warning' : 'normal' }
 }
 
+export function clusterTrafficHint(period: ClusterTrafficPeriod | undefined, details: ClusterHostDetails | undefined, t: ReturnType<typeof useI18n>['t']) {
+  const parts = [trafficPeriodHint(period, t)]
+  if (!period && details?.trafficResetDay) parts.push(t('cluster.traffic.waiting'))
+  const usage = monthlyTrafficUsage(period, details)
+  if (usage) {
+    parts.push(t('cluster.traffic.quotaSummary', { used: formatBytes(usage.used), quota: formatBytes(usage.quotaBytes),
+      method: t(`cluster.traffic.calculation.${usage.calculation}`) }))
+    if (usage.percent >= 100) parts.push(t('cluster.traffic.exceeded'))
+    else if (usage.percent >= 80) parts.push(t('cluster.traffic.nearQuota'))
+  }
+  return parts.filter(Boolean).join(' · ') || undefined
+}
+
 export function clusterTrafficCounters(host: {
   trafficPeriod?: ClusterTrafficPeriod
   lastSnapshot?: { telemetry: { network: NetworkTrafficCounters } }

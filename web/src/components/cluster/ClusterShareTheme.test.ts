@@ -26,6 +26,14 @@ describe('isolated public theme', () => {
     await wrapper.vm.$nextTick()
     expect(post).toHaveBeenCalledWith(expect.objectContaining({ source: 'kpanel-share', schema: 1, data: expect.objectContaining({ title: 'Fleet' }) }), '*')
     expect(wrapper.find('.native').exists()).toBe(false)
+    window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, origin: 'null', data: { source: 'kpanel-share-theme', type: 'resize', height: 1200 } }))
+    await wrapper.vm.$nextTick()
+    expect(frame.style.getPropertyValue('--theme-height')).toBe('1200px')
+    for (const height of [-1, 1000000, '1000', NaN, 500.5]) {
+      window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, origin: 'null', data: { source: 'kpanel-share-theme', type: 'resize', height } }))
+    }
+    await wrapper.vm.$nextTick()
+    expect(frame.style.getPropertyValue('--theme-height')).toBe('1200px')
     await wrapper.setProps({ errorMessage: 'Refresh failed' })
     expect(wrapper.get('[role="alert"]').text()).toBe('Refresh failed')
     await wrapper.setProps({ snapshot: undefined })
