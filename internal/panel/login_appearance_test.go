@@ -86,6 +86,7 @@ func TestLoginWallpaperOnlyExposesCurrentThumbnailAndRevokesPreviousURL(t *testi
 		t.Fatalf("HEAD: %d %v", head.Code, head.Header())
 	}
 	conditional := httptest.NewRequest(http.MethodGet, address, nil)
+	conditional.Host = "panel.test"
 	conditional.Header.Set("If-None-Match", response.Header().Get("ETag"))
 	cached := httptest.NewRecorder()
 	s.ServeHTTP(cached, conditional)
