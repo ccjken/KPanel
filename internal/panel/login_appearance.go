@@ -17,6 +17,7 @@ const loginWallpaperPath = "/api/v1/auth/wallpaper"
 // Login appearance is public branding. It deliberately omits private asset IDs,
 // names, library contents and the authenticated settings resource version.
 type loginAppearance struct {
+	Branding  *store.SiteBranding     `json:"branding,omitempty"`
 	Theme     string                  `json:"theme"`
 	Colors    *store.AppearanceColors `json:"colors"`
 	Wallpaper loginWallpaper          `json:"wallpaper"`
@@ -54,7 +55,7 @@ func (s *Server) loginAppearance() *loginAppearance {
 			wallpaper.URL = loginWallpaperPath + "/" + strings.TrimPrefix(version, "sha256:")
 		}
 	}
-	return &loginAppearance{Theme: value.Theme, Colors: value.Colors, Wallpaper: wallpaper}
+	return &loginAppearance{Branding: value.Branding, Theme: value.Theme, Colors: value.Colors, Wallpaper: wallpaper}
 }
 
 // Only the currently selected artwork's bounded preview can be read before sign-in.

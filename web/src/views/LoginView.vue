@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Check, Copy, Eye, EyeOff, LoaderCircle, LockKeyhole } from '@lucide/vue'
+import { Check, Copy, Eye, EyeOff, LoaderCircle } from '@lucide/vue'
 import AuthLayout from '@/components/layout/AuthLayout.vue'
+import LogoMark from '@/components/common/LogoMark.vue'
+import { useSiteBranding } from '@/stores/branding'
 import { ApiError, api } from '@/lib/api'
 import { getPasskey, passkeyError, passkeysSupported } from '@/lib/passkeys'
 import { useI18n } from '@/i18n'
@@ -14,6 +16,7 @@ const route = useRoute()
 const router = useRouter()
 const session = useSession()
 const i18n = useI18n()
+const branding = useSiteBranding()
 const form = reactive({
   username: '',
   password: '',
@@ -169,10 +172,10 @@ onBeforeUnmount(() => passkeyController.abort())
 <template>
   <AuthLayout>
     <div class="auth-card__heading">
-      <span class="auth-card__icon"><LockKeyhole :size="21" /></span>
+      <span class="auth-card__icon"><LogoMark compact site /></span>
       <div>
         <span class="eyebrow">{{ i18n.t('auth.welcome') }}</span>
-        <h2>{{ i18n.t('auth.loginTitle') }}</h2>
+        <h2 class="auth-card__site-name">{{ i18n.t('auth.loginTitle', { name: branding.name.value }) }}</h2>
       </div>
     </div>
     <p class="auth-card__intro">{{ i18n.t('auth.loginIntro') }}</p>

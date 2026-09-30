@@ -951,6 +951,8 @@ textarea:focus-visible,
 
 .brand {
   display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
   align-items: center;
   gap: 11px;
 }
@@ -969,15 +971,19 @@ textarea:focus-visible,
   display: block;
   width: 100%;
   height: 100%;
+  object-fit: contain;
 }
 
 .brand__text {
+  min-width: 0;
+  overflow-wrap: anywhere;
   display: flex;
   align-items: baseline;
   gap: 6px;
 }
 
 .brand__text strong {
+  min-width: 0;
   color: inherit;
   font-size: 19px;
 }
@@ -1011,6 +1017,7 @@ textarea:focus-visible,
   min-height: 100vh;
   flex-direction: column;
   padding: clamp(32px, 5vw, 72px);
+  padding-bottom: calc(clamp(32px, 5vw, 72px) + 72px);
   overflow: hidden;
   color: var(--sidebar-text);
   background: var(--auth-brand-background);
@@ -1119,12 +1126,32 @@ textarea:focus-visible,
   min-height: 100vh;
   place-items: center;
   padding: 48px;
+  padding-bottom: 100px;
   background: var(--auth-form-background);
 }
 
 .auth-card {
   width: min(100%, 440px);
 }
+
+.auth-layout__source {
+  position: absolute;
+  z-index: 1;
+  left: clamp(32px, 5vw, 72px);
+  bottom: clamp(32px, 5vw, 72px);
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  max-width: calc(46% - 2 * clamp(32px, 5vw, 72px));
+  color: var(--sidebar-muted);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.auth-layout__source a { color: inherit; }
+.auth-card__site-name { overflow-wrap: anywhere; }
+.auth-layout__source a:focus-visible { outline: 2px solid var(--brand); outline-offset: 4px; }
+.desktop__site-name { max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .auth-card__heading {
   display: flex;
@@ -1869,6 +1896,15 @@ textarea:focus-visible,
 }
 
 @media (min-width: 921px) {
+  .sidebar:not(.sidebar--collapsed) .sidebar__brand {
+    padding-right: 62px;
+  }
+
+  .sidebar .brand__text strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .sidebar__brand {
     justify-content: flex-start;
   }
@@ -6238,9 +6274,21 @@ body.terminal-fullscreen-open .modal-panel {
     display: none;
   }
 
+  .auth-layout__source {
+    left: 20px;
+    bottom: 20px;
+    max-width: calc(100% - 40px);
+    color: var(--muted);
+  }
+
+  .auth-layout__source .auth-layout__footnote {
+    display: none;
+  }
+
   .auth-layout__form {
     min-height: 100dvh;
     padding: 32px 20px;
+    padding-bottom: 112px;
   }
 
   .site-service-grid {

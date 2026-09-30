@@ -1,4 +1,5 @@
 import { readonly, ref } from 'vue'
+import { applySiteBranding } from '@/stores/branding'
 import { ApiError, api } from '@/lib/api'
 import { useClassicWallpaper } from '@/lib/classicWallpaper'
 import { applySyncedWallpaper, isDesktopWallpaperID, useDesktopWallpaper } from '@/lib/desktopWallpapers'
@@ -8,7 +9,7 @@ import { parseStoredThemeColors } from '@/theme/colors'
 import { t } from '@/i18n'
 import type { AppearanceSettings } from '@/types/api'
 
-type AppearanceValue = Pick<AppearanceSettings, 'theme' | 'colors' | 'wallpaper' | 'classicLevel'>
+type AppearanceValue = Pick<AppearanceSettings, 'theme' | 'colors' | 'wallpaper' | 'classicLevel' | 'branding'>
 type Patch = Partial<AppearanceValue>
 // Per-tab explicit edits survive refresh; a cached full snapshot never becomes a write.
 const PENDING_KEY = 'kpanel:appearance-pending:v1'
@@ -30,6 +31,13 @@ interface Sync {
 }
 let current: Sync | undefined
 let applying = false
+let operationTail: Promise<void> = Promise.resolve()
+
+function serializeAppearance<T>(operation: () => Promise<T>): Promise<T> {
+  const task = operationTail.then(operation)
+  operationTail = task.then(() => {}, () => {})
+  return task
+}
 
 function localValue(): AppearanceValue {
   return {
@@ -67,6 +75,7 @@ function persist(sync: Sync): void {
 }
 
 function apply(value: AppearanceValue): void {
+  applySiteBranding(value.branding)
   applying = true
   try {
     // Keep the existing stores as the UI facade, with one reconciliation path.
@@ -101,7 +110,7 @@ function reconcile(sync: Sync): Promise<void> {
   if (sync.task) return sync.task
   window.clearTimeout(sync.timer)
   sync.timer = undefined
-  sync.task = Promise.resolve().then(async () => {
+  sync.task = serializeAppearance(async () => {
     let conflicts = 0
     try {
       if (current !== sync) return
@@ -133,15 +142,15 @@ function reconcile(sync: Sync): Promise<void> {
             if (JSON.stringify(sync.pending[key]) === JSON.stringify(patch[key])) delete sync.pending[key]
           }
           persist(sync)
-          apply({ ...updated, ...sync.pending })
+          apply({ ...sync.server, ...sync.pending })
         } catch (error) {
           if (current !== sync) return
           if (!(error instanceof ApiError && error.status === 409) || ++conflicts > 3) throw error
           const fetched = await api.desktop.appearance()
           if (current !== sync) return
           sync.server = fetched
-          if (fetched.configured) migration = {}
-          apply({ ...fetched, ...sync.pending })
+          if (sync.server.configured) migration = {}
+          apply({ ...sync.server, ...sync.pending })
         }
       }
       sync.retries = 0
@@ -159,6 +168,21 @@ function reconcile(sync: Sync): Promise<void> {
   return sync.task
 }
 
+/** Explicit saves share the theme sync queue, including response application. */
+export function saveAppearance(operation: () => Promise<AppearanceSettings>, signal: AbortSignal): Promise<AppearanceSettings> {
+  const owner = current
+  return serializeAppearance(async () => {
+    signal.throwIfAborted()
+    if (current !== owner) throw new Error('Appearance session changed')
+    const snapshot = await operation()
+    if (current === owner && !signal.aborted) {
+      if (owner) owner.server = snapshot
+      apply({ ...snapshot, ...owner?.pending })
+    }
+    return snapshot
+  })
+}
+
 /** Session/login responses seed this store; older servers use the same GET fallback. */
 export function startAppearanceSync(snapshot?: AppearanceSettings, owner = ''): Promise<void> {
   if (current) return current.task ?? Promise.resolve()
@@ -173,6 +197,9 @@ export function startAppearanceSync(snapshot?: AppearanceSettings, owner = ''): 
 export function stopAppearanceSync(): void {
   if (current) window.clearTimeout(current.timer)
   current = undefined
+  // A stopped session's pending network request must not hold the next session.
+  // Each queued callback still checks its captured owner before doing any work.
+  operationTail = Promise.resolve()
   ready.value = false
   window.removeEventListener('kpanel:appearance-changed', changed)
   window.removeEventListener('online', retry)

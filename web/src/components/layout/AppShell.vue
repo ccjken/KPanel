@@ -336,7 +336,7 @@ watch(
       :aria-hidden="desktopActive ? 'true' : undefined"
     >
       <div class="sidebar__brand">
-        <LogoMark />
+        <LogoMark site />
         <button
           class="icon-button sidebar__collapse"
           type="button"

@@ -24,7 +24,8 @@ vi.mock('@/lib/desktopWallpapers', () => ({ useDesktopWallpaper: () => ({ id: mo
 vi.mock('@/stores/toast', () => ({ useToast: () => ({ danger: mocks.danger }) }))
 vi.mock('@/i18n', () => ({ t: (key: string) => key }))
 
-import { appearanceReady, startAppearanceSync, stopAppearanceSync } from './appearanceSync'
+import { saveAppearance, appearanceReady, startAppearanceSync, stopAppearanceSync } from './appearanceSync'
+import { useSiteBranding } from '@/stores/branding'
 
 const remote = {
   configured: true, resourceVersion: 'sha256:remote', theme: 'dark' as const, colors: null,
@@ -36,6 +37,45 @@ async function settle(): Promise<void> {
 }
 
 describe('shared appearance preference', () => {
+  it('waits for a delayed theme response before saving and applying branding', async () => {
+    const original = { ...remote, branding: { name: 'Original', icon: '' } }
+    let resolve!: (value: typeof original) => void
+    mocks.appearance.mockResolvedValue(original)
+    mocks.updateAppearance.mockReturnValue(new Promise((done) => { resolve = done }))
+    await startAppearanceSync()
+    window.dispatchEvent(new CustomEvent('kpanel:appearance-changed', { detail: { wallpaper: 'prism' } }))
+    await settle()
+    const operation = vi.fn(async () => ({ ...original, wallpaper: 'prism', branding: { name: 'Saved name', icon: '' }, resourceVersion: 'sha256:branding' }))
+    const save = saveAppearance(operation, new AbortController().signal)
+    await settle()
+    expect(operation).not.toHaveBeenCalled()
+    resolve({ ...original, wallpaper: 'prism', resourceVersion: 'sha256:older-theme-response' })
+    await save
+    expect(useSiteBranding().name.value).toBe('Saved name')
+    mocks.updateAppearance.mockImplementation(async (body) => ({ ...original, ...body, branding: { name: 'Saved name', icon: '' } }))
+    window.dispatchEvent(new CustomEvent('kpanel:appearance-changed', { detail: { wallpaper: 'orbit' } }))
+    await settle()
+    expect(mocks.updateAppearance).toHaveBeenLastCalledWith(expect.objectContaining({ expectedResourceVersion: 'sha256:branding' }))
+  })
+
+  it('holds later theme writes until a delayed branding save is applied', async () => {
+    const branded = { ...remote, branding: { name: 'Saved name', icon: '' }, resourceVersion: 'sha256:branding' }
+    let resolve!: (value: typeof branded) => void
+    await startAppearanceSync(remote)
+    const save = saveAppearance(() => new Promise((done) => { resolve = done }), new AbortController().signal)
+    await settle()
+    window.dispatchEvent(new CustomEvent('kpanel:appearance-changed', { detail: { theme: 'light' } }))
+    await settle()
+    expect(mocks.updateAppearance).not.toHaveBeenCalled()
+    mocks.updateAppearance.mockImplementation(async (body) => ({ ...branded, ...body, resourceVersion: 'sha256:new-theme' }))
+    resolve(branded)
+    await save
+    await settle()
+    expect(mocks.updateAppearance).toHaveBeenCalledWith(expect.objectContaining({ theme: 'light', expectedResourceVersion: 'sha256:branding' }))
+    expect(mocks.setTheme).toHaveBeenLastCalledWith('light')
+    expect(useSiteBranding().name.value).toBe('Saved name')
+  })
+
   beforeEach(() => {
     vi.resetAllMocks()
     sessionStorage.clear()
