@@ -123,6 +123,23 @@ describe('shared appearance preference', () => {
       theme: 'light', wallpaper: 'prism', expectedResourceVersion: 'sha256:other',
     }))
   })
+
+  it.each([false, true])('does not overwrite a competing first configuration with legacy cache (explicit edit: %s)', async (edit) => {
+    const { ApiError } = await import('@/lib/api')
+    mocks.preference.value = 'light'
+    mocks.wallpaper.value = 'prism'
+    const empty = { ...remote, configured: false, theme: 'system' as const, wallpaper: 'classic', classicLevel: 'off' as const }
+    mocks.appearance.mockResolvedValue(remote)
+    mocks.updateAppearance.mockImplementationOnce(async () => {
+      if (edit) window.dispatchEvent(new CustomEvent('kpanel:appearance-changed', { detail: { classicLevel: 'ambient' } }))
+      throw new ApiError('conflict', 409)
+    }).mockImplementation(async body => ({ ...remote, ...body, resourceVersion: 'sha256:next' }))
+    await startAppearanceSync(empty)
+    expect(mocks.updateAppearance).toHaveBeenCalledTimes(edit ? 2 : 1)
+    if (edit) expect(mocks.updateAppearance).toHaveBeenLastCalledWith(expect.objectContaining({ theme: 'dark', wallpaper: 'orbit', classicLevel: 'ambient' }))
+    expect(mocks.applyWallpaper).toHaveBeenLastCalledWith('orbit')
+    expect(sessionStorage.getItem('kpanel:appearance-pending:v1')).toBeNull()
+  })
 })
 
 describe('appearance recovery and request budget', () => {

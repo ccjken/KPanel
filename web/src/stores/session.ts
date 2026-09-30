@@ -104,22 +104,31 @@ async function loginPasskey(input: { ceremonyId: string; credential: PasskeyCred
 }
 
 async function logout(): Promise<void> {
-  generation++
+  const run = ++generation
   statusPromise = undefined
   try {
     await api.auth.logout()
   } finally {
-    stopAppearanceSync()
-    resetApiSecurityState()
-    cancelLoginWallpaper()
-    state.authenticated = false
-    state.user = undefined
-    state.agent = undefined
-    state.appearance = undefined
-    state.checked = false
-    // Refresh public branding before routing back to login.
-    await refresh(true)
+    if (run === generation) state.loading = false
   }
+  if (run !== generation) return
+  stopAppearanceSync()
+  resetApiSecurityState()
+  cancelLoginWallpaper()
+  state.authenticated = false
+  state.user = undefined
+  state.agent = undefined
+  state.appearance = undefined
+  state.checked = false
+  // Refresh public branding before routing back to login.
+  await refresh(true)
+}
+
+function takeAppearanceSnapshot(): AuthStatus['appearance'] {
+  const snapshot = state.appearance
+  // A later shell mount must revalidate instead of replaying an old login snapshot.
+  state.appearance = undefined
+  return snapshot
 }
 
 export function useSession() {
@@ -133,5 +142,6 @@ export function useSession() {
     loginPasskey,
     setup,
     logout,
+    takeAppearanceSnapshot,
   }
 }

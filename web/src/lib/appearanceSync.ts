@@ -110,17 +110,15 @@ function reconcile(sync: Sync): Promise<void> {
         if (current !== sync) return
         sync.server = fetched
       }
-      if (!sync.server.configured) {
-        const initial = sync.initial
-        if (initial.theme !== 'system' || initial.colors !== null || initial.wallpaper !== 'classic' || initial.classicLevel !== 'off') {
-          sync.pending = { ...initial, ...sync.pending }
-          persist(sync)
-        }
-      }
-      apply({ ...sync.server, ...sync.pending })
+      const initial = sync.initial
+      let migration: Patch = !sync.server.configured
+        && (initial.theme !== 'system' || initial.colors !== null || initial.wallpaper !== 'classic' || initial.classicLevel !== 'off') ? initial : {}
+      // Implicit legacy migration must never survive a competing server configuration.
+      // Only explicit user edits are durable or replayed after a conflict.
+      apply({ ...sync.server, ...migration, ...sync.pending })
       ready.value = true
-      while (current === sync && Object.keys(sync.pending).length) {
-        const patch = { ...sync.pending }
+      while (current === sync && (Object.keys(migration).length || Object.keys(sync.pending).length)) {
+        const patch = { ...migration, ...sync.pending }
         const next = { ...sync.server, ...patch }
         try {
           const updated = await api.desktop.updateAppearance({
@@ -129,6 +127,7 @@ function reconcile(sync: Sync): Promise<void> {
           })
           if (current !== sync) return
           sync.server = updated
+          migration = {}
           // An edit made during this request is kept for the next serialized save.
           for (const key of Object.keys(patch) as (keyof Patch)[]) {
             if (JSON.stringify(sync.pending[key]) === JSON.stringify(patch[key])) delete sync.pending[key]
@@ -141,6 +140,7 @@ function reconcile(sync: Sync): Promise<void> {
           const fetched = await api.desktop.appearance()
           if (current !== sync) return
           sync.server = fetched
+          if (fetched.configured) migration = {}
           apply({ ...fetched, ...sync.pending })
         }
       }

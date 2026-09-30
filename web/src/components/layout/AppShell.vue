@@ -288,7 +288,7 @@ watch([appearanceReady, wallpaperChoice.id], ([ready, id]) => {
   if (ready && customWallpaperFromID(id)) void wallpaperChoice.loadCustomWallpapers().catch(() => undefined)
 })
 onMounted(() => {
-  void startAppearanceSync(session.state.appearance, session.state.user?.id)
+  void startAppearanceSync(session.takeAppearanceSnapshot(), session.state.user?.id)
   void refreshAgent()
   agentTimer = window.setInterval(refreshAgent, 30_000)
   navigationWarmupTimer = window.setTimeout(() => {

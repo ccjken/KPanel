@@ -19,6 +19,44 @@ const authenticated: AuthStatus = { setupRequired: false, authenticated: true, u
 
 describe('session appearance handoff', () => {
   beforeEach(() => vi.resetAllMocks())
+  it('hands off a login snapshot once so reentering the shell reads current server state', async () => {
+    mocks.login.mockResolvedValue(authenticated)
+    const session = useSession()
+    await session.login({ username: 'admin', password: 'fixture-only' })
+    expect(session.takeAppearanceSnapshot()).toEqual(appearance)
+    expect(session.takeAppearanceSnapshot()).toBeUndefined()
+    mocks.status.mockResolvedValue({ ...authenticated, appearance: { ...appearance, wallpaper: 'rift' } })
+    await session.refresh(true)
+    expect(session.takeAppearanceSnapshot()?.wallpaper).toBe('rift')
+  })
+
+  it('keeps appearance synchronization and the session alive if logout fails', async () => {
+    mocks.login.mockResolvedValue(authenticated)
+    mocks.logout.mockRejectedValue(new Error('offline'))
+    const session = useSession()
+    await session.login({ username: 'admin', password: 'fixture-only' })
+    await expect(session.logout()).rejects.toThrow('offline')
+    expect(session.state.authenticated).toBe(true)
+    expect(session.state.loading).toBe(false)
+    expect(mocks.stop).not.toHaveBeenCalled()
+    expect(mocks.reset).not.toHaveBeenCalled()
+    expect(mocks.status).not.toHaveBeenCalled()
+  })
+
+  it('does not let a delayed logout clear a newer login in memory', async () => {
+    let finish!: () => void
+    mocks.logout.mockReturnValue(new Promise<void>(resolve => { finish = resolve }))
+    mocks.login.mockResolvedValue(authenticated)
+    const session = useSession()
+    const old = session.logout()
+    await session.login({ username: 'admin', password: 'fixture-only' })
+    finish()
+    await old
+    expect(session.state.authenticated).toBe(true)
+    expect(mocks.stop).not.toHaveBeenCalled()
+    expect(mocks.status).not.toHaveBeenCalled()
+  })
+
   it('carries authenticated appearance to the shell and reloads guest branding on logout', async () => {
     mocks.login.mockResolvedValue(authenticated)
     mocks.logout.mockResolvedValue(undefined)
