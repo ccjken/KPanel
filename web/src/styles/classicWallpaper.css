@@ -164,7 +164,8 @@ body:has(.classic-backdrop) {
 /* The explicit show-through choice keeps its wallpaper with reduced transparency.
  * Forced-colors still uses solid surfaces for high-contrast legibility. */
 @media (forced-colors: active) {
-  :root[data-classic-wallpaper] .auth-layout__brand {
+  :root[data-classic-wallpaper] .auth-layout__brand,
+  :root[data-auth-wallpaper='server'] .auth-layout__brand {
     background: var(--auth-brand-background);
   }
 
