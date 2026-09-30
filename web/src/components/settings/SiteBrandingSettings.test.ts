@@ -54,7 +54,7 @@ describe('site branding settings', () => {
     await flushPromises()
     expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ branding: { name: 'New panel', icon: '' }, wallpaper: 'orbit', expectedResourceVersion: 'sha256:new' }))
     expect(mocks.apply).toHaveBeenCalledWith(expect.objectContaining({ branding: { name: 'New panel', icon: '' } }))
-    expect(wrapper.get('[role="status"]').text()).toContain('已保存')
+    expect(wrapper.get('.site-branding-status[role="status"]').text()).toContain('已保存')
     wrapper.unmount()
   })
 

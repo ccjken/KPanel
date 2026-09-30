@@ -17,6 +17,7 @@ const busy = ref(false)
 const error = ref('')
 const saved = ref(false)
 const iconInput = ref<HTMLInputElement>()
+const iconSelected = ref(false)
 const controller = new AbortController()
 onBeforeUnmount(() => controller.abort())
 
@@ -28,6 +29,7 @@ async function load(): Promise<void> {
     if (controller.signal.aborted) return
     form.name = value.branding?.name || ''
     form.icon = value.branding?.icon || ''
+    iconSelected.value = false
     baseline = { ...form }
     resetAll = false
     loaded.value = true
@@ -46,7 +48,10 @@ async function chooseIcon(event: Event): Promise<void> {
   error.value = ''
   try {
     const icon = await prepareSiteIcon(file)
-    if (!controller.signal.aborted) form.icon = icon
+    if (!controller.signal.aborted) {
+      form.icon = icon
+      iconSelected.value = true
+    }
   } catch { error.value = i18n.t('branding.iconInvalid') }
   finally { busy.value = false }
 }
@@ -55,6 +60,7 @@ function reset(): void {
   resetAll = true
   form.name = ''
   form.icon = ''
+  iconSelected.value = false
   saved.value = false
   error.value = ''
 }
@@ -93,6 +99,7 @@ async function save(): Promise<void> {
     if (controller.signal.aborted) return
     form.name = value.branding?.name || ''
     form.icon = value.branding?.icon || ''
+    iconSelected.value = false
     baseline = { ...form }
     resetAll = false
     saved.value = true
@@ -132,7 +139,7 @@ onMounted(load)
                 <p>{{ i18n.t('branding.iconHint') }}</p>
               </div>
             </div>
-            <p class="site-branding-icon__hint">{{ i18n.t('branding.iconSizeHint') }}</p>
+            <p class="site-branding-icon__hint" role="status">{{ i18n.t(iconSelected ? 'branding.iconSelected' : 'branding.iconSizeHint') }}</p>
             <input ref="iconInput" class="site-branding-file" type="file" name="siteIcon" accept="image/png,image/jpeg,image/webp" tabindex="-1" aria-hidden="true" @change="chooseIcon" />
           </div>
         </div>

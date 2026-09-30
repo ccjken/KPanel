@@ -980,6 +980,7 @@ export const zhTWMessages = {
   "branding.nameHint": "最多 64 個字元，留空使用 KPanel。",
   "branding.icon": "站點圖示",
   "branding.changeIcon": "更換圖示",
+  "branding.iconSelected": "圖示已選好，儲存後生效。",
   "branding.iconHint": "PNG / JPG / WebP · 不超過 2 MB",
   "branding.iconSizeHint": "建議使用正方形圖片，最大 4096 × 4096 像素。",
   "branding.iconInvalid": "圖片無法使用，請選擇有效的 PNG、JPEG 或 WebP（最大 2 MB、4096 × 4096 像素）。",

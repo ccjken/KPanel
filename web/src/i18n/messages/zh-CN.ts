@@ -994,6 +994,7 @@ export const zhCNMessages = {
   "branding.nameHint": "最多 64 个字符，留空使用 KPanel。",
   "branding.icon": "站点图标",
   "branding.changeIcon": "更换图标",
+  "branding.iconSelected": "图标已选好，保存后生效。",
   "branding.iconHint": "PNG / JPG / WebP · 不超过 2 MB",
   "branding.iconSizeHint": "建议使用正方形图片，最大 4096 × 4096 像素。",
   "branding.iconInvalid": "图片不可用，请选择有效的 PNG、JPEG 或 WebP（最大 2 MB、4096 × 4096 像素）。",

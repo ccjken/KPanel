@@ -993,6 +993,7 @@ export const enUSMessages = {
   "branding.nameHint": "Up to 64 characters. Leave blank to use KPanel.",
   "branding.icon": "Site icon",
   "branding.changeIcon": "Change icon",
+  "branding.iconSelected": "Icon selected. Save to apply it.",
   "branding.iconHint": "PNG / JPG / WebP · Up to 2 MB",
   "branding.iconSizeHint": "A square image works best. Maximum 4096 × 4096 pixels.",
   "branding.iconInvalid": "Choose a valid PNG, JPEG, or WebP (up to 2 MB and 4096 × 4096 pixels).",
