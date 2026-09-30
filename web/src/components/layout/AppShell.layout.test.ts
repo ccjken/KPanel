@@ -2,17 +2,11 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const styles = readFileSync(new URL('../../styles/main.css', import.meta.url), 'utf8')
-const classicWallpaperStyles = readFileSync(new URL('../../styles/classicWallpaper.css', import.meta.url), 'utf8')
 const appShellSource = readFileSync(new URL('./AppShell.vue', import.meta.url), 'utf8')
 const sitesSource = readFileSync(new URL('../../views/SitesView.vue', import.meta.url), 'utf8')
 const jobsSource = readFileSync(new URL('../../views/JobsView.vue', import.meta.url), 'utf8')
 
 describe('responsive application shell comfort', () => {
-  it('uses the stable classic bitmap path while preserving live scene rendering', () => {
-    expect(appShellSource).toContain('v-if="classicScenePack" class="classic-backdrop__wallpaper"')
-    expect(appShellSource).toContain('<div v-else class="classic-backdrop__image" />')
-    expect(classicWallpaperStyles).toContain("background: var(--classic-wallpaper-image, url('/wallpapers/kpanel-desktop.webp'))")
-  })
 
   it('keeps the mobile navigation usable on short screens', () => {
     expect(styles).toMatch(

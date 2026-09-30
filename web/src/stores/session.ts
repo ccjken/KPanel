@@ -1,5 +1,7 @@
 import { computed, reactive } from 'vue'
 import { api, resetApiSecurityState } from '@/lib/api'
+import { stopAppearanceSync } from '@/lib/appearanceSync'
+import { applyLoginAppearance, cancelLoginWallpaper } from '@/lib/loginAppearance'
 import type { PasskeyCredentialJSON } from '@/lib/passkeys'
 import type { AgentStatus, AuthStatus, LoginRequest, SetupRequest, User } from '@/types/api'
 
@@ -11,6 +13,7 @@ interface SessionState {
   user?: User
   expiresAt?: string
   agent?: AgentStatus
+  appearance?: AuthStatus['appearance']
   error?: unknown
 }
 
@@ -22,8 +25,12 @@ const state = reactive<SessionState>({
 })
 
 let statusPromise: Promise<void> | undefined
+let generation = 0
 
 function applyStatus(status: AuthStatus): void {
+  if (!status.authenticated && !status.setupRequired && status.loginAppearance) applyLoginAppearance(status.loginAppearance)
+  else cancelLoginWallpaper()
+  state.appearance = status.appearance
   state.setupRequired = status.setupRequired
   state.authenticated = status.authenticated
   state.user = status.user
@@ -35,16 +42,22 @@ function applyStatus(status: AuthStatus): void {
 async function refresh(force = false): Promise<void> {
   if (statusPromise && !force) return statusPromise
 
+  const run = ++generation
   statusPromise = (async () => {
     state.loading = true
     try {
-      applyStatus(await api.auth.status())
+      const status = await api.auth.status()
+      if (run === generation) applyStatus(status)
     } catch (error) {
+      if (run !== generation) return
+      cancelLoginWallpaper()
+      state.appearance = undefined
       state.authenticated = false
       state.setupRequired = false
       state.user = undefined
       state.error = error
     } finally {
+      if (run !== generation) return
       state.checked = true
       state.loading = false
       statusPromise = undefined
@@ -55,41 +68,67 @@ async function refresh(force = false): Promise<void> {
 }
 
 async function login(input: LoginRequest): Promise<void> {
+  const run = ++generation
+  statusPromise = undefined
   state.loading = true
   try {
-    applyStatus(await api.auth.login(input))
+    const status = await api.auth.login(input)
+    if (run === generation) applyStatus(status)
   } finally {
-    state.loading = false
+    if (run === generation) state.loading = false
   }
 }
 
 async function setup(input: SetupRequest): Promise<void> {
+  const run = ++generation
+  statusPromise = undefined
   state.loading = true
   try {
-    applyStatus(await api.auth.setup(input))
+    const status = await api.auth.setup(input)
+    if (run === generation) applyStatus(status)
   } finally {
-    state.loading = false
+    if (run === generation) state.loading = false
   }
 }
 
 async function loginPasskey(input: { ceremonyId: string; credential: PasskeyCredentialJSON; totpCode?: string }, signal?: AbortSignal): Promise<void> {
+  const run = ++generation
+  statusPromise = undefined
   state.loading = true
   try {
-    applyStatus(await api.auth.passkeys.loginFinish(input, signal))
+    const status = await api.auth.passkeys.loginFinish(input, signal)
+    if (run === generation) applyStatus(status)
   } finally {
-    state.loading = false
+    if (run === generation) state.loading = false
   }
 }
 
 async function logout(): Promise<void> {
+  const run = ++generation
+  statusPromise = undefined
   try {
     await api.auth.logout()
   } finally {
-    resetApiSecurityState()
-    state.authenticated = false
-    state.user = undefined
-    state.agent = undefined
+    if (run === generation) state.loading = false
   }
+  if (run !== generation) return
+  stopAppearanceSync()
+  resetApiSecurityState()
+  cancelLoginWallpaper()
+  state.authenticated = false
+  state.user = undefined
+  state.agent = undefined
+  state.appearance = undefined
+  state.checked = false
+  // Refresh public branding before routing back to login.
+  await refresh(true)
+}
+
+function takeAppearanceSnapshot(): AuthStatus['appearance'] {
+  const snapshot = state.appearance
+  // A later shell mount must revalidate instead of replaying an old login snapshot.
+  state.appearance = undefined
+  return snapshot
 }
 
 export function useSession() {
@@ -103,5 +142,6 @@ export function useSession() {
     loginPasskey,
     setup,
     logout,
+    takeAppearanceSnapshot,
   }
 }

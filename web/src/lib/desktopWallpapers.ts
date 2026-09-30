@@ -1,6 +1,5 @@
 import { readonly, ref } from 'vue'
 import { api } from '@/lib/api'
-import { forgetAuthWallpaperCopy, readAuthWallpaperCopy, rememberAuthWallpaperCopy } from '@/lib/authWallpaperCopy'
 import { rememberFileBase, scenePackFromWallpaper, scenePackThemeColors, type ScenePack } from '@/lib/scenePacks'
 import type { CustomWallpaper, CustomWallpaperList } from '@/types/api'
 import { useTheme } from '@/stores/theme'
@@ -8,8 +7,8 @@ import { THEME_COLOR_PRESETS, type ThemeColorIntent } from '@/theme/colors'
 
 /**
  * The one wallpaper choice shared by desktop mode, classic mode and Settings. Choosing a
- * wallpaper also applies its colour scheme. public/appearance-init.js reads the same key
- * before the app starts.
+ * wallpaper also applies its colour scheme. the shared appearance sync reads the same key
+ * for migration from older installations.
  */
 export const DESKTOP_WALLPAPER_KEY = 'kpanel:desktop-wallpaper:v1'
 
@@ -62,18 +61,12 @@ export function desktopWallpaperImage(id: DesktopWallpaperID): { src: string, ur
   const url = pack ? api.desktop.scenePackPosterURL(pack)
     : custom ? api.desktop.wallpaperImageURL(custom)
       : (DESKTOP_WALLPAPERS.find((wallpaper) => wallpaper.id === id) || DESKTOP_WALLPAPERS[0]).src
-  try {
-    const cached = window.sessionStorage.getItem(`kpanel:desktop-wallpaper-cache:v1:${id}`)
-    if (!custom && cached && cached.length <= 131072 && /^data:image\/webp;base64,[A-Za-z0-9+/]+=*$/.test(cached)) {
-      return { src: cached, url }
-    }
-  } catch { /* The image URL remains usable without optional session storage. */ }
   return { src: url, url }
 }
 
 const CUSTOM_WALLPAPER_PREFIX = 'custom:'
 const CUSTOM_WALLPAPER_ID = /^[0-9a-f]{32}$/
-/** How the chosen uploaded picture is framed; appearance-init.js applies it before the app starts. */
+/** Local framing cache for the selected uploaded picture. */
 export const CUSTOM_WALLPAPER_DISPLAY_KEY = 'kpanel:desktop-wallpaper-custom:v1'
 /** Above this mean brightness (0–100) the classic-mode veil is thickened. */
 export const BRIGHT_WALLPAPER_LUMINANCE = 50
@@ -136,7 +129,6 @@ const customUsage = ref<CustomWallpaperList['usage']>()
 function persist(id: DesktopWallpaperID): void {
   try {
     window.localStorage.setItem(DESKTOP_WALLPAPER_KEY, id)
-    window.dispatchEvent(new Event('kpanel:cache-desktop-wallpaper'))
   } catch {
     // The wallpaper still applies to this session when storage is unavailable.
   }
@@ -145,7 +137,6 @@ function persist(id: DesktopWallpaperID): void {
 function resetToClassic(): void {
   current.value = 'classic'
   applyCustomDisplay()
-  forgetAuthWallpaperCopy()
   persist('classic')
   window.dispatchEvent(new CustomEvent('kpanel:appearance-changed', { detail: { wallpaper: 'classic' } }))
 }
@@ -155,39 +146,6 @@ export function applySyncedWallpaper(id: DesktopWallpaperID): void {
   if (current.value !== id) applyCustomDisplay()
   current.value = id
   persist(id)
-  syncAuthWallpaperCopy(id)
-}
-
-function readCustomFocus(customID: string): { focusX: number, focusY: number } {
-  try {
-    const display = JSON.parse(window.localStorage.getItem(CUSTOM_WALLPAPER_DISPLAY_KEY) || 'null') as Partial<CustomWallpaper> | null
-    if (display?.id === customID && Number.isInteger(display.focusX) && Number.isInteger(display.focusY)) {
-      return { focusX: display.focusX!, focusY: display.focusY! }
-    }
-  } catch {
-    // Centred when the framing is unknown.
-  }
-  return { focusX: 500, focusY: 500 }
-}
-
-/**
- * Keeps this browser's sign-in copy (authWallpaperCopy.ts) in step with a private choice:
- * an uploaded picture, or a 3D scene's poster. A built-in wallpaper needs no copy.
- */
-function syncAuthWallpaperCopy(id: DesktopWallpaperID): void {
-  const customID = customWallpaperFromID(id)
-  const packID = scenePackFromWallpaper(id)
-  if (!customID && !packID) {
-    forgetAuthWallpaperCopy()
-    return
-  }
-  const focus = customID ? readCustomFocus(customID) : { focusX: 500, focusY: 500 }
-  const copy = readAuthWallpaperCopy()
-  // An existing copy is kept unless its framing changed (it was centred before the picture's
-  // focal point was known in this browser).
-  if (copy?.id === id && copy.focusX === focus.focusX && copy.focusY === focus.focusY) return
-  const url = customID ? api.desktop.wallpaperImageURL(customID) : api.desktop.scenePackPosterURL(packID!)
-  void rememberAuthWallpaperCopy(id, url, focus, () => current.value === id)
 }
 
 export function useDesktopWallpaper() {
@@ -230,13 +188,8 @@ export function useDesktopWallpaper() {
       if (packColors) applyScenePackTheme(packColors)
       if (custom?.theme) applyScenePackTheme({ ...custom.theme, signatureLinked: custom.theme.signature === custom.theme.brand })
       persist(id)
-      syncAuthWallpaperCopy(id)
-      window.dispatchEvent(new CustomEvent('kpanel:appearance-changed', { detail: { wallpaper: id } }))
+          window.dispatchEvent(new CustomEvent('kpanel:appearance-changed', { detail: { wallpaper: id } }))
       return true
-    },
-    /** Makes sure a private choice made earlier (or in another tab) has its sign-in copy. */
-    ensureAuthWallpaperCopy(): void {
-      syncAuthWallpaperCopy(current.value)
     },
     /** Falls back to the default wallpaper without touching the colors (a removed pack or picture). */
     resetToClassic,
@@ -260,7 +213,6 @@ export function useDesktopWallpaper() {
         return
       }
       applyCustomDisplay(wallpaper)
-      syncAuthWallpaperCopy(current.value)
     },
     /** Adds a just-uploaded wallpaper to the shared list. */
     customUploaded(wallpaper: CustomWallpaper): void {

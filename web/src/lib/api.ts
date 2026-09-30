@@ -22,6 +22,7 @@ import type {
   AuditEvent,
   AuthSession,
   AuthStatus,
+  LoginAppearance,
   ClusterController,
   ClusterHost,
   ClusterHostDetails,
@@ -1207,24 +1208,25 @@ export const api = {
         request<{ ceremonyId: string; publicKey: PasskeyRequestOptions }>('/auth/passkeys/login/begin', { method: 'POST', body, signal }),
       loginFinish: async (body: { ceremonyId: string; credential: PasskeyCredentialJSON; totpCode?: string }, signal?: AbortSignal): Promise<AuthStatus> => {
         const session = await request<AuthSession>('/auth/passkeys/login/finish', { method: 'POST', body, signal })
-        return { setupRequired: false, authenticated: true, user: session.user, csrfToken: session.csrfToken, expiresAt: session.expiresAt }
+        return { setupRequired: false, authenticated: true, appearance: session.appearance, user: session.user, csrfToken: session.csrfToken, expiresAt: session.expiresAt }
       },
     },
     status: async (signal?: AbortSignal): Promise<AuthStatus> => {
-      const bootstrap = await request<{ required: boolean }>('/auth/bootstrap', { signal })
+      const bootstrap = await request<{ required: boolean; appearance?: LoginAppearance }>('/auth/bootstrap', { signal })
       if (bootstrap.required) return { setupRequired: true, authenticated: false }
       try {
         const session = await request<AuthSession>('/auth/session', { signal })
         return {
           setupRequired: false,
           authenticated: true,
+          appearance: session.appearance,
           user: session.user,
           csrfToken: session.csrfToken,
           expiresAt: session.expiresAt,
         }
       } catch (error) {
         if (error instanceof ApiError && error.status === 401) {
-          return { setupRequired: false, authenticated: false }
+          return { setupRequired: false, authenticated: false, ...(bootstrap.appearance ? { loginAppearance: bootstrap.appearance } : {}) }
         }
         throw error
       }
@@ -1234,6 +1236,7 @@ export const api = {
       return {
         setupRequired: false,
         authenticated: true,
+        appearance: session.appearance,
         user: session.user,
         csrfToken: session.csrfToken,
         expiresAt: session.expiresAt,
@@ -1244,6 +1247,7 @@ export const api = {
       return {
         setupRequired: false,
         authenticated: true,
+        appearance: session.appearance,
         user: session.user,
         csrfToken: session.csrfToken,
         expiresAt: session.expiresAt,

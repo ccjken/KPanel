@@ -51,9 +51,8 @@ import {
 } from '@/lib/navigation'
 import { readSidebarCollapsed, writeSidebarCollapsed } from '@/lib/sidebarPreference'
 import { useClassicWallpaper } from '@/lib/classicWallpaper'
-import { customWallpaperFromID, useDesktopWallpaper } from '@/lib/desktopWallpapers'
-import { scenePackFromWallpaper } from '@/lib/scenePacks'
-import { startAppearanceSync, stopAppearanceSync } from '@/lib/appearanceSync'
+import { customWallpaperFromID, desktopWallpaperImage, useDesktopWallpaper } from '@/lib/desktopWallpapers'
+import { appearanceReady, startAppearanceSync, stopAppearanceSync } from '@/lib/appearanceSync'
 import DesktopWallpaper from '@/components/desktop/DesktopWallpaper.vue'
 import {
   detectKPanelUpdate,
@@ -112,12 +111,14 @@ const DesktopLoadingView = defineComponent({
         role: 'status',
         'aria-label': i18n.t('common.loading'),
       },
-      [h('div', { class: 'desktop__wallpaper', 'aria-hidden': 'true' }, [
-        h('div', { class: 'desktop__wallpaper-image' }),
+      appearanceReady.value ? [h('div', { class: 'desktop__wallpaper', 'aria-hidden': 'true' }, [
+        h('div', { class: 'desktop__wallpaper-image', style: {
+          backgroundImage: `url("${desktopWallpaperImage(wallpaperChoice.id.value).src}")`,
+        } }),
         h('div', { class: 'desktop__wallpaper-veil' }),
         h('div', { class: 'desktop__aurora desktop__aurora--one' }),
         h('div', { class: 'desktop__aurora desktop__aurora--two' }),
-      ])],
+      ])] : [],
     )
   },
 })
@@ -137,12 +138,9 @@ const DesktopView = defineAsyncComponent({
 })
 const desktopActive = computed(() => desktop.mode.value === 'desktop')
 const classicWallpaper = useClassicWallpaper()
-const classicBackdrop = computed(() => !desktopActive.value && classicWallpaper.level.value !== 'off')
-// A 3D scene pack chosen as the wallpaper (in desktop mode or Settings) keeps running behind the
-// classic pages. Desktop mode may have changed it, so the choice is re-read on the way back.
+const classicBackdrop = computed(() => appearanceReady.value && !desktopActive.value && classicWallpaper.level.value !== 'off')
+// Desktop and classic pages share the reconciled wallpaper, including installed scene packs.
 const wallpaperChoice = useDesktopWallpaper()
-const classicScenePack = computed(() => classicBackdrop.value ? scenePackFromWallpaper(wallpaperChoice.id.value) : undefined)
-watch(desktopActive, (active) => { if (!active) wallpaperChoice.refresh() }, { immediate: true })
 const DESKTOP_ENTRY_NOTICE_KEY = 'kpanel:desktop-entry-notice:v2'
 
 function readDesktopEntrySeen(): boolean {
@@ -286,15 +284,11 @@ async function refreshAgent(): Promise<void> {
   }
 }
 
-let shellMounted = false
+watch([appearanceReady, wallpaperChoice.id], ([ready, id]) => {
+  if (ready && customWallpaperFromID(id)) void wallpaperChoice.loadCustomWallpapers().catch(() => undefined)
+})
 onMounted(() => {
-  shellMounted = true
-  void startAppearanceSync().then(() => {
-    if (!shellMounted) return
-    if (customWallpaperFromID(wallpaperChoice.id.value)) void wallpaperChoice.loadCustomWallpapers().catch(() => undefined)
-    else wallpaperChoice.ensureAuthWallpaperCopy()
-    window.dispatchEvent(new Event('kpanel:cache-desktop-wallpaper'))
-  })
+  void startAppearanceSync(session.takeAppearanceSnapshot(), session.state.user?.id)
   void refreshAgent()
   agentTimer = window.setInterval(refreshAgent, 30_000)
   navigationWarmupTimer = window.setTimeout(() => {
@@ -303,7 +297,6 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  shellMounted = false
   stopAppearanceSync()
   desktopBrowserHistory.dispose()
   if (agentTimer) window.clearInterval(agentTimer)
@@ -323,8 +316,7 @@ watch(
 <template>
   <div class="app-shell">
     <div v-if="classicBackdrop" class="classic-backdrop" aria-hidden="true">
-      <DesktopWallpaper v-if="classicScenePack" class="classic-backdrop__wallpaper" :wallpaper-id="wallpaperChoice.id.value" :revision="wallpaperChoice.sceneRevision.value" :covered="false" />
-      <div v-else class="classic-backdrop__image" />
+      <DesktopWallpaper class="classic-backdrop__wallpaper" :wallpaper-id="wallpaperChoice.id.value" :revision="wallpaperChoice.sceneRevision.value" :covered="false" />
       <div class="classic-backdrop__veil" />
     </div>
     <Transition name="fade">

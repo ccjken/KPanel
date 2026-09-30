@@ -51,6 +51,41 @@ func listOne(t *testing.T, s *Store) View {
 	return list.Packs[0]
 }
 
+func TestInstalledPreviewIsBoundedLocalOnlyAndVerified(t *testing.T) {
+	p, files := fixturePack("orbit", "1.0.0")
+	fetch := fixtureFetch(t, &p, files)
+	var calls int
+	s := Open(t.TempDir(), func(ctx context.Context, address string, limit int64) ([]byte, error) {
+		calls++
+		return fetch(ctx, address, limit)
+	})
+	defer s.Close()
+	if _, err := s.InstalledPreview(p.ID, 256); !errors.Is(err, ErrNotFound) || calls != 0 {
+		t.Fatalf("missing preview: calls=%d err=%v", calls, err)
+	}
+	v := listOne(t, s)
+	if _, err := s.Install(context.Background(), p.ID, v.ResourceVersion); err != nil {
+		t.Fatal(err)
+	}
+	before := calls
+	if _, err := s.InstalledPreview(p.ID, 4); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("oversize preview: %v", err)
+	}
+	if body, err := s.InstalledPreview(p.ID, 256); err != nil || string(body) != "thumb" {
+		t.Fatalf("preview=%q err=%v", body, err)
+	}
+	if calls != before {
+		t.Fatal("installed preview fetched remote content")
+	}
+	item := s.state.Installed[p.ID]
+	if err := os.WriteFile(filepath.Join(s.root, "objects", item.Token, "thumb.webp"), []byte("wrong"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.InstalledPreview(p.ID, 256); err == nil {
+		t.Fatal("corrupt preview was served")
+	}
+}
+
 func TestAutoRouteReusesWorkingMirrorAndStillVerifiesFallback(t *testing.T) {
 	p, files := fixturePack("orbit", "1.0.0")
 	fixture := fixtureFetch(t, &p, files)

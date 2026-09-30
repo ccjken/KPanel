@@ -129,9 +129,10 @@ type agentAPI interface {
 }
 
 type authResponse struct {
-	User      auth.PublicUser `json:"user"`
-	CSRFToken string          `json:"csrfToken"`
-	ExpiresAt time.Time       `json:"expiresAt"`
+	Appearance appearanceResponse `json:"appearance"`
+	User       auth.PublicUser    `json:"user"`
+	CSRFToken  string             `json:"csrfToken"`
+	ExpiresAt  time.Time          `json:"expiresAt"`
 }
 
 func NewServer(config Config, authService *auth.Service, storage *store.Store, agent *AgentClient) (*Server, error) {
@@ -392,7 +393,12 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request) {
 			"checkedAt":       time.Now().UTC(),
 		})
 	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/auth/bootstrap":
-		s.writeJSON(w, http.StatusOK, map[string]bool{"required": !s.auth.IsInitialized()})
+		s.writeJSON(w, http.StatusOK, struct {
+			Required   bool             `json:"required"`
+			Appearance *loginAppearance `json:"appearance,omitempty"`
+		}{!s.auth.IsInitialized(), s.loginAppearance()})
+	case r.URL.Path == loginWallpaperPath || strings.HasPrefix(r.URL.Path, loginWallpaperPath+"/"):
+		s.handleLoginWallpaper(w, r)
 	case r.Method == http.MethodPost && r.URL.Path == "/api/v1/auth/bootstrap":
 		s.handleBootstrap(w, r)
 	case r.Method == http.MethodPost && r.URL.Path == "/api/v1/auth/login":
@@ -775,7 +781,8 @@ func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request) {
 	s.setAuthCookies(w, r, credentials)
 	_ = s.audit(r, credentials.User.ID, "auth.bootstrap", "user", credentials.User.ID, "success", nil)
 	s.writeJSON(w, http.StatusCreated, authResponse{
-		User: credentials.User, CSRFToken: credentials.CSRFToken, ExpiresAt: credentials.ExpiresAt,
+		Appearance: s.appearanceSnapshot(),
+		User:       credentials.User, CSRFToken: credentials.CSRFToken, ExpiresAt: credentials.ExpiresAt,
 	})
 }
 
@@ -820,7 +827,8 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	s.setAuthCookies(w, r, credentials)
 	_ = s.audit(r, credentials.User.ID, "auth.login", "session", "", "success", nil)
 	s.writeJSON(w, http.StatusOK, authResponse{
-		User: credentials.User, CSRFToken: credentials.CSRFToken, ExpiresAt: credentials.ExpiresAt,
+		Appearance: s.appearanceSnapshot(),
+		User:       credentials.User, CSRFToken: credentials.CSRFToken, ExpiresAt: credentials.ExpiresAt,
 	})
 }
 
@@ -1030,7 +1038,8 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 		csrfToken = ""
 	}
 	s.writeJSON(w, http.StatusOK, authResponse{
-		User: session.User, CSRFToken: csrfToken, ExpiresAt: session.ExpiresAt,
+		Appearance: s.appearanceSnapshot(),
+		User:       session.User, CSRFToken: csrfToken, ExpiresAt: session.ExpiresAt,
 	})
 }
 

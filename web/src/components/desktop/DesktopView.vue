@@ -48,6 +48,7 @@ import DesktopShortcutDialog, {
 import ModalDialog from '@/components/common/ModalDialog.vue'
 import DesktopWallpaperPicker from '@/components/desktop/DesktopWallpaperPicker.vue'
 import { useDesktopWallpaper, type DesktopWallpaperID } from '@/lib/desktopWallpapers'
+import { appearanceReady } from '@/lib/appearanceSync'
 import LogoMark from '@/components/common/LogoMark.vue'
 import { DEFAULT_WINDOW_GRADIENT, desktopApps, desktopRoutePath, findDesktopApp } from '@/lib/desktopApps'
 import {
@@ -386,7 +387,6 @@ const iconAnnouncement = ref('')
 const iconManagerOpen = ref(false)
 const wallpaperDialogOpen = ref(false)
 const wallpaperChoice = useDesktopWallpaper()
-wallpaperChoice.refresh()
 const desktopWallpaperID = computed(() => wallpaperChoice.id.value)
 const activeScenePack = computed(() => scenePackFromWallpaper(desktopWallpaperID.value))
 const coarseDesktopPointer = typeof window.matchMedia === 'function'
@@ -3799,7 +3799,7 @@ function onViewportResize(): void {
     @dragleave="onDesktopFileDragLeave"
     @drop="onDesktopFileDrop"
   >
-    <div class="desktop__wallpaper" :class="{ 'desktop__wallpaper--scene': liveScenePack }" aria-hidden="true">
+    <div v-if="appearanceReady" class="desktop__wallpaper" :class="{ 'desktop__wallpaper--scene': liveScenePack }" aria-hidden="true">
       <DesktopWallpaper
         ref="scenePackLayer"
         :wallpaper-id="desktopWallpaperID"

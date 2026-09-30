@@ -15,6 +15,11 @@ type appearanceResponse struct {
 	store.Appearance
 }
 
+func (s *Server) appearanceSnapshot() appearanceResponse {
+	value, version := s.store.Appearance()
+	return appearanceView(value, version)
+}
+
 func appearanceView(value *store.Appearance, version string) appearanceResponse {
 	if value == nil {
 		return appearanceResponse{ResourceVersion: version, Appearance: store.Appearance{

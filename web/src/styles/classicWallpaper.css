@@ -29,10 +29,6 @@
   filter: blur(var(--classic-wallpaper-blur)) saturate(var(--classic-wallpaper-saturate));
 }
 
-.classic-backdrop__image {
-  background: var(--classic-wallpaper-image, url('/wallpapers/kpanel-desktop.webp')) var(--desktop-wallpaper-position, center) / cover no-repeat;
-}
-
 /*
  * A live 3D scene pack sits under the same blur and veil. Behind pages it is never seen sharp,
  * so the pack renders at half resolution (a quarter of the pixels) and is scaled up to fill.
@@ -134,16 +130,16 @@ body:has(.classic-backdrop) {
 /*
  * Sign-in and first-run pages: with show-through on, the brand panel carries the chosen
  * wallpaper under a veil in the sidebar colour, so the headline stays as legible as on the
- * plain gradient. appearance-init.js sets --auth-wallpaper-image to a public built-in wallpaper
- * or to this browser's own copy of a private one (authWallpaperCopy.ts); the sign-in form keeps
- * its solid surface.
+ * plain gradient. The login bootstrap supplies the selected public preview.
+ * The sign-in form keeps its solid surface while the image loads.
  */
-:root[data-classic-wallpaper] .auth-layout__brand {
+:root[data-classic-wallpaper] .auth-layout__brand,
+:root[data-auth-wallpaper='server'] .auth-layout__brand {
   background:
     linear-gradient(160deg,
       color-mix(in srgb, var(--sidebar) var(--auth-wallpaper-veil-start), transparent),
       color-mix(in srgb, var(--sidebar) var(--auth-wallpaper-veil-end), transparent) 78%),
-    var(--auth-wallpaper-image, url('/wallpapers/kpanel-desktop.webp')) var(--auth-wallpaper-position, center) / cover no-repeat,
+    var(--auth-wallpaper-image, none) var(--auth-wallpaper-position, center) / cover no-repeat,
     var(--sidebar);
   --auth-wallpaper-veil-start: 60%;
   --auth-wallpaper-veil-end: 82%;
@@ -155,7 +151,8 @@ body:has(.classic-backdrop) {
 }
 
 /* A bright picture (the hazy dawn built-in, or a bright private copy) needs more veil for the muted copy. */
-:root[data-classic-wallpaper][data-auth-wallpaper-bright] .auth-layout__brand {
+:root[data-classic-wallpaper][data-auth-wallpaper-bright] .auth-layout__brand,
+:root[data-auth-wallpaper='server'][data-auth-wallpaper-bright] .auth-layout__brand {
   --auth-wallpaper-veil-start: 72%;
   --auth-wallpaper-veil-end: 86%;
 }
@@ -163,7 +160,8 @@ body:has(.classic-backdrop) {
 /* The explicit show-through choice keeps its wallpaper with reduced transparency.
  * Forced-colors still uses solid surfaces for high-contrast legibility. */
 @media (forced-colors: active) {
-  :root[data-classic-wallpaper] .auth-layout__brand {
+  :root[data-classic-wallpaper] .auth-layout__brand,
+  :root[data-auth-wallpaper='server'] .auth-layout__brand {
     background: var(--auth-brand-background);
   }
 

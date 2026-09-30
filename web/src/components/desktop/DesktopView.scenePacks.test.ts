@@ -4,11 +4,14 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import DesktopView from '@/components/desktop/DesktopView.vue'
 import { api } from '@/lib/api'
-import { useDesktopWallpaper } from '@/lib/desktopWallpapers'
+import { applySyncedWallpaper, useDesktopWallpaper } from '@/lib/desktopWallpapers'
 import { resetSceneMotionPreferenceForTest } from '@/lib/desktopScenes/motionPreference'
 import type { ScenePack, ScenePackSource } from '@/lib/scenePacks'
 import { resetDesktopModeForTest } from '@/stores/desktopMode'
 import { useTheme } from '@/stores/theme'
+
+// These fixtures exercise an authenticated desktop after its appearance has loaded.
+vi.mock('@/lib/appearanceSync', () => ({ appearanceReady: true }))
 
 const available: ScenePack = {
   resourceVersion: `sha256:${'a'.repeat(64)}`,
@@ -204,7 +207,7 @@ describe('DesktopView scene packs', () => {
     packs = [installed]
     vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('reduced-motion'), addEventListener: vi.fn(), removeEventListener: vi.fn() }))
     resetSceneMotionPreferenceForTest()
-    window.localStorage.setItem('kpanel:desktop-wallpaper:v1', 'pack:orbital-station')
+    applySyncedWallpaper('pack:orbital-station')
     const wrapper = mount(DesktopView, { attachTo: document.body })
     await settle()
     expect(wrapper.get('.desktop__wallpaper').classes()).not.toContain('desktop__wallpaper--scene')
@@ -218,7 +221,7 @@ describe('DesktopView scene packs', () => {
     stubPackAPI()
     const nextPack = { ...installed, id: 'neon-city' }
     packs = [installed, nextPack]
-    window.localStorage.setItem('kpanel:desktop-wallpaper:v1', 'pack:orbital-station')
+    applySyncedWallpaper('pack:orbital-station')
     const wrapper = mount(DesktopView, { attachTo: document.body })
     await sceneFrame(wrapper)
     expect(wrapper.get('.desktop-wallpaper-host').attributes('data-wallpaper-phase')).toBe('idle')
@@ -241,7 +244,7 @@ describe('DesktopView scene packs', () => {
   it('ignores a departed scene failure response after the selection changes', async () => {
     stubPackAPI()
     packs = [installed]
-    window.localStorage.setItem('kpanel:desktop-wallpaper:v1', 'pack:orbital-station')
+    applySyncedWallpaper('pack:orbital-station')
     const wrapper = mount(DesktopView, { attachTo: document.body })
     await settle()
     const oldFrame = await sceneFrame(wrapper)
@@ -269,7 +272,7 @@ describe('DesktopView scene packs', () => {
     const updated = { ...old, installedVersion: '1.0.1', fileBase: `/api/v1/desktop/scene-packs/orbital-station/files/${'b'.repeat(32)}/` }
     packs = [old]
     install.mockImplementationOnce(async () => { packs = [updated]; return updated })
-    window.localStorage.setItem('kpanel:desktop-wallpaper:v1', 'pack:orbital-station')
+    applySyncedWallpaper('pack:orbital-station')
     const wrapper = mount(DesktopView, { attachTo: document.body })
     await settle()
     const originalFrame = await sceneFrame(wrapper)
@@ -339,7 +342,7 @@ describe('DesktopView scene packs', () => {
   it('returns to the classic wallpaper only when a failed pack is really gone', async () => {
     stubPackAPI()
     packs = [installed]
-    window.localStorage.setItem('kpanel:desktop-wallpaper:v1', 'pack:orbital-station')
+    applySyncedWallpaper('pack:orbital-station')
     const wrapper = mount(DesktopView, { attachTo: document.body })
     await settle()
     expect(document.documentElement.dataset.desktopWallpaperScene).toBe('live')

@@ -540,6 +540,24 @@ func (s *Store) File(id, token, name string) ([]byte, string, error) {
 	return body, ContentType(name), nil
 }
 
+// InstalledPreview reads a size-bounded thumbnail already on disk; it never
+// refreshes the catalog or downloads an uninstalled pack for an anonymous page.
+func (s *Store) InstalledPreview(id string, maxBytes int64) ([]byte, error) {
+	s.mu.Lock()
+	item, installed := s.state.Installed[id]
+	s.mu.Unlock()
+	if !installed || maxBytes <= 0 {
+		return nil, ErrNotFound
+	}
+	for _, file := range item.Pack.Files {
+		if file.Path == "thumb.webp" && file.Size > 0 && file.Size <= maxBytes {
+			body, _, err := s.File(id, item.Token, "thumb.webp")
+			return body, err
+		}
+	}
+	return nil, ErrInvalid
+}
+
 func (s *Store) Image(ctx context.Context, id, name string) ([]byte, error) {
 	if !ValidID(id) || (name != "thumb.webp" && name != "poster.webp") {
 		return nil, ErrNotFound
