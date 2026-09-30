@@ -2,7 +2,7 @@ import { readonly, ref } from 'vue'
 
 // Classic mode can show the desktop wallpaper behind its pages. The picture is the shared wallpaper
 // (desktopWallpapers.ts; a 3D scene pack keeps running, at reduced resolution); only the strength
-// is chosen here. appearance-init.js applies the stored value before the app starts.
+// is chosen here. The shared sync applies the server value before a backdrop mounts.
 export const CLASSIC_WALLPAPER_KEY = 'kpanel:classic-wallpaper:v1'
 
 export type ClassicWallpaperLevel = 'off' | 'ambient' | 'clear'

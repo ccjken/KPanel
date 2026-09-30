@@ -1,6 +1,8 @@
 package panel
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"net/http"
 	"strconv"
@@ -80,12 +82,16 @@ func (s *Server) handleLoginWallpaper(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer file.Close()
-		w.Header().Set("Content-Type", contentType)
-		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
-		w.WriteHeader(http.StatusOK)
-		if r.Method == http.MethodGet {
-			_, _ = io.Copy(w, file)
+		if size > desktopwallpapers.MaxThumbBytes {
+			http.NotFound(w, r)
+			return
 		}
+		body, err := io.ReadAll(io.LimitReader(file, desktopwallpapers.MaxThumbBytes+1))
+		if err != nil || len(body) > desktopwallpapers.MaxThumbBytes {
+			http.NotFound(w, r)
+			return
+		}
+		writeLoginWallpaper(w, r, contentType, body)
 		return
 	}
 	if id := strings.TrimPrefix(value.Wallpaper, "pack:"); id != value.Wallpaper && s.scenePacks != nil {
@@ -98,13 +104,27 @@ func (s *Server) handleLoginWallpaper(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		w.Header().Set("Content-Type", "image/webp")
-		w.Header().Set("Content-Length", strconv.Itoa(len(body)))
-		w.WriteHeader(http.StatusOK)
-		if r.Method == http.MethodGet {
-			_, _ = w.Write(body)
-		}
+		writeLoginWallpaper(w, r, "image/webp", body)
 		return
 	}
 	http.NotFound(w, r)
+}
+
+// Revalidate the current selection before reusing bytes. Content-based ETags also
+// invalidate a scene poster when the installed pack changes without a new selection.
+func writeLoginWallpaper(w http.ResponseWriter, r *http.Request, contentType string, body []byte) {
+	digest := sha256.Sum256(body)
+	etag := `"` + hex.EncodeToString(digest[:]) + `"`
+	w.Header().Set("Cache-Control", "private, no-cache")
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Content-Type", contentType)
+	if r.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+	w.WriteHeader(http.StatusOK)
+	if r.Method == http.MethodGet {
+		_, _ = w.Write(body)
+	}
 }

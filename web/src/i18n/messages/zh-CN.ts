@@ -648,7 +648,7 @@ export const zhCNMessages = {
   'desktop.wallpaperTitle': '更换桌面壁纸和主题',
   'desktop.wallpaperDescription': '选择壁纸和主题色；登录后设置会同步到面板，其他浏览器打开时自动应用。',
   'desktop.appearanceSyncFailed': '外观设置未同步',
-  'desktop.appearanceSyncRetry': '已保留在当前浏览器；请刷新页面后重试。',
+  'desktop.appearanceSyncRetry': '尚未同步；恢复网络或刷新页面可重试。',
   'desktop.appearanceLoadFailed': '外观设置读取失败',
   'desktop.appearanceLoadFallback': '当前浏览器的设置仍可使用。',
   'desktop.wallpaperClassic': '经典流光',

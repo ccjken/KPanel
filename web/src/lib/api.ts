@@ -1208,7 +1208,7 @@ export const api = {
         request<{ ceremonyId: string; publicKey: PasskeyRequestOptions }>('/auth/passkeys/login/begin', { method: 'POST', body, signal }),
       loginFinish: async (body: { ceremonyId: string; credential: PasskeyCredentialJSON; totpCode?: string }, signal?: AbortSignal): Promise<AuthStatus> => {
         const session = await request<AuthSession>('/auth/passkeys/login/finish', { method: 'POST', body, signal })
-        return { setupRequired: false, authenticated: true, user: session.user, csrfToken: session.csrfToken, expiresAt: session.expiresAt }
+        return { setupRequired: false, authenticated: true, appearance: session.appearance, user: session.user, csrfToken: session.csrfToken, expiresAt: session.expiresAt }
       },
     },
     status: async (signal?: AbortSignal): Promise<AuthStatus> => {
@@ -1219,6 +1219,7 @@ export const api = {
         return {
           setupRequired: false,
           authenticated: true,
+          appearance: session.appearance,
           user: session.user,
           csrfToken: session.csrfToken,
           expiresAt: session.expiresAt,
@@ -1235,7 +1236,8 @@ export const api = {
       return {
         setupRequired: false,
         authenticated: true,
-        user: session.user,
+        appearance: session.appearance,
+          user: session.user,
         csrfToken: session.csrfToken,
         expiresAt: session.expiresAt,
       }
@@ -1245,7 +1247,8 @@ export const api = {
       return {
         setupRequired: false,
         authenticated: true,
-        user: session.user,
+        appearance: session.appearance,
+          user: session.user,
         csrfToken: session.csrfToken,
         expiresAt: session.expiresAt,
       }

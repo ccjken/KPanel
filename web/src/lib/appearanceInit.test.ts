@@ -1,171 +1,51 @@
 import { readFileSync } from 'node:fs'
 import { runInNewContext } from 'node:vm'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 const script = readFileSync(new URL('../../public/appearance-init.js', import.meta.url), 'utf8')
-function run(values: Record<string, string>, pathname = '/overview', blocked = false, cached: Record<string, string> = {}) {
+
+function boot(values: Record<string, string> = {}, pathname = '/overview', blocked = false) {
   const properties = new Map<string, string>()
   const classes = new Set<string>()
-  let resolveImage!: () => void
-  const imageReady = new Promise<void>(resolve => { resolveImage = resolve })
-  const root = { dataset: {} as Record<string, string>, style: { colorScheme: '', setProperty: (key: string, value: string) => properties.set(key, value) }, classList: { add: (name: string) => classes.add(name), remove: (name: string) => classes.delete(name) } }
-  runInNewContext(script, { document: { documentElement: root }, location: { pathname }, matchMedia: () => ({ matches: true }), localStorage: { getItem: (key: string) => { if (blocked) throw new Error('blocked'); return values[key] ?? null } }, sessionStorage: { getItem: (key: string) => cached[key] ?? null }, Image: class { decode() { return imageReady } }, fetch: async () => ({ ok: false }), window: { addEventListener() {} } })
-  return { root, properties, classes, resolveImage }
+  const root = { dataset: {} as Record<string, string>, style: { colorScheme: '', setProperty: (key: string, value: string) => properties.set(key, value) }, classList: { add: (name: string) => classes.add(name) } }
+  const fetch = vi.fn()
+  const Image = vi.fn()
+  runInNewContext(script, {
+    document: { documentElement: root }, location: { pathname }, matchMedia: () => ({ matches: true }),
+    localStorage: { getItem: (key: string) => { if (blocked) throw new Error('blocked'); return values[key] ?? null } },
+    sessionStorage: { getItem: (key: string) => values[key] ?? null }, fetch, Image,
+  })
+  return { root, properties, classes, fetch, Image }
 }
 
-describe('appearance before application startup', () => {
-  it.each(['light', 'dark'])('restores %s desktop and saved wallpaper', theme => {
-    const result = run({ 'kejilion-panel-theme': theme, 'kejilion-panel-desktop-mode': 'desktop', 'kpanel:desktop-wallpaper:v1': 'prism' })
+describe('appearance before server bootstrap', () => {
+  it.each(['light', 'dark'])('restores %s tokens without fetching a cached or default wallpaper', (theme) => {
+    const result = boot({ 'kejilion-panel-theme': theme, 'kejilion-panel-desktop-mode': 'desktop', 'kpanel:desktop-wallpaper:v1': 'prism' })
     expect(result.root.dataset.theme).toBe(theme)
     expect(result.root.style.colorScheme).toBe(theme)
     expect(result.classes.has('desktop-boot')).toBe(true)
-    expect(result.properties.get('--desktop-wallpaper-image')).toBe('url("/wallpapers/kpanel-desktop-prism.webp")')
+    expect(result.properties.get('--desktop-wallpaper-image')).toBe('none')
+    expect(result.fetch).not.toHaveBeenCalled()
+    expect(result.Image).not.toHaveBeenCalled()
   })
-  it('falls back to the system theme when storage is unavailable', () => {
-    const result = run({}, '/overview', true)
-    expect(result.root.dataset.theme).toBe('dark')
-    expect(result.classes.has('desktop-boot')).toBe(false)
+  it.each(['/login', '/setup', '/share/token', '/overview'])('does not request stale/private/default images on %s', (path) => {
+    const result = boot({ 'kpanel:desktop-wallpaper:v1': 'custom:' + 'a'.repeat(32), 'kpanel:auth-wallpaper:v1': '{"image":"data:image/webp;base64,UklGRg=="}' }, path)
+    expect(result.properties.get('--auth-wallpaper-image')).toBe('none')
+    expect(result.properties.has('--classic-wallpaper-image')).toBe(false)
+    expect(result.fetch).not.toHaveBeenCalled()
+    expect(result.Image).not.toHaveBeenCalled()
   })
-  it('never interpolates an untrusted wallpaper URL', () => {
-    expect(run({ 'kpanel:desktop-wallpaper:v1': 'https://example.com/image' }).properties.get('--desktop-wallpaper-image')).toBe('url("/wallpapers/kpanel-desktop.webp")')
+  it.each(['/login', '/setup', '/share/token'])('does not show the desktop boot layer on %s', (path) => {
+    expect(boot({ 'kejilion-panel-desktop-mode': 'desktop' }, path).classes.has('desktop-boot')).toBe(false)
   })
-  it.each(['/login', '/setup', '/share/token', '/share/file/token'])('does not paint a desktop behind %s', pathname => {
-    expect(run({ 'kejilion-panel-desktop-mode': 'desktop' }, pathname).classes.has('desktop-boot')).toBe(false)
+  it('keeps startup available when browser storage is blocked', () => {
+    expect(boot({}, '/overview', true).root.dataset.theme).toBe('dark')
   })
-  it('leaves classic mode without a startup wallpaper surface', () => {
-    expect(run({ 'kejilion-panel-desktop-mode': 'classic' }).classes.has('desktop-boot')).toBe(false)
-  })
-  it('holds the image and veil together until decoding finishes', async () => {
-    const result = run({ 'kejilion-panel-desktop-mode': 'desktop' })
-    expect(result.classes.has('desktop-wallpaper-loading')).toBe(true)
-    result.resolveImage()
-    for (let tick = 0; tick < 5; tick++) await Promise.resolve()
-    expect(result.classes.has('desktop-wallpaper-loading')).toBe(false)
-  })
-  it('reuses a bounded per-tab bitmap without interpolating cache URLs', () => {
-    const key = 'kpanel:desktop-wallpaper-cache:v1:classic'
-    expect(run({}, '/', false, { [key]: 'data:image/webp;base64,UklGRg==' }).properties.get('--desktop-wallpaper-image')).toContain('data:image/webp;')
-    expect(run({}, '/', false, { [key]: 'https://example.com/x.webp' }).properties.get('--desktop-wallpaper-image')).toBe('url("/wallpapers/kpanel-desktop.webp")')
-  })
-  function bootPack(stored: string, { reduced, always = false }: { reduced: boolean, always?: boolean }) {
-    const properties = new Map<string, string>()
-    const classes = new Set<string>()
-    const root = { dataset: {} as Record<string, string>, style: { colorScheme: '', setProperty: (key: string, value: string) => properties.set(key, value) }, classList: { add: (name: string) => classes.add(name), remove: (name: string) => classes.delete(name) } }
-    const sources: string[] = []
-    const values: Record<string, string> = { 'kpanel:desktop-wallpaper:v1': stored, ...(always ? { 'kpanel:desktop-scene-motion:v1': 'always' } : {}) }
-    runInNewContext(script, {
-      document: { documentElement: root },
-      location: { pathname: '/' },
-      matchMedia: (query: string) => ({ matches: query.includes('reduced-motion') && reduced }),
-      localStorage: { getItem: (key: string) => values[key] ?? null },
-      sessionStorage: { getItem: () => null },
-      Image: class {
-        set src(value: string) { sources.push(value) }
-        decode() { return sources.at(-1)?.includes('/scene-packs/') ? Promise.reject(new Error('404')) : Promise.resolve() }
-      },
-      fetch: async () => ({ ok: false }),
-      window: { addEventListener() {} },
-    })
-    return { root, properties, classes, sources }
-  }
-  it('preloads the live poster without hiding the scene while it decodes', () => {
-    for (const result of [bootPack('pack:orbital-station', { reduced: false }), bootPack('pack:orbital-station', { reduced: true, always: true })]) {
-      expect(result.root.dataset.desktopWallpaper).toBe('pack:orbital-station')
-      expect(result.root.dataset.desktopWallpaperScene).toBe('live')
-      expect(result.properties.get('--desktop-wallpaper-image')).toBe('url("/api/v1/desktop/scene-packs/orbital-station/poster")')
-      expect(result.classes.has('desktop-wallpaper-loading')).toBe(false)
-      expect(result.sources).toEqual(['/api/v1/desktop/scene-packs/orbital-station/poster'])
-    }
-  })
-  it('paints the scene pack poster for reduced motion and never trusts other pack keys', () => {
-    const result = run({ 'kpanel:desktop-wallpaper:v1': 'pack:orbital-station' })
-    expect(result.root.dataset.desktopWallpaperScene).toBeUndefined()
-    expect(result.properties.get('--desktop-wallpaper-image')).toBe('url("/api/v1/desktop/scene-packs/orbital-station/poster")')
-    for (const stored of ['pack:../../logout', 'pack:Orbital', 'pack:']) {
-      const forged = bootPack(stored, { reduced: false })
-      expect(forged.root.dataset.desktopWallpaperScene).toBeUndefined()
-      expect(forged.properties.get('--desktop-wallpaper-image')).toBe('url("/wallpapers/kpanel-desktop.webp")')
-    }
-  })
-  it('falls back to the classic wallpaper when a still pack poster is gone', async () => {
-    const result = bootPack('pack:orbital-station', { reduced: true })
-    for (let tick = 0; tick < 8; tick++) await Promise.resolve()
-    expect(result.sources).toEqual(['/api/v1/desktop/scene-packs/orbital-station/poster', '/wallpapers/kpanel-desktop.webp'])
-    expect(result.properties.get('--desktop-wallpaper-image')).toBe('url("/wallpapers/kpanel-desktop.webp")')
-    expect(result.root.dataset.desktopWallpaperFailed).toBeUndefined()
-  })
-  it('restores matching veil tokens but rejects URL-bearing CSS', () => {
-    const cached = { 'kpanel:desktop-backdrop:v1': JSON.stringify({ theme: 'dark', colors: null, tokens: { '--desktop-wallpaper-veil-dark': 'linear-gradient(145deg, rgb(0 0 0 / 26%), rgb(0 0 0 / 48%))', '--desktop-aurora-one': 'url(https://example.com/x)' } }) }
-    expect(run({}, '/', false, cached).properties.get('--desktop-wallpaper-veil-dark')).toContain('26%')
-    expect(run({}, '/', false, cached).properties.has('--desktop-aurora-one')).toBe(false)
-    expect(run({ 'kejilion-panel-colors': 'changed' }, '/', false, cached).properties.has('--desktop-wallpaper-veil-dark')).toBe(false)
-  })
-  it('boots an uploaded picture with its saved framing and never trusts other ids', () => {
-    const id = '0123456789abcdef0123456789abcdef'
-    const display = JSON.stringify({ id, focusX: 700, focusY: 320, luminance: 72 })
-    const result = run({ 'kpanel:desktop-wallpaper:v1': `custom:${id}`, 'kpanel:desktop-wallpaper-custom:v1': display })
-    expect(result.properties.get('--desktop-wallpaper-image')).toBe(`url("/api/v1/desktop/wallpapers/${id}/image")`)
-    expect(result.properties.get('--classic-wallpaper-image')).toBe(`url("/api/v1/desktop/wallpapers/${id}/image")`)
-    expect(result.properties.get('--desktop-wallpaper-position')).toBe('70% 32%')
-    expect(result.root.dataset.wallpaperBright).toBe('true')
-
-    const mismatched = run({ 'kpanel:desktop-wallpaper:v1': `custom:${id}`, 'kpanel:desktop-wallpaper-custom:v1': JSON.stringify({ id: 'f'.repeat(32), focusX: 1, focusY: 1, luminance: 90 }) })
-    expect(mismatched.properties.has('--desktop-wallpaper-position')).toBe(false)
-    expect(mismatched.root.dataset.wallpaperBright).toBeUndefined()
-    const outOfRange = run({ 'kpanel:desktop-wallpaper:v1': `custom:${id}`, 'kpanel:desktop-wallpaper-custom:v1': JSON.stringify({ id, focusX: '50%;x', focusY: 2000, luminance: 10 }) })
-    expect(outOfRange.properties.has('--desktop-wallpaper-position')).toBe(false)
-    for (const stored of ['custom:../../etc', `custom:${id.toUpperCase()}`, `custom:${id}x`]) {
-      expect(run({ 'kpanel:desktop-wallpaper:v1': stored }).properties.get('--desktop-wallpaper-image')).toBe('url("/wallpapers/kpanel-desktop.webp")')
-    }
-  })
-  it.each(['/login', '/setup', '/share/token'])('never requests or shows a private wallpaper on %s', pathname => {
-    const id = '0123456789abcdef0123456789abcdef'
-    const display = JSON.stringify({ id, focusX: 700, focusY: 320, luminance: 72 })
-    const custom = run({ 'kpanel:desktop-wallpaper:v1': `custom:${id}`, 'kpanel:desktop-wallpaper-custom:v1': display, 'kpanel:classic-wallpaper:v1': 'clear' }, pathname)
-    expect(custom.properties.get('--auth-wallpaper-image')).toBe('url("/wallpapers/kpanel-desktop.webp")')
-    expect(custom.properties.has('--desktop-wallpaper-image')).toBe(false)
-    expect(custom.properties.has('--classic-wallpaper-image')).toBe(false)
-    expect(custom.properties.has('--desktop-wallpaper-position')).toBe(false)
-    expect(custom.root.dataset.wallpaperBright).toBeUndefined()
-    expect(custom.root.dataset.classicWallpaper).toBe('clear')
-    expect(custom.root.dataset.desktopWallpaper).toBe('classic')
-    expect(custom.root.dataset.authWallpaper).toBe('classic')
-
-    const pack = run({ 'kpanel:desktop-wallpaper:v1': 'pack:orbital-station' }, pathname)
-    expect(pack.root.dataset.desktopWallpaperScene).toBeUndefined()
-    expect(pack.properties.get('--auth-wallpaper-image')).toBe('url("/wallpapers/kpanel-desktop.webp")')
-    expect(pack.properties.has('--desktop-wallpaper-image')).toBe(false)
-  })
-  it('shows the chosen built-in wallpaper before sign-in and the real one after', () => {
-    const login = run({ 'kpanel:desktop-wallpaper:v1': 'rift' }, '/login')
-    expect(login.properties.get('--auth-wallpaper-image')).toBe('url("/wallpapers/kpanel-desktop-rift.webp")')
-    expect(login.root.dataset.authWallpaper).toBe('rift')
-    const signedIn = run({ 'kpanel:desktop-wallpaper:v1': 'pack:orbital-station', 'kpanel:desktop-scene-motion:v1': 'always' }, '/overview')
-    expect(signedIn.properties.get('--auth-wallpaper-image')).toBe('url("/wallpapers/kpanel-desktop.webp")')
-    expect(signedIn.root.dataset.desktopWallpaperScene).toBe('live')
-  })
-  it('shows this browser\'s own copy of a private wallpaper before sign-in, and only a valid one for the chosen wallpaper', () => {
-    const id = '0123456789abcdef0123456789abcdef'
-    const image = 'data:image/webp;base64,UklGRg=='
-    const copy = (overrides = {}) => JSON.stringify({ id: `custom:${id}`, image, focusX: 700, focusY: 320, bright: true, ...overrides })
-    const chosen = { 'kpanel:desktop-wallpaper:v1': `custom:${id}`, 'kpanel:classic-wallpaper:v1': 'clear' }
-
-    const login = run({ ...chosen, 'kpanel:auth-wallpaper:v1': copy() }, '/login')
-    expect(login.properties.get('--auth-wallpaper-image')).toBe(`url("${image}")`)
-    expect(login.properties.get('--auth-wallpaper-position')).toBe('70% 32%')
-    expect(login.root.dataset.authWallpaper).toBe('private')
-    expect(login.root.dataset.authWallpaperBright).toBe('true')
-    expect(login.properties.has('--desktop-wallpaper-image')).toBe(false)
-
-    for (const bad of [copy({ id: 'pack:orbital-station' }), copy({ image: 'https://example.com/x.webp' }), copy({ image: 'data:image/svg+xml;base64,PHN2Zz4=' }), copy({ focusX: '50%' }), copy({ image: `data:image/webp;base64,${'A'.repeat(400001)}` }), '{broken']) {
-      const fallback = run({ ...chosen, 'kpanel:auth-wallpaper:v1': bad }, '/login')
-      expect(fallback.properties.get('--auth-wallpaper-image')).toBe('url("/wallpapers/kpanel-desktop.webp")')
-      expect(fallback.root.dataset.authWallpaper).toBe('classic')
-      expect(fallback.root.dataset.authWallpaperBright).toBeUndefined()
-    }
-
-    const horizon = run({ 'kpanel:desktop-wallpaper:v1': 'horizon' }, '/login')
-    expect(horizon.root.dataset.authWallpaperBright).toBe('true')
-    expect(horizon.properties.get('--auth-wallpaper-position')).toBe('center')
+  it('accepts matching color tokens but rejects CSS URL injection', () => {
+    const cache = JSON.stringify({ theme: 'dark', colors: null, tokens: { '--desktop-wallpaper-veil-dark': 'linear-gradient(145deg, rgb(0 0 0 / 26%), rgb(0 0 0 / 48%))', '--desktop-aurora-one': 'url(https://example.com/x)' } })
+    const result = boot({ 'kpanel:desktop-backdrop:v1': cache })
+    expect(result.properties.get('--desktop-wallpaper-veil-dark')).toContain('26%')
+    expect(result.properties.has('--desktop-aurora-one')).toBe(false)
+    expect(boot({ 'kpanel:desktop-backdrop:v1': cache, 'kejilion-panel-colors': 'changed' }).properties.has('--desktop-wallpaper-veil-dark')).toBe(false)
   })
 })

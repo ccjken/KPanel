@@ -634,7 +634,7 @@ export const zhTWMessages = {
   "desktop.wallpaperTitle": "更換桌面桌布和主題",
   "desktop.wallpaperDescription": "選擇桌布和主題色；登入後設定會同步到面板，其他瀏覽器開啟時自動套用。",
   "desktop.appearanceSyncFailed": "外觀設定未同步",
-  "desktop.appearanceSyncRetry": "已保留在目前瀏覽器；請重新整理頁面後再試。",
+  "desktop.appearanceSyncRetry": "尚未同步；恢復網路或重新整理頁面可重試。",
   "desktop.appearanceLoadFailed": "外觀設定讀取失敗",
   "desktop.appearanceLoadFallback": "目前瀏覽器的設定仍可使用。",
   "desktop.wallpaperClassic": "經典流光",

@@ -387,7 +387,6 @@ const iconAnnouncement = ref('')
 const iconManagerOpen = ref(false)
 const wallpaperDialogOpen = ref(false)
 const wallpaperChoice = useDesktopWallpaper()
-wallpaperChoice.refresh()
 const desktopWallpaperID = computed(() => wallpaperChoice.id.value)
 const activeScenePack = computed(() => scenePackFromWallpaper(desktopWallpaperID.value))
 const coarseDesktopPointer = typeof window.matchMedia === 'function'

@@ -14,17 +14,6 @@ const wallpapersAPI = vi.hoisted(() => ({
   scenePackPosterURL: (id: string) => `/api/v1/desktop/scene-packs/${id}/poster`,
 }))
 vi.mock('@/lib/api', () => ({ api: { desktop: wallpapersAPI } }))
-const authCopy = vi.hoisted(() => ({
-  stored: undefined as { id: string, focusX: number, focusY: number } | undefined,
-  remember: vi.fn(async (_id: string, _url: string, _focus: { focusX: number, focusY: number }, _stillChosen: () => boolean) => true),
-  forget: vi.fn(),
-}))
-vi.mock('@/lib/authWallpaperCopy', () => ({
-  readAuthWallpaperCopy: () => authCopy.stored,
-  rememberAuthWallpaperCopy: authCopy.remember,
-  forgetAuthWallpaperCopy: authCopy.forget,
-}))
-
 import type { CustomWallpaper } from '@/types/api'
 import {
   applySyncedWallpaper,
@@ -49,14 +38,9 @@ describe('shared desktop wallpaper', () => {
   beforeEach(() => {
     window.localStorage.clear()
     theme.setColors.mockClear()
-    authCopy.stored = undefined
-    authCopy.remember.mockClear()
-    authCopy.forget.mockClear()
   })
 
-  it('applies a static wallpaper with its colors, saves it and asks the boot script to refresh', () => {
-    const cache = vi.fn()
-    window.addEventListener('kpanel:cache-desktop-wallpaper', cache)
+  it('applies a static wallpaper and its colors without a second bitmap cache', () => {
     const wallpaper = useDesktopWallpaper()
 
     expect(wallpaper.select('orbit')).toBe(true)
@@ -64,8 +48,6 @@ describe('shared desktop wallpaper', () => {
     expect(wallpaper.id.value).toBe('orbit')
     expect(window.localStorage.getItem(DESKTOP_WALLPAPER_KEY)).toBe('orbit')
     expect(theme.setColors).toHaveBeenCalledWith(DESKTOP_WALLPAPERS[1].themePreset.colors)
-    expect(cache).toHaveBeenCalledTimes(1)
-    window.removeEventListener('kpanel:cache-desktop-wallpaper', cache)
   })
 
   it('applies a scene pack with the colors of the listed pack and resets without touching colors', () => {
@@ -151,42 +133,4 @@ describe('shared desktop wallpaper', () => {
     expect(window.localStorage.getItem(CUSTOM_WALLPAPER_DISPLAY_KEY)).toBeNull()
   })
 
-  it('keeps a sign-in copy for private wallpapers only, framed at the focal point', () => {
-    const wallpaper = useDesktopWallpaper()
-    wallpaper.select(customWallpaperID(uploaded.id), uploaded)
-    expect(authCopy.remember).toHaveBeenCalledWith(
-      `custom:${uploaded.id}`, `/api/v1/desktop/wallpapers/${uploaded.id}/image`, { focusX: 700, focusY: 320 }, expect.any(Function),
-    )
-    const stillChosen = authCopy.remember.mock.calls[0]![3]
-    expect(stillChosen()).toBe(true)
-
-    authCopy.remember.mockClear()
-    wallpaper.select('pack:orbital-station')
-    expect(authCopy.remember).toHaveBeenCalledWith(
-      'pack:orbital-station', '/api/v1/desktop/scene-packs/orbital-station/poster', { focusX: 500, focusY: 500 }, expect.any(Function),
-    )
-    expect(stillChosen()).toBe(false)
-
-    authCopy.stored = { id: 'pack:orbital-station', focusX: 500, focusY: 500 }
-    authCopy.remember.mockClear()
-    wallpaper.ensureAuthWallpaperCopy()
-    expect(authCopy.remember).not.toHaveBeenCalled()
-
-    wallpaper.select('rift')
-    expect(authCopy.forget).toHaveBeenCalledTimes(1)
-    wallpaper.resetToClassic()
-    expect(authCopy.forget).toHaveBeenCalledTimes(2)
-  })
-
-  it('reframes a centred sign-in copy once the upload list confirms the focal point', async () => {
-    window.localStorage.setItem('kpanel:desktop-wallpaper:v1', `custom:${uploaded.id}`)
-    const wallpaper = useDesktopWallpaper()
-    wallpaper.refresh()
-    authCopy.stored = { id: `custom:${uploaded.id}`, focusX: 500, focusY: 500 }
-    wallpapersAPI.wallpapers.mockResolvedValue({ wallpapers: [uploaded], usage: { count: 1, bytes: 2_040_000, maxCount: 12, maxBytes: 48 << 20 } })
-    await wallpaper.loadCustomWallpapers()
-    expect(authCopy.remember).toHaveBeenCalledWith(
-      `custom:${uploaded.id}`, `/api/v1/desktop/wallpapers/${uploaded.id}/image`, { focusX: 700, focusY: 320 }, expect.any(Function),
-    )
-  })
 })

@@ -647,7 +647,7 @@ export const enUSMessages = {
   'desktop.wallpaperTitle': 'Change desktop wallpaper and theme',
   'desktop.wallpaperDescription': 'Choose a wallpaper and color theme. After sign-in, the panel syncs them across browsers.',
   'desktop.appearanceSyncFailed': 'Appearance was not synced',
-  'desktop.appearanceSyncRetry': 'Saved in this browser. Refresh the page to retry.',
+  'desktop.appearanceSyncRetry': 'Not synced yet. Reconnect or refresh the page to retry.',
   'desktop.appearanceLoadFailed': 'Could not load appearance settings',
   'desktop.appearanceLoadFallback': 'This browser can still use its local settings.',
   'desktop.wallpaperClassic': 'Classic Flow',

@@ -4,7 +4,11 @@ import { applyLoginTheme } from '@/stores/theme'
 
 let generation = 0
 
-export function cancelLoginWallpaper(): void { generation++ }
+export function cancelLoginWallpaper(): void {
+  generation++
+  document.documentElement.style.setProperty('--auth-wallpaper-image', 'none')
+  delete document.documentElement.dataset.authWallpaper
+}
 
 /** The session guard calls this before displaying the login form. */
 export function applyLoginAppearance(value: LoginAppearance): void {

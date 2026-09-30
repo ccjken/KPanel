@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -77,12 +78,19 @@ func TestLoginWallpaperOnlyExposesCurrentThumbnailAndRevokesPreviousURL(t *testi
 	}
 	address := appearance.Wallpaper.URL
 	response := performRequest(s, http.MethodGet, address, nil, nil)
-	if response.Code != 200 || !bytes.Equal(response.Body.Bytes(), thumb) || response.Header().Get("Cache-Control") != "no-store" || response.Header().Get("Content-Type") != "image/jpeg" {
+	if response.Code != 200 || !bytes.Equal(response.Body.Bytes(), thumb) || response.Header().Get("Cache-Control") != "private, no-cache" || response.Header().Get("Content-Type") != "image/jpeg" {
 		t.Fatalf("thumbnail: %d %v", response.Code, response.Header())
 	}
 	head := performRequest(s, http.MethodHead, address, nil, nil)
 	if head.Code != 200 || head.Body.Len() != 0 || head.Header().Get("Content-Length") != response.Header().Get("Content-Length") {
 		t.Fatalf("HEAD: %d %v", head.Code, head.Header())
+	}
+	conditional := httptest.NewRequest(http.MethodGet, address, nil)
+	conditional.Header.Set("If-None-Match", response.Header().Get("ETag"))
+	cached := httptest.NewRecorder()
+	s.ServeHTTP(cached, conditional)
+	if cached.Code != http.StatusNotModified || cached.Body.Len() != 0 {
+		t.Fatalf("unchanged thumbnail transferred again: %d", cached.Code)
 	}
 	for _, path := range []string{address + "?image=original", address + "/image", loginWallpaperPath + "/" + item.ID, loginWallpaperPath + "/" + strings.Repeat("0", 64)} {
 		if r := performRequest(s, http.MethodGet, path, nil, nil); r.Code != 404 {
@@ -100,8 +108,25 @@ func TestLoginWallpaperOnlyExposesCurrentThumbnailAndRevokesPreviousURL(t *testi
 		}
 	}
 	savedLoginAppearance(t, s, "orbit")
+	revoked := httptest.NewRecorder()
+	s.ServeHTTP(revoked, conditional)
+	if revoked.Code != http.StatusNotFound {
+		t.Fatalf("cached preview bypassed revocation: %d", revoked.Code)
+	}
 	if r := performRequest(s, http.MethodGet, address, nil, nil); r.Code != 404 {
 		t.Fatalf("revoked preview: %d", r.Code)
+	}
+}
+
+func TestLoginWallpaperCacheTracksContentChanges(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/preview", nil)
+	first := httptest.NewRecorder()
+	writeLoginWallpaper(first, request, "image/webp", []byte("first"))
+	request.Header.Set("If-None-Match", first.Header().Get("ETag"))
+	updated := httptest.NewRecorder()
+	writeLoginWallpaper(updated, request, "image/webp", []byte("updated scene poster"))
+	if updated.Code != 200 || updated.Header().Get("ETag") == first.Header().Get("ETag") {
+		t.Fatal("poster update reused an outdated cache entry")
 	}
 }
 

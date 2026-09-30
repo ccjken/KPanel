@@ -41,6 +41,7 @@ export interface AuthStatus {
   csrfToken?: string
   expiresAt?: string
   agent?: AgentStatus
+  appearance?: AppearanceSettings
   loginAppearance?: LoginAppearance
 }
 
@@ -64,6 +65,7 @@ export interface LoginRequest {
 }
 
 export interface AuthSession {
+  appearance?: AppearanceSettings
   user: User
   csrfToken?: string
   expiresAt?: string

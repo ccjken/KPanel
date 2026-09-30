@@ -63,3 +63,22 @@ func TestAppearanceSettingsAuthenticationValidationAndConflict(t *testing.T) {
 		t.Fatalf("failed writes changed setting: %#v", reread)
 	}
 }
+
+func TestAuthSessionCarriesCurrentAppearance(t *testing.T) {
+	server, tokenPath := newTestServer(t)
+	session, csrf := bootstrapCookies(t, server, tokenPath)
+	for _, wallpaper := range []string{"orbit", "prism"} {
+		savedLoginAppearance(t, server, wallpaper)
+		response := authenticatedSiteRequest(server, session, csrf, http.MethodGet, "/api/v1/auth/session", nil, false)
+		var payload authResponse
+		if response.Code != http.StatusOK {
+			t.Fatalf("session: %d", response.Code)
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if !payload.Appearance.Configured || payload.Appearance.ResourceVersion == "" || payload.Appearance.Wallpaper != wallpaper {
+			t.Fatalf("stale or incomplete session appearance: %+v", payload.Appearance)
+		}
+	}
+}
