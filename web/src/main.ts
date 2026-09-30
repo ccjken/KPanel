@@ -17,6 +17,8 @@ async function bootstrap(): Promise<void> {
   await nextTick()
   document.documentElement.classList.remove('desktop-boot')
   document.getElementById('desktop-boot')?.remove()
+  document.documentElement.classList.remove('classic-wallpaper-boot')
+  document.getElementById('classic-wallpaper-boot')?.remove()
 }
 
 void bootstrap()

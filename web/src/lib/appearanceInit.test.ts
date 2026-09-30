@@ -7,18 +7,42 @@ const script = readFileSync(new URL('../../public/appearance-init.js', import.me
 function boot(values: Record<string, string> = {}, pathname = '/overview', blocked = false) {
   const properties = new Map<string, string>()
   const classes = new Set<string>()
-  const root = { dataset: {} as Record<string, string>, style: { colorScheme: '', setProperty: (key: string, value: string) => properties.set(key, value) }, classList: { add: (name: string) => classes.add(name) } }
+  const listeners = new Map<string, (event: { detail: { id: string } }) => void>()
+  const root = { dataset: {} as Record<string, string>, style: { colorScheme: '', setProperty: (key: string, value: string) => properties.set(key, value) }, classList: { add: (name: string) => classes.add(name), remove: (name: string) => classes.delete(name) } }
   const fetch = vi.fn()
-  const Image = vi.fn()
+  const Image = vi.fn(function () { return { decode: () => Promise.resolve() } })
   runInNewContext(script, {
     document: { documentElement: root }, location: { pathname }, matchMedia: () => ({ matches: true }),
     localStorage: { getItem: (key: string) => { if (blocked) throw new Error('blocked'); return values[key] ?? null } },
-    sessionStorage: { getItem: (key: string) => values[key] ?? null }, fetch, Image,
+    sessionStorage: { getItem: (key: string) => values[key] ?? null, setItem: (key: string, value: string) => { values[key] = value }, removeItem: (key: string) => { delete values[key] } }, fetch, Image,
+    window: { addEventListener: (name: string, listener: (event: { detail: { id: string } }) => void) => listeners.set(name, listener) },
   })
-  return { root, properties, classes, fetch, Image }
+  return { root, properties, classes, fetch, Image, cache: (id: string) => listeners.get('kpanel:cache-classic-wallpaper')?.({ detail: { id } }) }
 }
 
 describe('appearance before server bootstrap', () => {
+  it('restores the last public built-in bitmap on a classic refresh without fetching or writing settings', () => {
+    const result = boot({ 'kejilion-panel-desktop-mode': 'classic', 'kpanel:classic-wallpaper:v1': 'clear', 'kpanel:desktop-wallpaper:v1': 'prism', 'kpanel:desktop-wallpaper-cache:v1:prism': 'data:image/webp;base64,UklGRg==' })
+    expect(result.classes.has('classic-wallpaper-boot')).toBe(true)
+    expect(result.properties.get('--classic-wallpaper-image')).toBe('url("data:image/webp;base64,UklGRg==")')
+    expect(result.Image).toHaveBeenCalledOnce()
+    expect(result.fetch).not.toHaveBeenCalled()
+  })
+  it.each(['/login', '/setup', '/share/token'])('does not carry a classic refresh preview onto %s', pathname => {
+    const result = boot({ 'kpanel:classic-wallpaper:v1': 'clear', 'kpanel:desktop-wallpaper:v1': 'prism', 'kpanel:desktop-wallpaper-cache:v1:prism': 'data:image/webp;base64,UklGRg==' }, pathname)
+    expect(result.classes.has('classic-wallpaper-boot')).toBe(false)
+    expect(result.properties.has('--classic-wallpaper-image')).toBe(false)
+    expect(result.Image).not.toHaveBeenCalled()
+  })
+  it('ignores cache URLs and never requests private assets through the bitmap cache event', () => {
+    const result = boot({ 'kpanel:classic-wallpaper:v1': 'clear', 'kpanel:desktop-wallpaper:v1': 'prism', 'kpanel:desktop-wallpaper-cache:v1:prism': 'https://example.com/x.webp' })
+    expect(result.classes.has('classic-wallpaper-boot')).toBe(false)
+    expect(result.properties.get('--classic-wallpaper-image')).toBe('url("/wallpapers/kpanel-desktop-prism.webp")')
+    for (const id of ['pack:orbital-station', `custom:${'a'.repeat(32)}`, '../../logout']) result.cache(id)
+    expect(result.fetch).not.toHaveBeenCalled()
+    result.cache('orbit')
+    expect(result.fetch).toHaveBeenCalledWith('/wallpapers/kpanel-desktop-orbit.webp', { cache: 'force-cache' })
+  })
   it.each(['light', 'dark'])('restores %s tokens without fetching a cached or default wallpaper', (theme) => {
     const result = boot({ 'kejilion-panel-theme': theme, 'kejilion-panel-desktop-mode': 'desktop', 'kpanel:desktop-wallpaper:v1': 'prism' })
     expect(result.root.dataset.theme).toBe(theme)

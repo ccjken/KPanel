@@ -22,6 +22,7 @@ import {
   customWallpaperID,
   DESKTOP_WALLPAPER_KEY,
   DESKTOP_WALLPAPERS,
+  desktopWallpaperImage,
   isDesktopWallpaperID,
   useDesktopWallpaper,
   wallpaperFocusPosition,
@@ -37,10 +38,11 @@ const uploaded: CustomWallpaper = {
 describe('shared desktop wallpaper', () => {
   beforeEach(() => {
     window.localStorage.clear()
+    window.sessionStorage.clear()
     theme.setColors.mockClear()
   })
 
-  it('applies a static wallpaper and its colors without a second bitmap cache', () => {
+  it('applies a static wallpaper and its colors', () => {
     const wallpaper = useDesktopWallpaper()
 
     expect(wallpaper.select('orbit')).toBe(true)
@@ -48,6 +50,23 @@ describe('shared desktop wallpaper', () => {
     expect(wallpaper.id.value).toBe('orbit')
     expect(window.localStorage.getItem(DESKTOP_WALLPAPER_KEY)).toBe('orbit')
     expect(theme.setColors).toHaveBeenCalledWith(DESKTOP_WALLPAPERS[1].themePreset.colors)
+  })
+
+  it('uses only the matching bounded built-in cache and replaces it with the server choice', () => {
+    const bitmap = 'data:image/webp;base64,UklGRg=='
+    window.sessionStorage.setItem('kpanel:desktop-wallpaper-cache:v1:prism', bitmap)
+    applySyncedWallpaper('prism')
+    expect(document.documentElement.style.getPropertyValue('--classic-wallpaper-image')).toBe(`url("${bitmap}")`)
+    applySyncedWallpaper('orbit')
+    expect(document.documentElement.style.getPropertyValue('--classic-wallpaper-image')).toBe('url("/wallpapers/kpanel-desktop-orbit.webp")')
+    for (const id of ['pack:neon-city', `custom:${uploaded.id}`] as const) {
+      window.sessionStorage.setItem(`kpanel:desktop-wallpaper-cache:v1:${id}`, bitmap)
+      expect(desktopWallpaperImage(id).src).toMatch(/^\/api\/v1\//)
+    }
+    for (const invalid of ['https://example.com/x.webp', 'data:image/svg+xml;base64,PHN2Zz4=', `data:image/webp;base64,${'A'.repeat(131073)}`]) {
+      window.sessionStorage.setItem('kpanel:desktop-wallpaper-cache:v1:prism', invalid)
+      expect(desktopWallpaperImage('prism').src).toBe('/wallpapers/kpanel-desktop-prism.webp')
+    }
   })
 
   it('applies a scene pack with the colors of the listed pack and resets without touching colors', () => {

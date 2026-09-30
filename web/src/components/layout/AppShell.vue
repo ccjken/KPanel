@@ -53,6 +53,7 @@ import { readSidebarCollapsed, writeSidebarCollapsed } from '@/lib/sidebarPrefer
 import { useClassicWallpaper } from '@/lib/classicWallpaper'
 import { customWallpaperFromID, desktopWallpaperImage, useDesktopWallpaper } from '@/lib/desktopWallpapers'
 import { appearanceReady, startAppearanceSync, stopAppearanceSync } from '@/lib/appearanceSync'
+import { scenePackFromWallpaper } from '@/lib/scenePacks'
 import DesktopWallpaper from '@/components/desktop/DesktopWallpaper.vue'
 import {
   detectKPanelUpdate,
@@ -141,6 +142,7 @@ const classicWallpaper = useClassicWallpaper()
 const classicBackdrop = computed(() => appearanceReady.value && !desktopActive.value && classicWallpaper.level.value !== 'off')
 // Desktop and classic pages share the reconciled wallpaper, including installed scene packs.
 const wallpaperChoice = useDesktopWallpaper()
+const classicScenePack = computed(() => scenePackFromWallpaper(wallpaperChoice.id.value))
 const DESKTOP_ENTRY_NOTICE_KEY = 'kpanel:desktop-entry-notice:v2'
 
 function readDesktopEntrySeen(): boolean {
@@ -316,7 +318,8 @@ watch(
 <template>
   <div class="app-shell">
     <div v-if="classicBackdrop" class="classic-backdrop" aria-hidden="true">
-      <DesktopWallpaper class="classic-backdrop__wallpaper" :wallpaper-id="wallpaperChoice.id.value" :revision="wallpaperChoice.sceneRevision.value" :covered="false" />
+      <DesktopWallpaper v-if="classicScenePack" class="classic-backdrop__wallpaper" :wallpaper-id="wallpaperChoice.id.value" :revision="wallpaperChoice.sceneRevision.value" :covered="false" />
+      <div v-else class="classic-backdrop__image" />
       <div class="classic-backdrop__veil" />
     </div>
     <Transition name="fade">

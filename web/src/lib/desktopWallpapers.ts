@@ -61,6 +61,10 @@ export function desktopWallpaperImage(id: DesktopWallpaperID): { src: string, ur
   const url = pack ? api.desktop.scenePackPosterURL(pack)
     : custom ? api.desktop.wallpaperImageURL(custom)
       : (DESKTOP_WALLPAPERS.find((wallpaper) => wallpaper.id === id) || DESKTOP_WALLPAPERS[0]).src
+  try {
+    const cached = window.sessionStorage.getItem(`kpanel:desktop-wallpaper-cache:v1:${id}`)
+    if (!pack && !custom && cached && cached.length <= 131072 && /^data:image\/webp;base64,[A-Za-z0-9+/]+=*$/.test(cached)) return { src: cached, url }
+  } catch { /* The image URL remains usable without optional session storage. */ }
   return { src: url, url }
 }
 
@@ -132,6 +136,8 @@ function persist(id: DesktopWallpaperID): void {
   } catch {
     // The wallpaper still applies to this session when storage is unavailable.
   }
+  document.documentElement.style.setProperty('--classic-wallpaper-image', `url("${desktopWallpaperImage(id).src}")`)
+  window.dispatchEvent(new CustomEvent('kpanel:cache-classic-wallpaper', { detail: { id } }))
 }
 
 function resetToClassic(): void {

@@ -10,13 +10,22 @@
  *   clear   — cards become translucent as well, for a lighter, desktop-like classic mode.
  */
 
-.classic-backdrop {
+#classic-wallpaper-boot { display: none; }
+html.classic-wallpaper-boot #classic-wallpaper-boot { display: block; }
+html.classic-wallpaper-boot body { background: transparent; }
+
+.classic-backdrop,
+#classic-wallpaper-boot {
   position: fixed;
   z-index: -1;
   inset: 0;
   overflow: hidden;
   pointer-events: none;
   background: var(--page-ambient-background);
+}
+
+.classic-backdrop__image {
+  background: var(--classic-wallpaper-image, none) var(--desktop-wallpaper-position, center) / cover no-repeat;
 }
 
 /* Keep the themed page beneath a still picture while it loads or falls back. */
@@ -170,11 +179,13 @@ body:has(.classic-backdrop) {
     background: var(--auth-brand-background);
   }
 
-  .classic-backdrop {
+  .classic-backdrop,
+  html.classic-wallpaper-boot #classic-wallpaper-boot {
     display: none;
   }
 
-  body:has(.classic-backdrop) {
+  body:has(.classic-backdrop),
+  html.classic-wallpaper-boot body {
     background: var(--page-ambient-background);
   }
 
