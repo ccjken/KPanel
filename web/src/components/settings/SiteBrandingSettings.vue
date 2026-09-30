@@ -9,6 +9,8 @@ import { prepareSiteIcon } from '@/lib/siteBranding'
 
 const i18n = useI18n()
 const form = reactive({ name: '', icon: '' })
+let baseline = { name: '', icon: '' }
+let resetAll = false
 const loading = ref(true)
 const loaded = ref(false)
 const busy = ref(false)
@@ -25,6 +27,8 @@ async function load(): Promise<void> {
     if (controller.signal.aborted) return
     form.name = value.branding?.name || ''
     form.icon = value.branding?.icon || ''
+    baseline = { ...form }
+    resetAll = false
     loaded.value = true
   } catch {
     if (!controller.signal.aborted) error.value = i18n.t('branding.loadFailed')
@@ -47,6 +51,7 @@ async function chooseIcon(event: Event): Promise<void> {
 }
 
 function reset(): void {
+  resetAll = true
   form.name = ''
   form.icon = ''
   saved.value = false
@@ -64,19 +69,30 @@ async function save(): Promise<void> {
   saved.value = false
   error.value = ''
   try {
-    // Read the latest appearance so a branding edit preserves theme/wallpaper.
-    // A competing write after this read is rejected by the shared version check.
+    // Merge only explicit edits into current state. Concurrent edits to the
+    // same field need a retry; unrelated theme/icon changes stay intact.
     const current = await api.desktop.appearance(controller.signal)
     if (controller.signal.aborted) return
+    const latest = { name: current.branding?.name || '', icon: current.branding?.icon || '' }
+    const edited = { name, icon: form.icon }
+    const changed = { name: resetAll || name !== baseline.name, icon: resetAll || form.icon !== baseline.icon }
+    const conflict = (['name', 'icon'] as const).some((key) => changed[key] && latest[key] !== baseline[key] && latest[key] !== edited[key])
+    if (conflict) {
+      for (const key of ['name', 'icon'] as const) if (!changed[key]) form[key] = latest[key]
+      baseline = latest
+      throw new Error('Branding changed')
+    }
     const value = await api.desktop.updateAppearance({
       theme: current.theme, colors: current.colors, wallpaper: current.wallpaper,
       classicLevel: current.classicLevel, expectedResourceVersion: current.resourceVersion,
-      branding: { name, icon: form.icon },
+      branding: { name: changed.name ? name : latest.name, icon: changed.icon ? form.icon : latest.icon },
     })
     if (controller.signal.aborted) return
     acceptAppearanceSnapshot(value)
     form.name = value.branding?.name || ''
     form.icon = value.branding?.icon || ''
+    baseline = { ...form }
+    resetAll = false
     saved.value = true
   } catch { if (!controller.signal.aborted) error.value = i18n.t('branding.saveFailed') }
   finally { busy.value = false }

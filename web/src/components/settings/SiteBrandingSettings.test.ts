@@ -15,6 +15,32 @@ beforeEach(() => {
 })
 
 describe('site branding settings', () => {
+  it('preserves a newer icon when this form only edits the name', async () => {
+    const wrapper = mount(SiteBrandingSettings)
+    await flushPromises()
+    await wrapper.get('input[name="siteName"]').setValue('New name')
+    mocks.read.mockResolvedValue({ ...current, branding: { name: 'My server', icon: 'new-icon' } })
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ branding: { name: 'New name', icon: 'new-icon' } }))
+    wrapper.unmount()
+  })
+
+  it('requires an explicit retry for a competing name edit while retaining the newer icon', async () => {
+    const wrapper = mount(SiteBrandingSettings)
+    await flushPromises()
+    await wrapper.get('input[name="siteName"]').setValue('My edit')
+    mocks.read.mockResolvedValue({ ...current, branding: { name: 'Other tab', icon: 'new-icon' } })
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(mocks.save).not.toHaveBeenCalled()
+    expect(wrapper.get('[role="alert"]').text()).toContain('输入已保留')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ branding: { name: 'My edit', icon: 'new-icon' } }))
+    wrapper.unmount()
+  })
+
   it('saves trimmed branding with fresh theme values and applies only the confirmed response', async () => {
     const wrapper = mount(SiteBrandingSettings)
     await flushPromises()

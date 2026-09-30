@@ -24,7 +24,8 @@ vi.mock('@/lib/desktopWallpapers', () => ({ useDesktopWallpaper: () => ({ id: mo
 vi.mock('@/stores/toast', () => ({ useToast: () => ({ danger: mocks.danger }) }))
 vi.mock('@/i18n', () => ({ t: (key: string) => key }))
 
-import { appearanceReady, startAppearanceSync, stopAppearanceSync } from './appearanceSync'
+import { acceptAppearanceSnapshot, appearanceReady, startAppearanceSync, stopAppearanceSync } from './appearanceSync'
+import { useSiteBranding } from '@/stores/branding'
 
 const remote = {
   configured: true, resourceVersion: 'sha256:remote', theme: 'dark' as const, colors: null,
@@ -36,6 +37,34 @@ async function settle(): Promise<void> {
 }
 
 describe('shared appearance preference', () => {
+  it('does not let a delayed theme response overwrite newer confirmed branding', async () => {
+    const original = { ...remote, branding: { name: 'Original', icon: '' } }
+    let resolve!: (value: typeof original) => void
+    mocks.appearance.mockResolvedValue(original)
+    mocks.updateAppearance.mockReturnValue(new Promise((done) => { resolve = done }))
+    await startAppearanceSync()
+    window.dispatchEvent(new CustomEvent('kpanel:appearance-changed', { detail: { wallpaper: 'prism' } }))
+    await settle()
+    acceptAppearanceSnapshot({ ...original, wallpaper: 'prism', branding: { name: 'Saved name', icon: '' }, resourceVersion: 'sha256:branding' })
+    resolve({ ...original, wallpaper: 'prism', resourceVersion: 'sha256:older-theme-response' })
+    await settle()
+    expect(useSiteBranding().name.value).toBe('Saved name')
+    window.dispatchEvent(new CustomEvent('kpanel:appearance-changed', { detail: { wallpaper: 'orbit' } }))
+    await settle()
+    expect(mocks.updateAppearance).toHaveBeenLastCalledWith(expect.objectContaining({ expectedResourceVersion: 'sha256:branding' }))
+  })
+
+  it('ignores an initial read that arrives after an explicit confirmed save', async () => {
+    let resolve!: (value: typeof remote) => void
+    mocks.appearance.mockReturnValue(new Promise((done) => { resolve = done }))
+    const task = startAppearanceSync()
+    await Promise.resolve()
+    acceptAppearanceSnapshot({ ...remote, branding: { name: 'Saved name', icon: '' } })
+    resolve(remote)
+    await task
+    expect(useSiteBranding().name.value).toBe('Saved name')
+  })
+
   beforeEach(() => {
     vi.resetAllMocks()
     sessionStorage.clear()
