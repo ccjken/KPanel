@@ -108,7 +108,7 @@ onMounted(load)
       <span><ImageIcon :size="19" /></span>
       <div><h2>{{ i18n.t('branding.title') }}</h2><p>{{ i18n.t('branding.description') }}</p></div>
     </header>
-    <p v-if="loading" role="status">{{ i18n.t('branding.loading') }}</p>
+    <p v-if="loading" class="site-branding-status" role="status">{{ i18n.t('branding.loading') }}</p>
     <form v-else-if="loaded" class="site-branding-form" @submit.prevent="save">
       <fieldset :disabled="busy">
         <label class="field">
@@ -130,19 +130,23 @@ onMounted(load)
         </div>
       </fieldset>
     </form>
-    <p v-if="error" class="site-branding-error" role="alert">{{ error }}</p>
+    <p v-if="error" class="site-branding-status site-branding-error" role="alert">{{ error }}</p>
     <button v-if="!loading && !loaded" class="button button--secondary" type="button" @click="load">{{ i18n.t('branding.retry') }}</button>
-    <p v-if="saved" role="status">{{ i18n.t('branding.saved') }}</p>
+    <p v-if="saved" class="site-branding-status" role="status">{{ i18n.t('branding.saved') }}</p>
   </section>
 </template>
 
 <style scoped>
+.site-branding-form { padding: 20px; }
 .site-branding-form fieldset { display: grid; gap: 20px; min-width: 0; margin: 0; padding: 0; border: 0; }
 .site-branding-form .field { display: grid; gap: 8px; min-width: 0; font-size: 14px; }
-.site-branding-form small { color: var(--muted); font-size: 13px; }
+.site-branding-form .field > small { color: var(--muted); font-size: 13px; }
+.site-branding-form input { font-size: 14px; }
 .site-branding-icon { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; }
 .site-branding-icon img { object-fit: contain; border: 1px solid var(--border); border-radius: var(--radius); }
-.site-branding-icon input { max-width: 100%; }
+.site-branding-icon .field { flex: 1 1 240px; }
+.site-branding-icon input { max-width: 100%; height: auto; min-height: 43px; padding: 8px 12px; }
 .site-branding-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.site-branding-status { margin: 0; padding: 0 20px 20px; font-size: 14px; line-height: 1.5; }
 .site-branding-error { color: var(--danger); }
 </style>

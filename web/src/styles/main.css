@@ -951,6 +951,8 @@ textarea:focus-visible,
 
 .brand {
   display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
   align-items: center;
   gap: 11px;
 }
@@ -1895,6 +1897,15 @@ textarea:focus-visible,
 }
 
 @media (min-width: 921px) {
+  .sidebar:not(.sidebar--collapsed) .sidebar__brand {
+    padding-right: 62px;
+  }
+
+  .sidebar .brand__text strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .sidebar__brand {
     justify-content: flex-start;
   }
