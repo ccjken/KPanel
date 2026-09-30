@@ -21,7 +21,6 @@ export const appearanceReady = readonly(ready)
 
 interface Sync {
   owner: string
-  revision: number
   server?: AppearanceSettings
   pending: Patch
   initial: AppearanceValue
@@ -32,6 +31,13 @@ interface Sync {
 }
 let current: Sync | undefined
 let applying = false
+let operationTail: Promise<void> = Promise.resolve()
+
+function serializeAppearance<T>(operation: () => Promise<T>): Promise<T> {
+  const task = operationTail.then(operation)
+  operationTail = task.then(() => {}, () => {})
+  return task
+}
 
 function localValue(): AppearanceValue {
   return {
@@ -104,17 +110,15 @@ function reconcile(sync: Sync): Promise<void> {
   if (sync.task) return sync.task
   window.clearTimeout(sync.timer)
   sync.timer = undefined
-  sync.task = Promise.resolve().then(async () => {
+  sync.task = serializeAppearance(async () => {
     let conflicts = 0
     try {
       if (current !== sync) return
       if (!sync.server) {
-        const revision = sync.revision
         const fetched = await api.desktop.appearance()
         if (current !== sync) return
-        if (sync.revision === revision) sync.server = fetched
+        sync.server = fetched
       }
-      if (!sync.server) return
       const initial = sync.initial
       let migration: Patch = !sync.server.configured
         && (initial.theme !== 'system' || initial.colors !== null || initial.wallpaper !== 'classic' || initial.classicLevel !== 'off') ? initial : {}
@@ -125,14 +129,13 @@ function reconcile(sync: Sync): Promise<void> {
       while (current === sync && (Object.keys(migration).length || Object.keys(sync.pending).length)) {
         const patch = { ...migration, ...sync.pending }
         const next = { ...sync.server, ...patch }
-        const revision = sync.revision
         try {
           const updated = await api.desktop.updateAppearance({
             theme: next.theme, colors: next.colors, wallpaper: next.wallpaper,
             classicLevel: next.classicLevel, expectedResourceVersion: sync.server.resourceVersion,
           })
           if (current !== sync) return
-          if (sync.revision === revision) sync.server = updated
+          sync.server = updated
           migration = {}
           // An edit made during this request is kept for the next serialized save.
           for (const key of Object.keys(patch) as (keyof Patch)[]) {
@@ -143,10 +146,9 @@ function reconcile(sync: Sync): Promise<void> {
         } catch (error) {
           if (current !== sync) return
           if (!(error instanceof ApiError && error.status === 409) || ++conflicts > 3) throw error
-          const revision = sync.revision
           const fetched = await api.desktop.appearance()
           if (current !== sync) return
-          if (sync.revision === revision) sync.server = fetched
+          sync.server = fetched
           if (sync.server.configured) migration = {}
           apply({ ...sync.server, ...sync.pending })
         }
@@ -166,19 +168,25 @@ function reconcile(sync: Sync): Promise<void> {
   return sync.task
 }
 
-/** A confirmed explicit save supersedes any older in-flight response. */
-export function acceptAppearanceSnapshot(snapshot: AppearanceSettings): void {
-  if (current) {
-    current.revision++
-    current.server = snapshot
-  }
-  apply({ ...snapshot, ...current?.pending })
+/** Explicit saves share the theme sync queue, including response application. */
+export function saveAppearance(operation: () => Promise<AppearanceSettings>, signal: AbortSignal): Promise<AppearanceSettings> {
+  const owner = current
+  return serializeAppearance(async () => {
+    signal.throwIfAborted()
+    if (current !== owner) throw new Error('Appearance session changed')
+    const snapshot = await operation()
+    if (current === owner && !signal.aborted) {
+      if (owner) owner.server = snapshot
+      apply({ ...snapshot, ...owner?.pending })
+    }
+    return snapshot
+  })
 }
 
 /** Session/login responses seed this store; older servers use the same GET fallback. */
 export function startAppearanceSync(snapshot?: AppearanceSettings, owner = ''): Promise<void> {
   if (current) return current.task ?? Promise.resolve()
-  const sync: Sync = { owner, revision: 0, server: snapshot, pending: readPending(owner), initial: localValue(), retries: 0, notified: false }
+  const sync: Sync = { owner, server: snapshot, pending: readPending(owner), initial: localValue(), retries: 0, notified: false }
   current = sync
   ready.value = false
   window.addEventListener('kpanel:appearance-changed', changed)
@@ -189,6 +197,9 @@ export function startAppearanceSync(snapshot?: AppearanceSettings, owner = ''): 
 export function stopAppearanceSync(): void {
   if (current) window.clearTimeout(current.timer)
   current = undefined
+  // A stopped session's pending network request must not hold the next session.
+  // Each queued callback still checks its captured owner before doing any work.
+  operationTail = Promise.resolve()
   ready.value = false
   window.removeEventListener('kpanel:appearance-changed', changed)
   window.removeEventListener('online', retry)

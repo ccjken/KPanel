@@ -3,7 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 const mocks = vi.hoisted(() => ({ read: vi.fn(), save: vi.fn(), apply: vi.fn(), icon: vi.fn() }))
 vi.mock('@/lib/api', () => ({ api: { desktop: { appearance: mocks.read, updateAppearance: mocks.save } } }))
-vi.mock('@/lib/appearanceSync', () => ({ acceptAppearanceSnapshot: mocks.apply }))
+vi.mock('@/lib/appearanceSync', () => ({ saveAppearance: async (operation: () => Promise<unknown>) => {
+  const value = await operation()
+  mocks.apply(value)
+  return value
+} }))
 vi.mock('@/lib/siteBranding', () => ({ prepareSiteIcon: mocks.icon }))
 import SiteBrandingSettings from './SiteBrandingSettings.vue'
 

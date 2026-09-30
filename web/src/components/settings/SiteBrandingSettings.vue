@@ -2,7 +2,7 @@
 import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { Image as ImageIcon } from '@lucide/vue'
 import { api } from '@/lib/api'
-import { acceptAppearanceSnapshot } from '@/lib/appearanceSync'
+import { saveAppearance } from '@/lib/appearanceSync'
 import { DEFAULT_SITE_ICON } from '@/stores/branding'
 import { useI18n } from '@/i18n'
 import { prepareSiteIcon } from '@/lib/siteBranding'
@@ -71,24 +71,25 @@ async function save(): Promise<void> {
   try {
     // Merge only explicit edits into current state. Concurrent edits to the
     // same field need a retry; unrelated theme/icon changes stay intact.
-    const current = await api.desktop.appearance(controller.signal)
+    const value = await saveAppearance(async () => {
+      const current = await api.desktop.appearance(controller.signal)
+      controller.signal.throwIfAborted()
+      const latest = { name: current.branding?.name || '', icon: current.branding?.icon || '' }
+      const edited = { name, icon: form.icon }
+      const changed = { name: resetAll || name !== baseline.name, icon: resetAll || form.icon !== baseline.icon }
+      const conflict = (['name', 'icon'] as const).some((key) => changed[key] && latest[key] !== baseline[key] && latest[key] !== edited[key])
+      if (conflict) {
+        for (const key of ['name', 'icon'] as const) if (!changed[key]) form[key] = latest[key]
+        baseline = latest
+        throw new Error('Branding changed')
+      }
+      return api.desktop.updateAppearance({
+        theme: current.theme, colors: current.colors, wallpaper: current.wallpaper,
+        classicLevel: current.classicLevel, expectedResourceVersion: current.resourceVersion,
+        branding: { name: changed.name ? name : latest.name, icon: changed.icon ? form.icon : latest.icon },
+      })
+    }, controller.signal)
     if (controller.signal.aborted) return
-    const latest = { name: current.branding?.name || '', icon: current.branding?.icon || '' }
-    const edited = { name, icon: form.icon }
-    const changed = { name: resetAll || name !== baseline.name, icon: resetAll || form.icon !== baseline.icon }
-    const conflict = (['name', 'icon'] as const).some((key) => changed[key] && latest[key] !== baseline[key] && latest[key] !== edited[key])
-    if (conflict) {
-      for (const key of ['name', 'icon'] as const) if (!changed[key]) form[key] = latest[key]
-      baseline = latest
-      throw new Error('Branding changed')
-    }
-    const value = await api.desktop.updateAppearance({
-      theme: current.theme, colors: current.colors, wallpaper: current.wallpaper,
-      classicLevel: current.classicLevel, expectedResourceVersion: current.resourceVersion,
-      branding: { name: changed.name ? name : latest.name, icon: changed.icon ? form.icon : latest.icon },
-    })
-    if (controller.signal.aborted) return
-    acceptAppearanceSnapshot(value)
     form.name = value.branding?.name || ''
     form.icon = value.branding?.icon || ''
     baseline = { ...form }
