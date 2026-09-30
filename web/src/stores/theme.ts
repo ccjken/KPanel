@@ -63,7 +63,7 @@ function applyTheme(animate = false): void {
   try {
     const style = getComputedStyle(root)
     const tokens = Object.fromEntries(THEME_TOKEN_NAMES
-      .filter(token => token.startsWith('--desktop-wallpaper-') || token.startsWith('--desktop-aurora-'))
+      .filter(token => token === '--bg' || token === '--brand-soft' || token.startsWith('--desktop-wallpaper-') || token.startsWith('--desktop-aurora-'))
       .map(token => [token, style.getPropertyValue(token).trim()]))
     window.sessionStorage.setItem('kpanel:desktop-backdrop:v1', JSON.stringify({
       theme: mode, colors: readPreference(COLOR_STORAGE_KEY), tokens,

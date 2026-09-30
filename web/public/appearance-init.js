@@ -18,8 +18,7 @@
     const raw = readSession('kpanel:desktop-backdrop:v1')
     const cached = raw && raw.length < 12000 ? JSON.parse(raw) : null
     if (cached?.theme === theme && cached.colors === read('kejilion-panel-colors')) {
-      for (const key of ['wallpaper-base', 'wallpaper-veil-light', 'wallpaper-veil-dark', 'wallpaper-vignette', 'aurora-one', 'aurora-two', 'aurora-opacity']) {
-        const token = `--desktop-${key}`
+      for (const token of ['--bg', '--brand-soft', '--desktop-wallpaper-base', '--desktop-wallpaper-veil-light', '--desktop-wallpaper-veil-dark', '--desktop-wallpaper-vignette', '--desktop-aurora-one', '--desktop-aurora-two', '--desktop-aurora-opacity']) {
         const value = cached.tokens?.[token]
         if (typeof value === 'string' && value.length < 1500 && /^[a-zA-Z0-9#.,()% /+-]+$/.test(value) && !/url/i.test(value)) root.style.setProperty(token, value)
       }

@@ -16,7 +16,12 @@
   inset: 0;
   overflow: hidden;
   pointer-events: none;
-  background: var(--desktop-wallpaper-base);
+  background: var(--page-ambient-background);
+}
+
+/* Keep the themed page beneath a still picture while it loads or falls back. */
+.classic-backdrop .desktop-wallpaper-surface:not(.desktop-wallpaper-surface--scene) {
+  background: transparent;
 }
 
 .classic-backdrop__image,
