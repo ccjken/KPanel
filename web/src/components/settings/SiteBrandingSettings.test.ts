@@ -68,7 +68,7 @@ describe('site branding settings', () => {
     expect(wrapper.get('[role="alert"]').text()).toContain('输入已保留')
     expect((wrapper.get('input[name="siteName"]').element as HTMLInputElement).value).toBe('Unsaved')
     expect(mocks.apply).not.toHaveBeenCalled()
-    await wrapper.get('button[type="button"]').trigger('click')
+    await wrapper.get('.site-branding-actions button[type="button"]').trigger('click')
     expect(mocks.apply).not.toHaveBeenCalled()
     await wrapper.get('form').trigger('submit')
     await flushPromises()

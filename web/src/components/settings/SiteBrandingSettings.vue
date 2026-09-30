@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-import { Image as ImageIcon } from '@lucide/vue'
+import { Image as ImageIcon, Upload } from '@lucide/vue'
 import { api } from '@/lib/api'
 import { saveAppearance } from '@/lib/appearanceSync'
 import { DEFAULT_SITE_ICON } from '@/stores/branding'
@@ -16,6 +16,7 @@ const loaded = ref(false)
 const busy = ref(false)
 const error = ref('')
 const saved = ref(false)
+const iconInput = ref<HTMLInputElement>()
 const controller = new AbortController()
 onBeforeUnmount(() => controller.abort())
 
@@ -111,22 +112,34 @@ onMounted(load)
     <p v-if="loading" class="site-branding-status" role="status">{{ i18n.t('branding.loading') }}</p>
     <form v-else-if="loaded" class="site-branding-form" @submit.prevent="save">
       <fieldset :disabled="busy">
-        <label class="field">
-          <span>{{ i18n.t('branding.name') }}</span>
-          <input v-model="form.name" name="siteName" placeholder="KPanel" @input="saved = false" />
-          <small>{{ i18n.t('branding.nameHint') }}</small>
-        </label>
-        <div class="site-branding-icon">
-          <img :src="form.icon || DEFAULT_SITE_ICON" alt="" width="64" height="64" />
+        <div class="site-branding-fields">
           <label class="field">
-            <span>{{ i18n.t('branding.icon') }}</span>
-            <input type="file" name="siteIcon" accept="image/png,image/jpeg,image/webp" @change="chooseIcon" />
-            <small>{{ i18n.t('branding.iconHint') }}</small>
+            <span>{{ i18n.t('branding.name') }}</span>
+            <input v-model="form.name" name="siteName" placeholder="KPanel" @input="saved = false" />
+            <small>{{ i18n.t('branding.nameHint') }}</small>
           </label>
+          <div class="site-branding-icon-field">
+            <span class="site-branding-label">{{ i18n.t('branding.icon') }}</span>
+            <div class="site-branding-icon">
+              <span class="site-branding-icon__preview">
+                <img :src="form.icon || DEFAULT_SITE_ICON" alt="" width="56" height="56" />
+              </span>
+              <div class="site-branding-icon__controls">
+                <button class="button button--secondary" type="button" @click="iconInput?.click()">
+                  <Upload :size="16" aria-hidden="true" />
+                  {{ i18n.t('branding.changeIcon') }}
+                </button>
+                <p>{{ i18n.t('branding.iconHint') }}</p>
+              </div>
+            </div>
+            <p class="site-branding-icon__hint">{{ i18n.t('branding.iconSizeHint') }}</p>
+            <input ref="iconInput" class="site-branding-file" type="file" name="siteIcon" accept="image/png,image/jpeg,image/webp" tabindex="-1" aria-hidden="true" @change="chooseIcon" />
+          </div>
         </div>
         <div class="site-branding-actions">
           <button class="button button--primary" type="submit">{{ i18n.t(busy ? 'branding.saving' : 'branding.save') }}</button>
           <button class="button button--secondary" type="button" @click="reset">{{ i18n.t('branding.reset') }}</button>
+          <span>{{ i18n.t('branding.applyHint') }}</span>
         </div>
       </fieldset>
     </form>
@@ -137,16 +150,22 @@ onMounted(load)
 </template>
 
 <style scoped>
-.site-branding-form { padding: 20px; }
-.site-branding-form fieldset { display: grid; gap: 20px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.site-branding-form { padding: 24px; }
+.site-branding-form fieldset { display: grid; gap: 24px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.site-branding-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); align-items: start; gap: 24px 32px; }
 .site-branding-form .field { display: grid; gap: 8px; min-width: 0; font-size: 14px; }
 .site-branding-form .field > small { color: var(--muted); font-size: 13px; }
 .site-branding-form input { font-size: 14px; }
-.site-branding-icon { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; }
-.site-branding-icon img { object-fit: contain; border: 1px solid var(--border); border-radius: var(--radius); }
-.site-branding-icon .field { flex: 1 1 240px; }
-.site-branding-icon input { max-width: 100%; height: auto; min-height: 43px; padding: 8px 12px; }
-.site-branding-actions { display: flex; flex-wrap: wrap; gap: 12px; }
-.site-branding-status { margin: 0; padding: 0 20px 20px; font-size: 14px; line-height: 1.5; }
+.site-branding-icon-field { display: grid; min-width: 0; gap: 8px; }
+.site-branding-label { color: var(--text-soft); font-size: 14px; font-weight: 600; }
+.site-branding-icon { display: flex; align-items: center; gap: 16px; }
+.site-branding-icon__preview { display: grid; width: 80px; height: 80px; flex: 0 0 auto; place-items: center; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.site-branding-icon__preview img { object-fit: contain; border-radius: var(--radius); }
+.site-branding-icon__controls { display: grid; min-width: 0; justify-items: start; gap: 8px; }
+.site-branding-icon__controls p, .site-branding-icon__hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.site-branding-file { display: none; }
+.site-branding-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding-top: 20px; border-top: 1px solid var(--border); }
+.site-branding-actions > span { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.site-branding-status { margin: 0; padding: 0 24px 24px; font-size: 14px; line-height: 1.5; }
 .site-branding-error { color: var(--danger); }
 </style>
