@@ -1237,7 +1237,7 @@ export const api = {
         setupRequired: false,
         authenticated: true,
         appearance: session.appearance,
-          user: session.user,
+        user: session.user,
         csrfToken: session.csrfToken,
         expiresAt: session.expiresAt,
       }
@@ -1248,7 +1248,7 @@ export const api = {
         setupRequired: false,
         authenticated: true,
         appearance: session.appearance,
-          user: session.user,
+        user: session.user,
         csrfToken: session.csrfToken,
         expiresAt: session.expiresAt,
       }

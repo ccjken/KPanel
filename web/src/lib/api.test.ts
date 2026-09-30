@@ -15,6 +15,15 @@ afterEach(() => {
 })
 
 describe('API client', () => {
+  it('carries the authenticated appearance snapshot without a settings request', async () => {
+    const appearance = { configured: true, resourceVersion: 'sha256:current', theme: 'dark', colors: null, wallpaper: 'rift', classicLevel: 'clear' }
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse({ required: false }))
+      .mockResolvedValueOnce(jsonResponse({ user: { id: 'owner' }, appearance }))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(api.auth.status()).resolves.toMatchObject({ authenticated: true, appearance })
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/v1/auth/bootstrap', '/api/v1/auth/session'])
+  })
+
   it('reuses login bootstrap appearance without an extra guest settings request', async () => {
     const appearance = { theme: 'dark', colors: null, wallpaper: { url: '/wallpapers/kpanel-desktop-rift.webp', focusX: 500, focusY: 500, bright: false } }
     const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse({ required: false, appearance }))

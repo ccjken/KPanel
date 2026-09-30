@@ -130,8 +130,8 @@ body:has(.classic-backdrop) {
 /*
  * Sign-in and first-run pages: with show-through on, the brand panel carries the chosen
  * wallpaper under a veil in the sidebar colour, so the headline stays as legible as on the
- * plain gradient. The login bootstrap supplies the selected public preview; older servers
- * use appearance-init.js and this browser's reduced copy. The sign-in form keeps its solid surface.
+ * plain gradient. The login bootstrap supplies the selected public preview.
+ * The sign-in form keeps its solid surface while the image loads.
  */
 :root[data-classic-wallpaper] .auth-layout__brand,
 :root[data-auth-wallpaper='server'] .auth-layout__brand {

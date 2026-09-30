@@ -139,8 +139,7 @@ const DesktopView = defineAsyncComponent({
 const desktopActive = computed(() => desktop.mode.value === 'desktop')
 const classicWallpaper = useClassicWallpaper()
 const classicBackdrop = computed(() => appearanceReady.value && !desktopActive.value && classicWallpaper.level.value !== 'off')
-// A 3D scene pack chosen as the wallpaper (in desktop mode or Settings) keeps running behind the
-// classic pages. Desktop mode may have changed it, so the choice is re-read on the way back.
+// Desktop and classic pages share the reconciled wallpaper, including installed scene packs.
 const wallpaperChoice = useDesktopWallpaper()
 const DESKTOP_ENTRY_NOTICE_KEY = 'kpanel:desktop-entry-notice:v2'
 
