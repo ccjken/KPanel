@@ -1,5 +1,13 @@
 @import './themes.css';
 
+/* Paint the page canvas before the application CSS and session bootstrap arrive. */
+:root[data-theme] { background: var(--bg); }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--page-ambient-background);
+}
+
 #desktop-boot { display: none; }
 html.desktop-boot,
 html:has(.desktop) { overflow: hidden; scrollbar-gutter: auto; }
