@@ -1,6 +1,9 @@
 import type { PhraseCatalog } from '@/i18n/phrase'
 
 export default [
+  ['站点名称与图标', 'Site name and icon'],
+  ['自定义面板与登录页标识', 'Custom panel and sign-in branding'],
+  ['图标', 'Icon'],
   ['壁纸', 'Wallpaper'],
   ['桌面与经典模式共用的壁纸、3D 场景与透出程度', 'Shared wallpaper, 3D scenes, and transparency for desktop and classic modes'],
   ['背景', 'Background'],

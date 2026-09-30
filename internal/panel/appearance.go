@@ -66,11 +66,23 @@ func (s *Server) handleAppearance(w http.ResponseWriter, r *http.Request) {
 		s.writeValidationProblem(w, r, "expectedResourceVersion", "a valid resourceVersion is required")
 		return
 	}
+	// Older clients and ordinary theme edits omit branding. Preserve it; an
+	// explicit empty object restores the defaults. The version check still
+	// rejects any concurrent change before persisting the merged snapshot.
+	if input.Branding == nil {
+		if current, _ := s.store.Appearance(); current != nil {
+			input.Branding = current.Branding
+		}
+	}
 	if store.ValidateAppearance(input.Appearance) != nil {
 		s.writeProblem(w, r, http.StatusUnprocessableEntity, "appearance_invalid", "Appearance setting is invalid", "")
 		return
 	}
 	change := map[string]any{"theme": input.Theme, "wallpaper": input.Wallpaper, "classicLevel": input.ClassicLevel}
+	if input.Branding != nil {
+		change["customSiteName"] = input.Branding.Name != ""
+		change["customSiteIcon"] = input.Branding.Icon != ""
+	}
 	if err := s.audit(r, session.User.ID, "settings.appearance.update", "panel", "appearance", "intent", change); err != nil {
 		s.writeProblem(w, r, http.StatusServiceUnavailable, "audit_unavailable", "Audit storage unavailable", "")
 		return

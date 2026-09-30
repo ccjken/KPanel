@@ -47,6 +47,7 @@ export interface AuthStatus {
 
 /** Public login branding, without private wallpaper IDs or management metadata. */
 export interface LoginAppearance {
+  branding?: SiteBranding
   theme: 'system' | 'light' | 'dark'
   colors: AppearanceSettings['colors']
   wallpaper: { url: string; focusX: number; focusY: number; bright: boolean }
@@ -2199,7 +2200,13 @@ export interface DesktopWorkspaceUpdate {
   shortcuts: Array<Pick<DesktopShortcut, 'id' | 'name' | 'description' | 'targetType' | 'url' | 'path'>>
 }
 
+export interface SiteBranding {
+  name: string
+  icon: string
+}
+
 export interface AppearanceSettings {
+  branding?: SiteBranding
   configured: boolean
   resourceVersion: string
   theme: 'system' | 'light' | 'dark'

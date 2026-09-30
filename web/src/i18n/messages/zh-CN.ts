@@ -416,7 +416,7 @@ export const zhCNMessages = {
   'auth.featureAudit': '从单机到多节点，关键变更可追溯',
   'auth.product': 'KPanel · 开源 Linux 服务器管理面板',
   'auth.welcome': '欢迎回来',
-  'auth.loginTitle': '登录 KPanel',
+  'auth.loginTitle': '登录 {name}',
   'auth.loginIntro': '使用本机管理员账户登录，继续管理这台服务器。',
   'auth.username': '用户名',
   'auth.password': '密码',
@@ -988,6 +988,22 @@ export const zhCNMessages = {
   "files.archive.previous": "上一页",
   "files.archive.checking": "正在确认该主机的压缩包能力，请稍候。",
 
+  "branding.title": "站点名称与图标",
+  "branding.description": "保存到面板后，登录页、面板标识和浏览器标签同步生效。",
+  "branding.name": "站点名称",
+  "branding.nameHint": "最多 64 个字符，留空使用 KPanel。",
+  "branding.icon": "站点图标",
+  "branding.iconHint": "PNG、JPEG 或 WebP，最大 2 MB、4096 × 4096 像素；自动缩放为 128 × 128。",
+  "branding.iconInvalid": "图片不可用，请选择有效的 PNG、JPEG 或 WebP（最大 2 MB、4096 × 4096 像素）。",
+  "branding.nameInvalid": "名称最多 64 个字符，不能包含控制字符。",
+  "branding.save": "保存站点设置",
+  "branding.saving": "正在处理…",
+  "branding.saved": "站点设置已保存。",
+  "branding.reset": "恢复默认（保存后生效）",
+  "branding.loading": "正在加载站点设置…",
+  "branding.loadFailed": "站点设置加载失败，请重试。",
+  "branding.saveFailed": "保存失败或设置已被其他页面更新。当前输入已保留，请重试。",
+  "branding.retry": "重新加载",
 } as const
 
 export type MessageKey = keyof typeof zhCNMessages

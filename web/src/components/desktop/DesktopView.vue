@@ -50,6 +50,9 @@ import DesktopWallpaperPicker from '@/components/desktop/DesktopWallpaperPicker.
 import { useDesktopWallpaper, type DesktopWallpaperID } from '@/lib/desktopWallpapers'
 import { appearanceReady } from '@/lib/appearanceSync'
 import LogoMark from '@/components/common/LogoMark.vue'
+import { useSiteBranding } from '@/stores/branding'
+
+const siteBranding = useSiteBranding()
 import { DEFAULT_WINDOW_GRADIENT, desktopApps, desktopRoutePath, findDesktopApp } from '@/lib/desktopApps'
 import {
   getCachedDesktopEntries,
@@ -4391,9 +4394,9 @@ function onViewportResize(): void {
       :aria-label="i18n.t('desktop.taskbarLabel')"
       @contextmenu.prevent.stop="onTaskbarContext"
     >
-      <div class="desktop__taskbar-brand" aria-label="KPanel">
-        <LogoMark compact />
-        <span>KPanel</span>
+      <div class="desktop__taskbar-brand" :aria-label="siteBranding.name.value">
+        <LogoMark compact site />
+        <span class="desktop__site-name">{{ siteBranding.name.value }}</span>
         <div v-if="props.agent" class="desktop__taskbar-agent">
           <span class="desktop__taskbar-agent-status" :class="`desktop__taskbar-agent-status--${agentStatus.state}`">
             <i aria-hidden="true" />

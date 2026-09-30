@@ -34,6 +34,7 @@ import {
 import PageHeader from '@/components/common/PageHeader.vue'
 import BackupCenter from '@/components/settings/BackupCenter.vue'
 import PasskeySettings from '@/components/settings/PasskeySettings.vue'
+import SiteBrandingSettings from '@/components/settings/SiteBrandingSettings.vue'
 import MCPAccess from '@/components/settings/MCPAccess.vue'
 import DesktopWallpaperPicker from '@/components/desktop/DesktopWallpaperPicker.vue'
 import KPanelUpdateDialog from '@/components/update/KPanelUpdateDialog.vue'
@@ -90,6 +91,7 @@ type SettingsSectionId =
   | 'totp'
   | 'passkeys'
   | 'language'
+  | 'branding'
   | 'appearance'
   | 'wallpaper'
   | 'backup'
@@ -116,6 +118,7 @@ const settingsCategories: Array<{ id: SettingsCategoryId; label: string }> = [
 ]
 
 const settingsSections: SettingsSectionDefinition[] = [
+  { id: 'branding', category: 'appearance', title: '站点名称与图标', description: '自定义面板与登录页标识', keywords: ['名称', '图标', 'Logo', 'favicon', 'KPanel'] },
   { id: 'help', category: 'support', title: '帮助与问题报告', description: '生成问题报告并获取排查帮助', keywords: ['反馈', '诊断', '日志', '报告'] },
   { id: 'account-overview', category: 'account', title: '管理账户', description: '当前登录身份与会话信息', keywords: ['管理员', 'Session', '登录', '身份验证'] },
   { id: 'username', category: 'account', title: '修改用户名', description: '更新当前管理员账户的登录名称', keywords: ['账号', '名称'] },
@@ -1247,6 +1250,8 @@ onBeforeUnmount(stopKPanelReleaseRequest)
         </button>
       </div>
     </section>
+
+    <SiteBrandingSettings v-show="isSettingsSectionVisible('branding')" />
 
     <section v-show="isSettingsSectionVisible('appearance')" class="settings-section panel-card">
       <header class="settings-section__header">

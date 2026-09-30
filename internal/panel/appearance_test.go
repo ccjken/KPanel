@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+
+	"github.com/kejilion/kejilion-panel/internal/store"
 )
 
 func TestAppearanceSettingsAuthenticationValidationAndConflict(t *testing.T) {
@@ -24,7 +26,8 @@ func TestAppearanceSettingsAuthenticationValidationAndConflict(t *testing.T) {
 		t.Fatalf("initial = %#v", initial)
 	}
 	body, _ := json.Marshal(map[string]any{
-		"theme": "dark", "wallpaper": "orbit", "classicLevel": "clear",
+		"branding": map[string]string{"name": "我的面板", "icon": ""},
+		"theme":    "dark", "wallpaper": "orbit", "classicLevel": "clear",
 		"colors":                  map[string]any{"brand": "#356fc0", "neutral": "#34465c", "signature": "#23a6bd", "signatureLinked": false},
 		"expectedResourceVersion": initial.ResourceVersion,
 	})
@@ -47,6 +50,9 @@ func TestAppearanceSettingsAuthenticationValidationAndConflict(t *testing.T) {
 	if !saved.Configured || saved.Theme != "dark" || saved.Wallpaper != "orbit" || saved.ClassicLevel != "clear" || saved.Colors.Brand != "#356fc0" {
 		t.Fatalf("saved = %#v", saved)
 	}
+	if saved.Branding == nil || saved.Branding.Name != "我的面板" {
+		t.Fatalf("branding not saved: %#v", saved.Branding)
+	}
 	if response := authenticatedSiteRequest(server, sessionCookie, csrfCookie, http.MethodPut, appearancePath, body, true); response.Code != http.StatusConflict {
 		t.Fatalf("stale version = %d", response.Code)
 	}
@@ -61,6 +67,47 @@ func TestAppearanceSettingsAuthenticationValidationAndConflict(t *testing.T) {
 	}
 	if reread.ResourceVersion != saved.ResourceVersion || reread.Wallpaper != "orbit" {
 		t.Fatalf("failed writes changed setting: %#v", reread)
+	}
+}
+
+func TestBrandingPublicReadLegacyUpdateAndReset(t *testing.T) {
+	server, tokenPath := newTestServer(t)
+	session, csrf := bootstrapCookies(t, server, tokenPath)
+	_, version := server.store.Appearance()
+	value := store.Appearance{Theme: "dark", Wallpaper: "classic", ClassicLevel: "off", Branding: &store.SiteBranding{Name: "My server"}}
+	if err := server.store.ReplaceAppearance(version, value); err != nil {
+		t.Fatal(err)
+	}
+	bootstrap := performRequest(server, http.MethodGet, "/api/v1/auth/bootstrap", nil, nil)
+	var guest struct {
+		Appearance *loginAppearance `json:"appearance"`
+	}
+	if err := json.Unmarshal(bootstrap.Body.Bytes(), &guest); err != nil || guest.Appearance == nil || guest.Appearance.Branding.Name != "My server" {
+		t.Fatalf("public branding missing: %s", bootstrap.Body.String())
+	}
+	update := func(branding any) appearanceResponse {
+		t.Helper()
+		_, current := server.store.Appearance()
+		body := map[string]any{"theme": "light", "wallpaper": "classic", "classicLevel": "off", "expectedResourceVersion": current}
+		if branding != nil {
+			body["branding"] = branding
+		}
+		payload, _ := json.Marshal(body)
+		response := authenticatedSiteRequest(server, session, csrf, http.MethodPut, appearancePath, payload, true)
+		if response.Code != http.StatusOK {
+			t.Fatalf("update: %d %s", response.Code, response.Body.String())
+		}
+		var saved appearanceResponse
+		if err := json.Unmarshal(response.Body.Bytes(), &saved); err != nil {
+			t.Fatal(err)
+		}
+		return saved
+	}
+	if saved := update(nil); saved.Branding == nil || saved.Branding.Name != "My server" {
+		t.Fatal("legacy theme write erased branding")
+	}
+	if saved := update(map[string]string{}); saved.Branding == nil || saved.Branding.Name != "" || saved.Branding.Icon != "" {
+		t.Fatal("explicit default reset did not persist")
 	}
 }
 

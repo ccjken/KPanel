@@ -1,4 +1,5 @@
 import { readonly, ref } from 'vue'
+import { applySiteBranding } from '@/stores/branding'
 import { ApiError, api } from '@/lib/api'
 import { useClassicWallpaper } from '@/lib/classicWallpaper'
 import { applySyncedWallpaper, isDesktopWallpaperID, useDesktopWallpaper } from '@/lib/desktopWallpapers'
@@ -8,7 +9,7 @@ import { parseStoredThemeColors } from '@/theme/colors'
 import { t } from '@/i18n'
 import type { AppearanceSettings } from '@/types/api'
 
-type AppearanceValue = Pick<AppearanceSettings, 'theme' | 'colors' | 'wallpaper' | 'classicLevel'>
+type AppearanceValue = Pick<AppearanceSettings, 'theme' | 'colors' | 'wallpaper' | 'classicLevel' | 'branding'>
 type Patch = Partial<AppearanceValue>
 // Per-tab explicit edits survive refresh; a cached full snapshot never becomes a write.
 const PENDING_KEY = 'kpanel:appearance-pending:v1'
@@ -67,6 +68,7 @@ function persist(sync: Sync): void {
 }
 
 function apply(value: AppearanceValue): void {
+  applySiteBranding(value.branding)
   applying = true
   try {
     // Keep the existing stores as the UI facade, with one reconciliation path.
@@ -160,6 +162,11 @@ function reconcile(sync: Sync): Promise<void> {
 }
 
 /** Session/login responses seed this store; older servers use the same GET fallback. */
+export function acceptAppearanceSnapshot(snapshot: AppearanceSettings): void {
+  if (current) current.server = snapshot
+  apply({ ...snapshot, ...current?.pending })
+}
+
 export function startAppearanceSync(snapshot?: AppearanceSettings, owner = ''): Promise<void> {
   if (current) return current.task ?? Promise.resolve()
   const sync: Sync = { owner, server: snapshot, pending: readPending(owner), initial: localValue(), retries: 0, notified: false }

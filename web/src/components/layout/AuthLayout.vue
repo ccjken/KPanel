@@ -3,6 +3,7 @@ import { CheckCircle2, ShieldCheck } from '@lucide/vue'
 import LanguageSelector from '@/components/common/LanguageSelector.vue'
 import LogoMark from '@/components/common/LogoMark.vue'
 import { useI18n } from '@/i18n'
+import { PROJECT_SOURCE_URL } from '@/stores/branding'
 
 const i18n = useI18n()
 </script>
@@ -11,7 +12,7 @@ const i18n = useI18n()
   <main class="auth-layout">
     <LanguageSelector class="auth-layout__language" />
     <section class="auth-layout__brand">
-      <LogoMark />
+      <LogoMark site />
       <div class="auth-layout__message">
         <span class="eyebrow"><ShieldCheck :size="16" /> {{ i18n.t('auth.ecosystem') }}</span>
         <h1>{{ i18n.t('auth.heroTitle') }}</h1>
@@ -29,5 +30,8 @@ const i18n = useI18n()
         <slot />
       </div>
     </section>
+    <footer class="auth-layout__source">
+      <a :href="PROJECT_SOURCE_URL" target="_blank" rel="noopener noreferrer">GitHub · github.com/kejilion/KPanel</a>
+    </footer>
   </main>
 </template>

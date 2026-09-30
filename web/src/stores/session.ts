@@ -1,4 +1,5 @@
 import { computed, reactive } from 'vue'
+import { applySiteBranding } from '@/stores/branding'
 import { api, resetApiSecurityState } from '@/lib/api'
 import { stopAppearanceSync } from '@/lib/appearanceSync'
 import { applyLoginAppearance, cancelLoginWallpaper } from '@/lib/loginAppearance'
@@ -28,6 +29,7 @@ let statusPromise: Promise<void> | undefined
 let generation = 0
 
 function applyStatus(status: AuthStatus): void {
+  applySiteBranding(status.authenticated ? status.appearance?.branding : status.loginAppearance?.branding)
   if (!status.authenticated && !status.setupRequired && status.loginAppearance) applyLoginAppearance(status.loginAppearance)
   else cancelLoginWallpaper()
   state.appearance = status.appearance

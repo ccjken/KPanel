@@ -119,10 +119,16 @@ type ClusterHostOrder struct {
 // Appearance is the administrator's shared wallpaper and theme preference.
 // A nil value means an older installation has not imported its browser setting yet.
 type Appearance struct {
+	Branding     *SiteBranding     `json:"branding,omitempty"`
 	Theme        string            `json:"theme"`
 	Colors       *AppearanceColors `json:"colors"`
 	Wallpaper    string            `json:"wallpaper"`
 	ClassicLevel string            `json:"classicLevel"`
+}
+
+type SiteBranding struct {
+	Name string `json:"name"`
+	Icon string `json:"icon"`
 }
 
 type AppearanceColors struct {
