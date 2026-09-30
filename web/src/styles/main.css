@@ -1017,7 +1017,7 @@ textarea:focus-visible,
   min-height: 100vh;
   flex-direction: column;
   padding: clamp(32px, 5vw, 72px);
-  padding-bottom: 112px;
+  padding-bottom: calc(clamp(32px, 5vw, 72px) + 72px);
   overflow: hidden;
   color: var(--sidebar-text);
   background: var(--auth-brand-background);
@@ -1137,14 +1137,13 @@ textarea:focus-visible,
 .auth-layout__source {
   position: absolute;
   z-index: 1;
-  left: 20px;
-  bottom: 20px;
-  max-width: calc(100% - 40px);
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text);
-  background: var(--surface);
+  left: clamp(32px, 5vw, 72px);
+  bottom: clamp(32px, 5vw, 72px);
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  max-width: calc(46% - 2 * clamp(32px, 5vw, 72px));
+  color: var(--sidebar-muted);
   font-size: 14px;
   overflow-wrap: anywhere;
 }
@@ -6272,6 +6271,17 @@ body.terminal-fullscreen-open .modal-panel {
   }
 
   .auth-layout__brand {
+    display: none;
+  }
+
+  .auth-layout__source {
+    left: 20px;
+    bottom: 20px;
+    max-width: calc(100% - 40px);
+    color: var(--muted);
+  }
+
+  .auth-layout__source .auth-layout__footnote {
     display: none;
   }
 

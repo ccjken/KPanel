@@ -23,7 +23,6 @@ const i18n = useI18n()
           <li><CheckCircle2 :size="17" /> {{ i18n.t('auth.featureAudit') }}</li>
         </ul>
       </div>
-      <p class="auth-layout__footnote">{{ i18n.t('auth.product') }}</p>
     </section>
     <section class="auth-layout__form">
       <div class="auth-card">
@@ -31,6 +30,7 @@ const i18n = useI18n()
       </div>
     </section>
     <footer class="auth-layout__source">
+      <p class="auth-layout__footnote">{{ i18n.t('auth.product') }}</p>
       <a :href="PROJECT_SOURCE_URL" target="_blank" rel="noopener noreferrer">GitHub · github.com/kejilion/KPanel</a>
     </footer>
   </main>
