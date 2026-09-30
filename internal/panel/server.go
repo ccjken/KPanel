@@ -392,7 +392,12 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request) {
 			"checkedAt":       time.Now().UTC(),
 		})
 	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/auth/bootstrap":
-		s.writeJSON(w, http.StatusOK, map[string]bool{"required": !s.auth.IsInitialized()})
+		s.writeJSON(w, http.StatusOK, struct {
+			Required   bool             `json:"required"`
+			Appearance *loginAppearance `json:"appearance,omitempty"`
+		}{!s.auth.IsInitialized(), s.loginAppearance()})
+	case r.URL.Path == loginWallpaperPath || strings.HasPrefix(r.URL.Path, loginWallpaperPath+"/"):
+		s.handleLoginWallpaper(w, r)
 	case r.Method == http.MethodPost && r.URL.Path == "/api/v1/auth/bootstrap":
 		s.handleBootstrap(w, r)
 	case r.Method == http.MethodPost && r.URL.Path == "/api/v1/auth/login":

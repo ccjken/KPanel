@@ -1,9 +1,7 @@
 /**
- * A private wallpaper (an uploaded picture, or a 3D scene's poster) is only served to a
- * signed-in browser, so the sign-in page cannot load it. While signed in, this browser keeps
- * a reduced copy of it in its own storage; public/appearance-init.js shows that copy behind
- * the sign-in brand panel without asking the server. Nothing is made public: only browsers
- * that have signed in hold a copy, and it is replaced or removed with the wallpaper.
+ * Authenticated originals and scene posters are reduced into this browser's local fallback.
+ * public/appearance-init.js uses that copy before the login bootstrap resolves, or with older
+ * servers. The bootstrap's selected public thumbnail is separate from this local cache.
  */
 export const AUTH_WALLPAPER_COPY_KEY = 'kpanel:auth-wallpaper:v1'
 /** The brand panel is at most about 900 CSS pixels wide; 1280 keeps it sharp without much weight. */

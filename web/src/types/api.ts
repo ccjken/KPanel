@@ -41,6 +41,14 @@ export interface AuthStatus {
   csrfToken?: string
   expiresAt?: string
   agent?: AgentStatus
+  loginAppearance?: LoginAppearance
+}
+
+/** Public login branding, without private wallpaper IDs or management metadata. */
+export interface LoginAppearance {
+  theme: 'system' | 'light' | 'dark'
+  colors: AppearanceSettings['colors']
+  wallpaper: { url: string; focusX: number; focusY: number; bright: boolean }
 }
 
 export interface SetupRequest {

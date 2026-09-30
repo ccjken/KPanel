@@ -185,6 +185,16 @@ export function resetThemeForTest(): void {
   clearAppliedColorTokens()
 }
 
+/** Apply server login branding to the shared state before the guest route paints. */
+export function applyLoginTheme(value: { theme: ThemePreference; colors: ThemeColorIntent | null }): void {
+  preference.value = value.theme
+  if (value.colors) {
+    colors.value = value.colors
+    customColors.value = true
+  } else resetColorsInMemory()
+  applyTheme()
+}
+
 export function useTheme() {
   const setTheme = (value: ThemePreference) => {
     preference.value = value

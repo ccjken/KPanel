@@ -1,5 +1,6 @@
 import { computed, reactive } from 'vue'
 import { api, resetApiSecurityState } from '@/lib/api'
+import { applyLoginAppearance, cancelLoginWallpaper } from '@/lib/loginAppearance'
 import type { PasskeyCredentialJSON } from '@/lib/passkeys'
 import type { AgentStatus, AuthStatus, LoginRequest, SetupRequest, User } from '@/types/api'
 
@@ -24,6 +25,8 @@ const state = reactive<SessionState>({
 let statusPromise: Promise<void> | undefined
 
 function applyStatus(status: AuthStatus): void {
+  if (!status.authenticated && !status.setupRequired && status.loginAppearance) applyLoginAppearance(status.loginAppearance)
+  else cancelLoginWallpaper()
   state.setupRequired = status.setupRequired
   state.authenticated = status.authenticated
   state.user = status.user
@@ -86,6 +89,7 @@ async function logout(): Promise<void> {
     await api.auth.logout()
   } finally {
     resetApiSecurityState()
+    cancelLoginWallpaper()
     state.authenticated = false
     state.user = undefined
     state.agent = undefined

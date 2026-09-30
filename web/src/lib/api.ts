@@ -22,6 +22,7 @@ import type {
   AuditEvent,
   AuthSession,
   AuthStatus,
+  LoginAppearance,
   ClusterController,
   ClusterHost,
   ClusterHostDetails,
@@ -1211,7 +1212,7 @@ export const api = {
       },
     },
     status: async (signal?: AbortSignal): Promise<AuthStatus> => {
-      const bootstrap = await request<{ required: boolean }>('/auth/bootstrap', { signal })
+      const bootstrap = await request<{ required: boolean; appearance?: LoginAppearance }>('/auth/bootstrap', { signal })
       if (bootstrap.required) return { setupRequired: true, authenticated: false }
       try {
         const session = await request<AuthSession>('/auth/session', { signal })
@@ -1224,7 +1225,7 @@ export const api = {
         }
       } catch (error) {
         if (error instanceof ApiError && error.status === 401) {
-          return { setupRequired: false, authenticated: false }
+          return { setupRequired: false, authenticated: false, ...(bootstrap.appearance ? { loginAppearance: bootstrap.appearance } : {}) }
         }
         throw error
       }

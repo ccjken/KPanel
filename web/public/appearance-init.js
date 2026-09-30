@@ -58,17 +58,14 @@
     } catch { /* Network failures never block the desktop. */ }
   }
   const wallpaper = selectedWallpaper()
-  // Sign-in, first-run and share pages have no session: an uploaded picture or a scene poster
-  // cannot load there and must not be shown to whoever opens them. Only the public built-in
-  // wallpapers are used before sign-in (the sign-in brand panel); AppShell asks for the real
-  // images again once signed in.
+  // Guest pages cannot fetch authenticated originals or scene assets. This early local fallback
+  // uses public built-ins; the login bootstrap can later supply the selected public thumbnail.
   const publicPage = /^\/(login|setup|share)(\/|$)/.test(location.pathname)
   const privateWallpaper = Boolean(wallpaper.pack || wallpaper.custom)
   // The desktop paints its own image when this does not name its wallpaper; a private one
   // held back here must not look already painted after an in-app sign-in.
   root.dataset.desktopWallpaper = publicPage && privateWallpaper ? 'classic' : wallpaper.id
-  // A private wallpaper appears on the sign-in page only as this browser's own reduced copy
-  // (web/src/lib/authWallpaperCopy.ts), never fetched from the server before sign-in.
+  // Before the bootstrap resolves, use only this browser's reduced copy of a private wallpaper.
   const authCopy = id => {
     try {
       const copy = JSON.parse(read('kpanel:auth-wallpaper:v1') || 'null')
